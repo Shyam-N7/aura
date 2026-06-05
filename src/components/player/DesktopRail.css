@@ -1,0 +1,216 @@
+/* Desktop right rail — persistent player on top, divider, always-on Talk on
+   bottom. Fixed-positioned at viewport right edge for ≥1280px. The responsive
+   shell reserves padding-right to make room. */
+
+.aura-desktop-rail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  z-index: 30;
+  background: rgb(255 255 255 / 0.32);
+  border-left: 1px solid var(--color-line);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  transition: transform 320ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-desktop-rail--collapsed {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+/* Reveal tab pinned to the right edge — visible when collapsed, also
+   peeks above the rail when expanded so the user can close it. */
+.aura-desktop-rail__handle {
+  position: fixed;
+  top: 50%;
+  right: 420px;
+  z-index: 31;
+  width: 22px;
+  height: 64px;
+  margin-top: -32px;
+  border: 1px solid var(--color-line);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: var(--color-bg);
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: -6px 0 14px rgb(0 0 0 / 0.05);
+  transition: right 320ms cubic-bezier(.2, .7, .2, 1), color 140ms ease, background 140ms ease;
+}
+.aura-desktop-rail__handle:hover {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-bg), var(--color-ink) 4%);
+}
+.aura-desktop-rail__handle--collapsed {
+  right: 0;
+  border-radius: 12px 0 0 12px;
+}
+.theme-midnight .aura-desktop-rail {
+  background: rgb(0 0 0 / 0.18);
+}
+
+.aura-desktop-rail--empty {
+  /* When no track is loaded yet, just show the panel chrome quietly. */
+  align-items: center;
+  justify-content: center;
+}
+
+.aura-desktop-rail__now {
+  padding: 22px 26px 18px;
+  flex-shrink: 0;
+}
+
+.aura-desktop-rail__queue-btn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color 140ms ease;
+}
+.aura-desktop-rail__queue-btn:hover {
+  color: var(--color-ink);
+}
+
+.aura-desktop-rail__ctrl {
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+.theme-midnight .aura-desktop-rail__ctrl {
+  background: rgb(255 255 255 / 0.08);
+}
+.aura-desktop-rail__ctrl:hover { filter: brightness(0.96); }
+.aura-desktop-rail__ctrl:active { transform: scale(0.96); }
+.aura-desktop-rail__ctrl--sm {
+  width: 34px;
+  height: 34px;
+}
+/* Mode-row chips (shuffle / repeat) above the main transport. Icon + mono
+   label, pill-shaped, subtle when off / accent when on. Reads as status
+   indicator, not primary action. */
+.aura-desktop-rail__mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  padding: 5px 10px;
+  transition: color 140ms ease, background 140ms ease;
+}
+.aura-desktop-rail__mode-btn:hover {
+  color: var(--color-ink);
+  background: rgb(0 0 0 / 0.04);
+}
+.theme-midnight .aura-desktop-rail__mode-btn:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+.aura-desktop-rail__mode-btn--on,
+.aura-desktop-rail__mode-btn--on:hover {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+}
+.aura-desktop-rail__ctrl--play {
+  width: 50px;
+  height: 50px;
+  background: var(--color-accent);
+  color: var(--color-ink);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--color-accent), transparent 70%);
+}
+.aura-desktop-rail__ctrl--play:hover { filter: brightness(1.04); }
+/* On dark, the peach accent feels muted against the warm-coffee page. Flip
+   to a cream disc — keeps the icon dark + readable, lights up against the bg. */
+.theme-midnight .aura-desktop-rail__ctrl--play {
+  background: var(--color-ink);
+  color: var(--color-bg);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--color-ink), transparent 70%);
+}
+
+.aura-desktop-rail__add {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  padding: 4px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 140ms ease, background 140ms ease;
+}
+.aura-desktop-rail__add:hover {
+  color: var(--color-ink);
+  background: rgb(0 0 0 / 0.04);
+}
+
+.aura-desktop-rail__mini-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 14px;
+}
+.aura-desktop-rail__mini-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-desktop-rail__mini-action:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+}
+
+.aura-desktop-rail__upnext {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  background: rgb(0 0 0 / 0.03);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 160ms ease;
+}
+.theme-midnight .aura-desktop-rail__upnext {
+  background: rgb(255 255 255 / 0.04);
+}
+.aura-desktop-rail__upnext:hover {
+  background: rgb(0 0 0 / 0.05);
+}
+.theme-midnight .aura-desktop-rail__upnext:hover {
+  background: rgb(255 255 255 / 0.07);
+}
+

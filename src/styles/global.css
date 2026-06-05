@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* ─── Resets ─────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  background: var(--page-bg, #d9cdb9);
+  overflow: hidden;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* React mount root. The responsive shell (portal'd into body) is the only
+   layout authority at every breakpoint now — the old 402×874 fixed stage +
+   transform-scale system was retired during the responsive flip. */
+#root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+/* ─── Design tokens (dusk theme = default) ────────────────────────────── */
+@theme {
+  --color-bg:         #e9dfd1;
+  --color-surface:    #f4ece0;
+  --color-ink:        #2a221c;
+  --color-ink-soft:   rgba(42, 34, 28, 0.62);
+  --color-ink-faint:  rgba(42, 34, 28, 0.46);
+  --color-line:       rgba(42, 34, 28, 0.10);
+  --color-accent:     #b06a3f;
+  --color-accent-soft: rgba(176, 106, 63, 0.16);
+  --page-bg:          #d9cdb9;
+  --stage-bg:         linear-gradient(140deg, #d9cdb9 0%, #bca790 100%);
+
+  --font-serif:  "Fraunces", serif;
+  --font-mono:   ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans:   "Hanken Grotesk", system-ui, sans-serif;
+  --font-script: "Dancing Script", cursive;
+
+  --animate-aura-pulse:     aura-pulse 1.8s ease-in-out infinite;
+  --animate-aura-rise:      aura-rise 360ms cubic-bezier(.2, .7, .2, 1);
+  --animate-aura-breathe:   aura-breathe 2.8s ease-in-out infinite;
+  --animate-aura-line-in:   aura-line-in 0.45s ease both;
+  --animate-aura-sheet-in:  aura-sheet-in 360ms cubic-bezier(.2, .7, .2, 1);
+  --animate-aura-sheet-out: aura-sheet-out 240ms cubic-bezier(.6, .2, .9, .4) forwards;
+  --animate-aura-fade-in:   aura-fade-in 0.9s ease forwards;
+  --animate-aura-fade-out:  aura-fade-out 0.9s ease forwards;
+  --animate-aura-screen-in: aura-screen-in 420ms cubic-bezier(.2, .7, .2, 1);
+  --animate-aura-soft:      aura-soft 2.4s ease-in-out infinite;
+  --animate-aura-fadein:    aura-fadein 240ms ease;
+  --animate-aura-heart-burst: aura-heart-burst 700ms cubic-bezier(.2, .8, .3, 1) forwards;
+}
+
+/* Tabular numerals for digit columns (track index, duration) that need
+   row-to-row alignment. Hanken Grotesk's `tnum` OpenType feature delivers
+   even digit widths without needing a separate monospaced font. */
+.aura-numeric {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ─── Runtime theme switches (toggle class on App root) ──────────────── */
+/* Warm midnight — the same warm room at night, not a cold tech-dashboard dark. */
+.theme-midnight {
+  --color-bg:         #1a1612;
+  --color-surface:    #231e18;
+  --color-ink:        #f0e8dc;
+  --color-ink-soft:   rgba(240, 232, 220, 0.62);
+  --color-ink-faint:  rgba(240, 232, 220, 0.46);
+  --color-line:       rgba(240, 232, 220, 0.10);
+  --color-accent:     #e09971;
+  --color-accent-soft: rgba(224, 153, 113, 0.18);
+  --page-bg:          #110e0b;
+  --stage-bg:         linear-gradient(140deg, #0f0c09 0%, #1c1813 100%);
+}
+
+.theme-bloom {
+  --color-bg:         #f3e8e4;
+  --color-surface:    #fbf3ef;
+  --color-ink:        #2a1f23;
+  --color-ink-soft:   rgba(42, 31, 35, 0.62);
+  --color-ink-faint:  rgba(42, 31, 35, 0.46);
+  --color-line:       rgba(42, 31, 35, 0.10);
+  --color-accent:     #a8556a;
+  --color-accent-soft: rgba(168, 85, 106, 0.16);
+}
+
+/* `dark:` variant fires inside the midnight subtree. Components use it for
+   glass-backdrop rgba values that genuinely need to flip, not just for tokens
+   already swapped above. */
+@custom-variant dark (&:where(.theme-midnight, .theme-midnight *));
+
+/* ─── Mood accents (used by BridgesScreen arc gradients) ─────────────── */
+:root {
+  --mood-restless: #c2603a;
+  --mood-focused:  #3e8466;
+  --mood-calm:     #5a4b86;
+  --mood-upbeat:   #d8956a;
+  --mood-warm:     #c47080;
+  --mood-social:   #e0a960;
+}

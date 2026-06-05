@@ -1,0 +1,44 @@
+/* Mobile top pill — paired with MobileBottomBar. Same glass recipe, same
+   58 px height, same 14 px side insets, same 16 px viewport inset.
+   Subtle bg tint so the pill reads as filled glass against dark scenes
+   instead of an outlined empty shape. */
+
+.aura-mobile-top {
+  position: fixed;
+  top: 16px;
+  left: 14px;
+  right: 14px;
+  z-index: 30;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-radius: 9999px;
+  /* Faint white-shimmer gradient gives a real glass look even when nothing's
+     scrolling behind the pill (uniform-dark page = backdrop-filter has
+     nothing to blur). The gradient + border + inset highlight together
+     define the pill rim as "frosted glass disc" against any backdrop. */
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.02));
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+  color: var(--color-ink);
+}
+.theme-midnight .aura-mobile-top {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015));
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.36),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.aura-mobile-top__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}

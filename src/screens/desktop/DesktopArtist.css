@@ -1,0 +1,152 @@
+/* DesktopArtist piggybacks on DesktopPlaylistDetail's `aura-dpd` styles for the
+   shared shell (flex-column root, pinned header, scroll body with mask fade,
+   hero pill, track rows, ⋯ menu). This file only adds the artist-specific
+   bits: avatar in the header, album grid, similar-artists row, and bio. */
+
+.aura-dar__hero-row {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 24px;
+}
+.aura-dar__avatar {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-line);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.10);
+}
+.aura-dar__avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 55%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 56px;
+  text-transform: lowercase;
+}
+
+/* Hero text needs to shrink so it doesn't crowd the avatar on narrow rails. */
+.aura-dar__hero-row .aura-dpd__hero {
+  font-size: 72px;
+  margin: 0;
+}
+
+/* Albums — 4-col grid, capped tile width so big artists with 12+ releases
+   don't stretch into uncomfortably large tiles on wide screens. */
+.aura-dar__albums {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 20px;
+  padding: 8px 56px 0;
+}
+.aura-dar__album {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 160ms ease;
+}
+.aura-dar__album:hover { transform: translateY(-1px); }
+.aura-dar__album-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--color-line);
+}
+.aura-dar__album-cover--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 55%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 48px;
+}
+.aura-dar__album-name {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Similar artists — small round avatars in a wrapping row. */
+.aura-dar__similar {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 18px;
+  padding: 8px 56px 0;
+}
+.aura-dar__similar-tile {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: center;
+  color: var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: transform 160ms ease;
+}
+.aura-dar__similar-tile:hover { transform: translateY(-1px); }
+.aura-dar__similar-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--color-line);
+}
+.aura-dar__similar-avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 55%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 38px;
+}
+.aura-dar__similar-name {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Bio — single paragraph, wide but capped for readability. */
+.aura-dar__bio {
+  padding: 8px 56px 0;
+  max-width: 720px;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+}

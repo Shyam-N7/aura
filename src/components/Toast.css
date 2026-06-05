@@ -1,0 +1,48 @@
+.aura-toast {
+  position: absolute;
+  /* Bottom-anchored on every breakpoint — sits above the BottomNav (mobile),
+     BottomMiniBar (tablet-portrait), or FloatingMini area (desktop). 96px
+     clears each of those bottom-rail elements with breathing room. */
+  bottom: 96px;
+  left: 50%;
+  z-index: 60;
+  pointer-events: none;
+  padding: 11px 22px;
+  border-radius: 9999px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-surface), transparent 4%);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  box-shadow:
+    0 12px 28px rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  white-space: nowrap;
+  transform-origin: bottom center;
+  animation:
+    aura-toast-in  320ms cubic-bezier(.4, 0, .8, 1) both,
+    aura-toast-out 320ms cubic-bezier(.4, 0, .8, 1) 1.28s both;
+}
+
+/* Rises into view from below, holds, then fades back down. */
+@keyframes aura-toast-in {
+  0%   { opacity: 0; transform: translate(-50%, 16px) scale(0.96); filter: blur(2px); }
+  100% { opacity: 1; transform: translate(-50%, 0)    scale(1);    filter: blur(0); }
+}
+
+@keyframes aura-toast-out {
+  0%   { opacity: 1; transform: translate(-50%, 0)    scale(1);    filter: blur(0); }
+  100% { opacity: 0; transform: translate(-50%, 16px) scale(0.96); filter: blur(2px); }
+}
+
+/* On dark, the bright white inset reads as a halo — soften it to a warm edge. */
+.theme-midnight .aura-toast {
+  box-shadow:
+    0 12px 28px rgb(0 0 0 / 0.40),
+    0 2px 6px rgb(0 0 0 / 0.20),
+    inset 0 1px 0 rgb(255 255 255 / 0.10);
+}

@@ -1,0 +1,21 @@
+.aura-crumb-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 9px;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-crumb-back:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+}

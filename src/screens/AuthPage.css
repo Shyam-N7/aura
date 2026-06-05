@@ -1,0 +1,635 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Auth page — faithful port of aura-export/signin.{html,css}
+   Scoped under .aura-auth-page. Reference :root names are aliased to the
+   app's global --color-* tokens so dusk/midnight/bloom follow automatically;
+   the warm visual side stays literal art.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.aura-auth-page {
+  /* Reference token names → global theme tokens */
+  --bg:          var(--color-bg);
+  --surface:     var(--color-surface);
+  --ink:         var(--color-ink);
+  --ink-soft:    var(--color-ink-soft);
+  --ink-faint:   var(--color-ink-faint);
+  --line:        var(--color-line);
+  --accent:      var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --max-w:       1240px;
+
+  /* #root is position:fixed;overflow:hidden — the page owns its own scroll. */
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Headline emphasis stays serif italic (never recolored / bolded) ─── */
+.aura-auth-page em { font-style: italic; }
+
+/* ─── Animations ──────────────────────────────────────────────────────── */
+@keyframes auth-soft     { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
+@keyframes auth-breathe  { 0%,100% { transform:scale(0.9); opacity:0.55; } 50% { transform:scale(1.08); opacity:1; } }
+@keyframes auth-orbit    { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes auth-float-a  { 0%,100% { transform:translate3d(0,0,0) rotate(0deg); } 50% { transform:translate3d(-6px,-10px,0) rotate(2deg); } }
+@keyframes auth-float-b  { 0%,100% { transform:translate3d(0,0,0) rotate(0deg); } 50% { transform:translate3d(8px,-8px,0) rotate(-2deg); } }
+@keyframes auth-rise     { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+@keyframes auth-shimmer  { 0% { background-position: -200% 50%; } 100% { background-position: 200% 50%; } }
+
+/* ─── Mono helper ─────────────────────────────────────────────────────── */
+.aura-auth-page .mono {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* ─── Top brand link (top-left) ───────────────────────────────────────── */
+.aura-auth-page .auth-top {
+  position: absolute; top: 24px; left: 28px; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--ink);
+  font-family: var(--font-serif); font-style: italic; font-size: 22px;
+  cursor: pointer; background: none; border: none; padding: 0;
+}
+.aura-auth-page .auth-top__mark {
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ─── Back link (top-right) ───────────────────────────────────────────── */
+.aura-auth-page .auth-back-link {
+  position: absolute; top: 30px; right: 28px; z-index: 5;
+  color: var(--ink); text-decoration: none;
+  font-family: var(--font-sans); font-weight: 500; font-size: 10.5px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; background: none; border: none; padding: 0;
+}
+.aura-auth-page .auth-back-link:hover { color: var(--accent); }
+
+/* ─── Layout ──────────────────────────────────────────────────────────── */
+.aura-auth-page .auth-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+}
+
+/* ─── Brand visual (left / mobile backdrop) — warm art, white text ────── */
+.aura-auth-page .auth-visual {
+  position: relative;
+  background: linear-gradient(140deg, #b89a78 0%, #8a6645 55%, #5a4128 100%);
+  overflow: hidden;
+  padding: 80px 56px 60px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  isolation: isolate;
+}
+
+/* warm grain overlay */
+.aura-auth-page .auth-visual::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 80% 10%, rgba(255,200,140,0.4), transparent 50%),
+    radial-gradient(circle at 10% 90%, rgba(80,40,20,0.4), transparent 55%);
+  z-index: -1;
+}
+
+/* Theme-aware backdrop. Midnight is a warm dark ("the room at night"), so the
+   panel becomes deep embers rather than daylight amber — the glowing orb reads
+   beautifully on it. Bloom shifts rosier to match its accent. Dusk keeps the
+   default warm gradient above. White text stays legible in every case. */
+.theme-midnight .aura-auth-page .auth-visual {
+  background: linear-gradient(140deg, #2b1d12 0%, #3c2716 55%, #140f0a 100%);
+}
+.theme-midnight .aura-auth-page .auth-visual::before {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(255,180,110,0.22), transparent 50%),
+    radial-gradient(circle at 10% 90%, rgba(60,30,15,0.5), transparent 55%);
+}
+.theme-bloom .aura-auth-page .auth-visual {
+  background: linear-gradient(140deg, #e7d3ca 0%, #cba892 55%, #9a6f63 100%);
+}
+
+.aura-auth-page .auth-visual .top-meta {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-top: 32px;
+}
+.aura-auth-page .auth-visual .mono { color: rgba(255,255,255,0.88); }
+
+/* 3D orb composition */
+.aura-auth-page .composition {
+  position: relative;
+  flex: 1;
+  margin: 60px 0;
+  perspective: 1200px;
+  perspective-origin: 50% 40%;
+  min-height: 320px;
+}
+.aura-auth-page .composition .ring-bg {
+  position: absolute; inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255,220,180,0.55) 0%, rgba(255,200,150,0.18) 35%, transparent 60%);
+  filter: blur(10px);
+  animation: auth-breathe 5s ease-in-out infinite;
+}
+.aura-auth-page .composition .ring {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 70%; aspect-ratio: 1; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.32);
+  animation: auth-orbit 70s linear infinite;
+}
+.aura-auth-page .composition .ring::before {
+  content: ''; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 8px; border-radius: 8px; background: #fff;
+  box-shadow: 0 0 16px rgba(255,255,255,0.8);
+}
+.aura-auth-page .composition .ring.r2 {
+  width: 92%; animation-duration: 110s; animation-direction: reverse;
+  border-color: rgba(255,255,255,0.16);
+}
+.aura-auth-page .composition .ring.r2::before { opacity: 0.5; left: 75%; top: 6.7%; transform: translate(-50%, -50%); }
+
+.aura-auth-page .composition .core {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 36%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 32% 32%, #ffd4a8 0%, #d6925a 45%, #6b3a1f 100%);
+  box-shadow: 0 30px 60px rgba(0,0,0,0.35), inset 0 0 60px rgba(80,30,10,0.6);
+  overflow: hidden;
+}
+.aura-auth-page .composition .core::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 70% 70%, rgba(80,30,10,0.5), transparent 50%);
+}
+/* specular highlight — soft upper-left sheen, not a centered cream dot */
+.aura-auth-page .composition .core::before {
+  content: ''; position: absolute; left: 32%; top: 28%;
+  transform: translate(-50%, -50%);
+  width: 36%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,240,210,0.50) 0%, rgba(255,220,180,0.18) 45%, transparent 75%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+/* floating album shards */
+.aura-auth-page .shard {
+  position: absolute;
+  width: 100px; aspect-ratio: 1;
+  border-radius: 10px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.30);
+  overflow: hidden;
+}
+.aura-auth-page .shard.s1 {
+  left: 4%; top: 8%; transform: rotateY(-18deg) rotateX(8deg);
+  animation: auth-float-a 9s ease-in-out infinite;
+  background: linear-gradient(135deg, #3a2b6b, #b8a4ff);
+}
+.aura-auth-page .shard.s1::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 40%; aspect-ratio: 1; transform: translate(-50%,-50%);
+  border-radius: 50%; border: 1px solid rgba(255,255,255,0.6);
+}
+.aura-auth-page .shard.s2 {
+  right: 6%; bottom: 14%;
+  width: 84px;
+  transform: rotateY(22deg) rotateX(-6deg);
+  animation: auth-float-b 8s ease-in-out infinite 1.4s;
+  background: linear-gradient(180deg, #2f5b42, #0e1a14);
+}
+.aura-auth-page .shard.s2::after {
+  content: ''; position: absolute; left: 16%; top: 14%;
+  width: 68%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #a8d8b0, #2f5b42 70%);
+}
+.aura-auth-page .shard.s3 {
+  right: 16%; top: 12%;
+  width: 70px;
+  transform: rotateY(-12deg) rotateX(10deg);
+  animation: auth-float-a 11s ease-in-out infinite 0.6s;
+  background: #0a1422;
+}
+.aura-auth-page .shard.s3 .b {
+  position: absolute; left: 0; right: 0; height: 18%;
+  background: #264b7a;
+}
+.aura-auth-page .shard.s3 .b:nth-child(1) { top: 10%; }
+.aura-auth-page .shard.s3 .b:nth-child(2) { top: 38%; background: #9ec5ff; height: 8%; }
+.aura-auth-page .shard.s3 .b:nth-child(3) { top: 60%; height: 14%; opacity: 0.6; }
+
+/* hero text on left */
+.aura-auth-page .auth-visual .pitch { position: relative; z-index: 2; }
+.aura-auth-page .auth-visual h1 {
+  font-family: var(--font-serif);
+  font-size: clamp(38px, 5.2vw, 68px);
+  line-height: 0.96;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: #fff;
+  text-wrap: pretty;
+}
+.aura-auth-page .auth-visual h1 em { font-style: italic; }
+.aura-auth-page .auth-visual .pitch-sub {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.45;
+  color: rgba(255,255,255,0.92);
+  margin: 22px 0 0;
+  max-width: 400px;
+  text-wrap: pretty;
+}
+.aura-auth-page .auth-visual .pitch-stats {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255,255,255,0.18);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 460px;
+}
+.aura-auth-page .pitch-stats .stat .v {
+  font-family: var(--font-sans); font-weight: 500;
+  font-size: 30px; line-height: 1; color: #fff; letter-spacing: -0.02em;
+}
+.aura-auth-page .pitch-stats .stat .l {
+  font-family: var(--font-sans); font-weight: 500; font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.85);
+  margin-top: 6px; display: block;
+}
+
+/* ─── Form (right) ────────────────────────────────────────────────────── */
+.aura-auth-page .form-side {
+  padding: 80px 56px 60px;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  background: var(--bg);
+  position: relative;
+}
+
+.aura-auth-page .form-wrap {
+  width: 100%; max-width: 420px;
+  animation: auth-rise 600ms cubic-bezier(.2,.7,.2,1);
+}
+
+.aura-auth-page .form-head { margin-bottom: 36px; }
+.aura-auth-page .form-head .mono { display: inline-block; margin-bottom: 14px; }
+.aura-auth-page .form-head h2 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(32px, 4.5vw, 48px);
+  line-height: 1;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--ink);
+}
+.aura-auth-page .form-head h2 em { font-style: normal; }
+.aura-auth-page .form-head .sub {
+  margin-top: 14px;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/* Social buttons — compact circular glass chips with brand-tinted hover glow
+   + hover/focus tooltip via data-label. */
+.aura-auth-page .social-row {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.aura-auth-page .social-btn {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  /* Light theme default: subtle dark-tinted glass over cream — reads as a
+     gentle raised disk, not a heavy gray puck. */
+  background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(42,34,28,0.12);
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--color-ink);
+  transition: transform 280ms cubic-bezier(.22,1,.36,1),
+              box-shadow 280ms ease,
+              border-color 280ms ease;
+}
+.aura-auth-page .social-btn svg {
+  position: relative; z-index: 2;
+  width: 22px; height: 22px;
+}
+
+/* Shimmer sweep on hover — dark in light theme so it reads against the
+   light glass; flipped to white in midnight via the .theme-midnight rule. */
+.aura-auth-page .social-btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(42,34,28,0.06) 50%, transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 700ms cubic-bezier(.22,1,.36,1);
+  pointer-events: none;
+  z-index: 1;
+}
+.aura-auth-page .social-btn:hover::before { transform: translateX(100%); }
+
+/* Hover lift + active press */
+.aura-auth-page .social-btn:hover  { transform: translateY(-2px) scale(1.06); }
+.aura-auth-page .social-btn:active { transform: translateY(0) scale(0.96); }
+
+/* Tooltip — small pill above the button, fades in on hover/focus */
+.aura-auth-page .social-btn::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 200ms ease;
+  z-index: 3;
+}
+.aura-auth-page .social-btn:hover::after,
+.aura-auth-page .social-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Brand-tinted borders + hover glows. Apple is "monochrome" — uses ink in
+   light theme and white in midnight, theme-aware via the override below.
+   Spotify + Google use brand-hex glows which read on both themes. */
+.aura-auth-page .social-btn--apple   { border-color: rgba(42,34,28,0.18); }
+.aura-auth-page .social-btn--apple:hover {
+  border-color: rgba(42,34,28,0.45);
+  box-shadow: 0 12px 28px rgba(42,34,28,0.18);
+}
+.aura-auth-page .social-btn--spotify { border-color: rgba(29,185,84,0.30); }
+.aura-auth-page .social-btn--spotify:hover {
+  border-color: rgba(29,185,84,0.70);
+  box-shadow: 0 12px 28px rgba(29,185,84,0.35);
+}
+.aura-auth-page .social-btn--google  { border-color: rgba(66,133,244,0.30); }
+.aura-auth-page .social-btn--google:hover {
+  border-color: rgba(66,133,244,0.70);
+  box-shadow: 0 12px 28px rgba(66,133,244,0.30);
+}
+
+/* Midnight theme — flip to white-tinted glass + white icons so the chips
+   read above the dark warm page bg. Brand-coloured Spotify/Google glows
+   already work; only base + Apple need the inversion. */
+.theme-midnight .aura-auth-page .social-btn {
+  background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+  border-color: rgba(255,255,255,0.16);
+  color: #fff;
+}
+.theme-midnight .aura-auth-page .social-btn::before {
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10) 50%, transparent 70%);
+}
+.theme-midnight .aura-auth-page .social-btn--apple { border-color: rgba(255,255,255,0.24); }
+.theme-midnight .aura-auth-page .social-btn--apple:hover {
+  border-color: rgba(255,255,255,0.55);
+  box-shadow: 0 12px 28px rgba(255,255,255,0.14);
+}
+.theme-midnight .aura-auth-page .social-btn--spotify:hover {
+  box-shadow: 0 12px 28px rgba(29,185,84,0.45);
+}
+.theme-midnight .aura-auth-page .social-btn--google:hover {
+  box-shadow: 0 12px 28px rgba(66,133,244,0.40);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-auth-page .social-btn,
+  .aura-auth-page .social-btn::before,
+  .aura-auth-page .social-btn::after { transition: none; }
+  .aura-auth-page .social-btn:hover { transform: none; }
+}
+
+/* Divider */
+.aura-auth-page .divider {
+  display: flex; align-items: center; gap: 14px;
+  margin: 6px 0 22px;
+}
+.aura-auth-page .divider::before,
+.aura-auth-page .divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+.aura-auth-page .divider span {
+  font-family: var(--font-sans); font-weight: 500; font-size: 9.5px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint);
+}
+
+/* Fields */
+.aura-auth-page .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.aura-auth-page .field label {
+  font-family: var(--font-sans); font-weight: 500; font-size: 9.5px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft);
+}
+.aura-auth-page .field input {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  padding: 14px 16px;
+  border-radius: 12px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 18px;
+  transition: border-color 200ms ease;
+  width: 100%;
+}
+.aura-auth-page .field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.aura-auth-page .field input::placeholder { color: var(--ink-faint); }
+
+.aura-auth-page .field-row { display: flex; justify-content: space-between; align-items: baseline; }
+.aura-auth-page .field-row a {
+  font-family: var(--font-sans); font-weight: 500; font-size: 9.5px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
+  text-decoration: none; cursor: pointer;
+}
+.aura-auth-page .field-row a:hover { text-decoration: underline; }
+
+/* Inline field-level error (accent) */
+.aura-auth-page .field-error {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+/* Inline form-level error (italic, accent) */
+.aura-auth-page .form-error {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--accent);
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+/* Password strength */
+.aura-auth-page .strength { display: none; flex-direction: column; gap: 4px; margin-top: 6px; }
+.aura-auth-page .strength.show { display: flex; }
+.aura-auth-page .strength .bar { display: flex; gap: 3px; margin-top: 4px; }
+.aura-auth-page .strength .bar i {
+  flex: 1; height: 3px; border-radius: 3px; background: var(--line); transition: background 280ms;
+}
+.aura-auth-page .strength.s1 .bar i:nth-child(1) { background: var(--accent); }
+.aura-auth-page .strength.s2 .bar i:nth-child(-n+2) { background: var(--accent); }
+.aura-auth-page .strength.s3 .bar i:nth-child(-n+3) { background: var(--accent); }
+.aura-auth-page .strength.s4 .bar i { background: var(--accent); }
+.aura-auth-page .strength .label {
+  font-family: var(--font-sans); font-weight: 500; font-size: 9px;
+  letter-spacing: 0.08em; color: var(--ink-faint); text-transform: uppercase;
+}
+
+/* Submit */
+.aura-auth-page .auth-submit {
+  width: 100%; margin-top: 12px;
+  padding: 16px 18px; border-radius: 12px;
+  background: var(--ink); color: var(--bg);
+  border: none; cursor: pointer;
+  font-family: var(--font-sans); font-weight: 500; font-size: 11.5px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+  background-image: linear-gradient(90deg, var(--ink) 0%, var(--ink) 40%, #4a3a2c 50%, var(--ink) 60%, var(--ink) 100%);
+  background-size: 200% 100%;
+}
+.aura-auth-page .auth-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(42,34,28,0.25);
+  animation: auth-shimmer 2.4s linear infinite;
+}
+.aura-auth-page .auth-submit svg { transition: transform 200ms; }
+.aura-auth-page .auth-submit:hover svg { transform: translateX(3px); }
+.aura-auth-page .auth-submit:disabled { opacity: 0.7; cursor: default; }
+.aura-auth-page .auth-submit:disabled:hover { transform: none; box-shadow: none; animation: none; }
+
+/* Footer toggle */
+.aura-auth-page .form-foot {
+  margin-top: 28px;
+  text-align: center;
+  font-family: var(--font-sans); font-weight: 400; font-size: 15px;
+  color: var(--ink-soft);
+}
+.aura-auth-page .form-foot a {
+  color: var(--ink); text-decoration: none;
+  border-bottom: 1px solid var(--accent);
+  padding-bottom: 2px;
+  cursor: pointer;
+}
+.aura-auth-page .form-foot a:hover { color: var(--accent); }
+
+/* Privacy line */
+.aura-auth-page .privacy {
+  margin-top: 28px;
+  font-family: var(--font-sans); font-weight: 500; font-size: 9.5px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint);
+  text-align: center; line-height: 1.6;
+}
+.aura-auth-page .privacy a { color: var(--ink-soft); }
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+/* Mobile reimagining: instead of stacking the visual panel above the form as
+   two boxes, the orb art becomes a FULL-SCREEN fixed backdrop and the form
+   floats over it in a frosted-glass card — one immersive surface. */
+@media (max-width: 920px) {
+  .aura-auth-page .auth-page { display: block; min-height: 100vh; min-height: 100dvh; }
+
+  /* Orb art → full-screen fixed backdrop (only the living composition shows;
+     the marketing copy is dropped — the form carries the headline, and text
+     behind a blurred card is just noise). */
+  .aura-auth-page .auth-visual {
+    position: fixed; inset: 0; z-index: 0;
+    min-height: 100vh; min-height: 100dvh;
+    padding: 64px 24px;
+    justify-content: center;
+  }
+  .aura-auth-page .auth-visual .top-meta,
+  .aura-auth-page .auth-visual .pitch { display: none; }
+
+  /* Form → transparent layer scrolling over the backdrop. margin-top:auto on
+     the card (below) anchors it low when there's room, yet lets a tall signup
+     form flow from the top + scroll without clipping. */
+  .aura-auth-page .form-side {
+    position: relative; z-index: 1;
+    background: transparent;
+    min-height: 100vh; min-height: 100dvh;
+    padding: 100px 20px 40px;
+  }
+
+  /* Frosted-glass card — theme-aware via tokens (light glass in dusk/bloom,
+     dark in midnight). Opaque var(--bg) fallback first for no-color-mix UAs. */
+  .aura-auth-page .form-wrap {
+    margin: auto auto 0;
+    padding: 28px 22px;
+    border-radius: 24px;
+    background: var(--bg);
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    backdrop-filter: blur(32px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  }
+
+  /* Brand + back sit over the warm art above the card → light text. */
+  .aura-auth-page .auth-top,
+  .aura-auth-page .auth-back-link { color: rgba(255, 255, 255, 0.9); }
+  .aura-auth-page .auth-back-link:hover { color: #fff; }
+}
+
+@media (max-width: 599px) {
+  .aura-auth-page .auth-visual { padding: 48px 18px; }
+  .aura-auth-page .auth-visual .composition { min-height: 240px; }
+  .aura-auth-page .shard.s1 { width: 70px; }
+  .aura-auth-page .shard.s2 { width: 60px; }
+  .aura-auth-page .shard.s3 { width: 50px; }
+  .aura-auth-page .form-side { padding: 84px 16px 32px; }
+  .aura-auth-page .form-wrap { padding: 24px 18px; }
+  .aura-auth-page .form-head h2 { font-size: clamp(28px, 7vw, 38px); }
+}
+
+/* ─── Reduced motion — silence every infinite animation ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .aura-auth-page .composition .ring-bg,
+  .aura-auth-page .composition .ring,
+  .aura-auth-page .composition .core::before,
+  .aura-auth-page .shard.s1,
+  .aura-auth-page .shard.s2,
+  .aura-auth-page .shard.s3,
+  .aura-auth-page .form-wrap,
+  .aura-auth-page .auth-submit:hover {
+    animation: none !important;
+  }
+}

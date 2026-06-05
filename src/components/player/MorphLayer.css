@@ -1,0 +1,19 @@
+.aura-morph-layer {
+  position: absolute;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+  left: var(--morph-left);
+  top: var(--morph-top);
+  width: var(--morph-width);
+  height: var(--morph-height);
+  border-radius: var(--morph-radius);
+  will-change: left, top, width, height, border-radius;
+  transition:
+    left        var(--morph-duration) cubic-bezier(.32, .72, .18, 1),
+    top         var(--morph-duration) cubic-bezier(.32, .72, .18, 1),
+    width       var(--morph-duration) cubic-bezier(.32, .72, .18, 1),
+    height      var(--morph-duration) cubic-bezier(.32, .72, .18, 1),
+    border-radius var(--morph-duration) cubic-bezier(.32, .72, .18, 1),
+    box-shadow  var(--morph-duration) ease;
+}

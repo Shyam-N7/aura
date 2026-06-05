@@ -1,0 +1,105 @@
+/* Rail-scoped add-to-playlist sheet — mirrors AddToPlaylistSheet visually but
+   confined to the right rail. Absolute positioning anchors it to the rail's
+   bottom edge instead of the viewport. */
+
+.aura-rail-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.34);
+  z-index: 50;
+  animation: aura-rail-sheet-fade 280ms cubic-bezier(.2, .7, .2, 1) both;
+}
+
+.aura-rail-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 51;
+  max-height: 78%;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--color-surface), transparent 2%);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-top: 1px solid color-mix(in srgb, var(--color-ink), transparent 88%);
+  border-radius: 20px 20px 0 0;
+  box-shadow:
+    0 -18px 40px rgb(0 0 0 / 0.20),
+    0 -2px 10px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+  animation: aura-rail-sheet-up 360ms cubic-bezier(.16, .9, .3, 1) both;
+  transform-origin: bottom center;
+  will-change: transform;
+}
+
+.aura-rail-sheet__handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink), transparent 76%);
+  margin: 10px auto 8px;
+}
+
+/* Stacked header — small mono label on top, italic serif track title below.
+   Avoids the inline label+title flex wrapping awkwardly at the rail's narrow
+   width. */
+.aura-rail-sheet__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 22px 12px;
+}
+.aura-rail-sheet__title {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.15;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aura-rail-sheet__list {
+  overflow-y: auto;
+  padding: 4px 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Compact picker rows — drop the heavy underline borders for a softer look. */
+.aura-rail-sheet__list .aura-sheet-row {
+  padding: 9px 10px;
+  border-bottom: 0;
+  border-radius: 10px;
+  transition: background 140ms ease;
+}
+.aura-rail-sheet__list .aura-sheet-row:not(:disabled):hover {
+  background: rgb(0 0 0 / 0.04);
+}
+.theme-midnight .aura-rail-sheet__list .aura-sheet-row:not(:disabled):hover {
+  background: rgb(255 255 255 / 0.06);
+}
+.aura-rail-sheet__list .aura-sheet-row--compact {
+  padding: 8px 10px;
+  gap: 12px;
+}
+.aura-rail-sheet__list .aura-sheet-row--compact .aura-sheet-cover,
+.aura-rail-sheet__list .aura-sheet-row--compact .aura-sheet-cover-fallback {
+  width: 38px;
+  height: 38px;
+}
+.aura-rail-sheet__list .aura-sheet-row--compact .font-serif {
+  font-size: 15px;
+}
+
+@keyframes aura-rail-sheet-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes aura-rail-sheet-up {
+  from { transform: translateY(100%) scale(0.98); opacity: 0.85; }
+  to   { transform: translateY(0) scale(1);       opacity: 1; }
+}

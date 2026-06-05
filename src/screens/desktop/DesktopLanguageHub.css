@@ -1,0 +1,134 @@
+.aura-dlh {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: dlh;
+}
+.aura-dlh__header {
+  padding: 40px 56px 0;
+}
+.aura-dlh__scroll {
+  padding-bottom: 80px;
+}
+.aura-dlh__hero {
+  font-family: var(--font-serif);
+  font-size: 88px;
+  line-height: 0.94;
+  letter-spacing: -0.03em;
+  margin: 28px 0 0;
+  font-weight: 400;
+  color: var(--color-ink);
+  text-transform: capitalize;
+}
+.aura-dlh__hero em { font-style: italic; }
+
+.aura-dlh__error {
+  padding: 40px 56px 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  max-width: 560px;
+}
+
+.aura-dlh__tracks {
+  padding: 0 48px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.aura-dlh__track {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 160ms ease;
+}
+.aura-dlh__track:hover { transform: translateY(-1px); }
+.aura-dlh__t-title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aura-dlh__playlists {
+  padding: 0 48px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.aura-dlh__playlist {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 160ms ease;
+}
+.aura-dlh__playlist:hover { transform: translateY(-1px); }
+.aura-dlh__pl-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+  background: var(--color-line);
+}
+.aura-dlh__pl-cover--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 55%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 64px;
+}
+.aura-dlh__pl-name {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aura-dlh__footer {
+  padding-top: 48px;
+  text-align: center;
+}
+
+/* Mobile (<600 px container) — tighten gutters, drop hero, switch grids to
+   2 columns since 4-col tiles get tiny at 393 px. */
+@container dlh (max-width: 600px) {
+  .aura-dlh__header { padding: 14px 22px 0; }
+  .aura-dlh__hero { font-size: 44px; margin-top: 18px; }
+  .aura-dlh__error { padding: 28px 22px 0; font-size: 14px; }
+  .aura-dlh__tracks,
+  .aura-dlh__playlists {
+    padding: 0 22px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .aura-dlh__t-title,
+  .aura-dlh__pl-name { font-size: 15px; }
+  .aura-dlh__pl-cover--fallback { font-size: 40px; }
+}

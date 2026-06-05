@@ -1,0 +1,94 @@
+/* `aura-fadein` keyframe is defined globally in src/styles/animations.css. */
+.aura-shortcuts-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.38);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 50;
+  animation: aura-fadein 200ms ease both;
+}
+
+.aura-shortcuts {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 51;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  border-radius: 18px;
+  box-shadow:
+    0 24px 56px rgb(0 0 0 / 0.32),
+    0 4px 12px rgb(0 0 0 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+  width: min(420px, calc(100% - 48px));
+  padding: 22px 24px 18px;
+  font-family: var(--font-sans);
+  animation: aura-shortcuts-in 240ms cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes aura-shortcuts-in {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.aura-shortcuts__title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--color-ink);
+}
+
+.aura-shortcuts__list {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 8px;
+  column-gap: 24px;
+  font-size: 13.5px;
+  color: var(--color-ink-soft);
+}
+.aura-shortcuts__list dt {
+  color: var(--color-ink-soft);
+}
+.aura-shortcuts__list dd {
+  margin: 0;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.aura-shortcuts__key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-ink), transparent 92%);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 80%);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.aura-shortcuts__hint {
+  margin-top: 14px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+.theme-midnight .aura-shortcuts-backdrop { background: rgb(0 0 0 / 0.55); }
+.theme-midnight .aura-shortcuts {
+  box-shadow:
+    0 24px 56px rgb(0 0 0 / 0.55),
+    0 4px 12px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+}

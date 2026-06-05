@@ -1,0 +1,190 @@
+.aura-dlib {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: dlib;
+}
+.aura-dlib__see-all {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-dlib__see-all:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+}
+.aura-dlib__header {
+  padding: 40px 56px 0;
+}
+.aura-dlib__scroll {
+  padding-bottom: 80px;
+}
+.aura-dlib__hero {
+  font-family: var(--font-serif);
+  font-size: 88px;
+  line-height: 0.94;
+  letter-spacing: -0.03em;
+  margin: 28px 0 0;
+  font-weight: 400;
+  color: var(--color-ink);
+}
+.aura-dlib__hero em { font-style: italic; }
+
+.aura-dlib__cols {
+  padding: 48px 56px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.aura-dlib__empty {
+  padding: 48px 56px 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  max-width: 520px;
+}
+
+.aura-dlib__browse {
+  padding: 48px 56px 0;
+}
+.aura-dlib__lang-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.aura-dlib__lang {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.aura-dlib__lang:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+  border-color: var(--color-ink);
+}
+.theme-midnight .aura-dlib__lang:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+.aura-dlib__empty-row {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+}
+
+.aura-dlib__row-wrap {
+  position: relative;
+  border-bottom: 1px solid var(--color-line);
+}
+.aura-dlib__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  padding-right: 40px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-ink);
+  transition: background 140ms ease;
+}
+.aura-dlib__row-wrap:hover .aura-dlib__row,
+.aura-dlib__row:hover {
+  background: rgb(0 0 0 / 0.02);
+}
+.aura-dlib__more {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 140ms ease, background 140ms ease, color 140ms ease;
+}
+.aura-dlib__row-wrap:hover .aura-dlib__more {
+  opacity: 1;
+}
+.aura-dlib__more:hover {
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+}
+.aura-dlib__row-title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-dlib__cover {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-line);
+}
+.aura-dlib__cover--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 55%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 22px;
+}
+
+@container dlib (max-width: 600px) {
+  .aura-dlib__header {
+    padding: 14px 22px 12px;
+    position: sticky;
+    top: 74px;
+    z-index: 5;
+    background: var(--color-bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
+  }
+  .aura-dlib__hero { font-size: 44px; margin-top: 12px; }
+  .aura-dlib__scroll { padding-bottom: 0; }
+  .aura-dlib__cols { padding: 28px 22px 0; grid-template-columns: 1fr; gap: 32px; }
+  .aura-dlib__empty { padding: 28px 22px 0; font-size: 14px; }
+  .aura-dlib__browse { padding: 32px 22px 0; }
+  .aura-dlib__row-title { font-size: 17px; }
+  .aura-dlib__cover { width: 44px; height: 44px; }
+  .aura-dlib__cover--fallback { font-size: 18px; }
+  .aura-dlib__more { opacity: 0.6; }
+  .aura-pl-menu { left: 4px; right: 4px; min-width: unset; }
+}

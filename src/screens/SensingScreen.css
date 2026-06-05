@@ -1,0 +1,63 @@
+.aura-sensing-breath-ring {
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-accent), transparent 78%), transparent 65%);
+}
+
+/* Eyebrow dot — small breathing dot with two expanding rings pulsing outward
+   (a mini version of the orb treatment in the centre of the screen, so the
+   "sensing" eyebrow visually echoes the main indicator). */
+.aura-sensing-dot-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+.aura-sensing-dot-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  margin-left: -3px;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent);
+  opacity: 0;
+  animation: aura-sensing-dot-pulse 2.4s ease-out infinite;
+  pointer-events: none;
+}
+.aura-sensing-dot-ring--late {
+  animation-delay: 1.2s;
+}
+@keyframes aura-sensing-dot-pulse {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(4.2); opacity: 0;   }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-sensing-dot-ring { animation: none; opacity: 0; }
+}
+
+.aura-sensing-mood {
+  opacity: 0;
+  transform: translateY(12px);
+  text-transform: capitalize;
+  transition:
+    opacity 800ms ease-in-out,
+    transform 800ms ease-in-out;
+}
+
+.aura-sensing-mood--revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.aura-sensing-tagline {
+  opacity: 0;
+  transition: opacity 1000ms ease;
+  transition-delay: 400ms;
+}
+
+.aura-sensing-tagline--revealed {
+  opacity: 1;
+}

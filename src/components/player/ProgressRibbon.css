@@ -1,0 +1,17 @@
+.aura-progress-ribbon {
+  width: 100%;
+  cursor: default;
+}
+
+.aura-progress-ribbon--seekable {
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.aura-progress-ribbon__svg {
+  width: 100%;
+  height: var(--ribbon-height);
+  overflow: visible;
+}

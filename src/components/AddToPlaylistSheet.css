@@ -1,0 +1,212 @@
+.aura-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.32);
+  backdrop-filter: blur(2px);
+  z-index: 40;
+  animation: aura-fadein 220ms ease both;
+}
+
+/* Floats in the dimmed area directly above the sheet's top edge (bottom:100%),
+   so it rides with the sheet during a drag. Light text reads on the scrim in
+   every theme; taps pass through to the backdrop below. */
+.aura-sheet-hint {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 12px;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: rgb(255 255 255 / 0.62);
+  pointer-events: none;
+  animation: aura-fadein 360ms ease both;
+}
+
+.aura-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  background: var(--color-bg);
+  border-top: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  box-shadow: 0 -18px 40px rgb(0 0 0 / 0.22);
+  max-height: 75%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: aura-sheet-rise 320ms cubic-bezier(.2, .8, .3, 1) both;
+}
+
+/* Open only — dismiss + drag are animated imperatively from the component so
+   the finger drives transform 1:1 without a React re-render per frame. */
+@keyframes aura-sheet-rise {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Grip — large invisible touch target around the visible handle bar so
+   users can actually grab it on mobile. Visible bar is 4 × 40 px; the
+   grip is a full-width 40 px tall band. touch-action:none keeps the
+   browser from converting the drag into a native scroll. */
+.aura-sheet-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding-top: 8px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.aura-sheet-grip:active { cursor: grabbing; }
+
+.aura-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink), transparent 75%);
+  pointer-events: none;
+}
+
+.aura-sheet-header {
+  padding: 4px 22px 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.aura-sheet-header:active { cursor: grabbing; }
+.aura-sheet-title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+.aura-sheet-subtitle {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.aura-sheet-preview {
+  padding: 0 22px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--color-line);
+  margin-bottom: 4px;
+}
+.aura-sheet-preview__item {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-sheet-preview__more {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-ink-faint);
+  margin-top: 2px;
+}
+
+.aura-sheet-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 22px 28px;
+}
+
+.aura-sheet-empty {
+  padding: 24px 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+}
+
+.aura-sheet-row {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.aura-sheet-row:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.aura-sheet-row__name {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+.aura-sheet-row__new-label {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink-soft);
+}
+.aura-sheet-row__count {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-faint);
+  margin-top: 2px;
+}
+
+.aura-sheet-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-line);
+}
+
+.aura-sheet-cover-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 60%),
+    color-mix(in srgb, var(--color-accent), transparent 85%));
+  color: var(--color-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.theme-midnight .aura-sheet-backdrop { background: rgb(0 0 0 / 0.50); }
+.theme-midnight .aura-sheet { box-shadow: 0 -18px 40px rgb(0 0 0 / 0.50); }

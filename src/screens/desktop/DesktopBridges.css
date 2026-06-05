@@ -1,0 +1,57 @@
+.aura-dbr {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: dbr;
+  background:
+    radial-gradient(circle at 12% -8%, color-mix(in srgb, var(--color-accent), transparent 80%), transparent 45%),
+    radial-gradient(circle at 110% 24%, color-mix(in srgb, var(--color-accent), transparent 90%), transparent 50%);
+}
+.aura-dbr__header {
+  padding: 40px 56px 0;
+}
+.aura-dbr__scroll {
+  padding-bottom: 80px;
+}
+.aura-dbr__hero {
+  font-family: var(--font-serif);
+  font-size: 88px;
+  line-height: 0.94;
+  letter-spacing: -0.03em;
+  margin: 28px 0 0;
+  font-weight: 400;
+  color: var(--color-ink);
+  text-wrap: pretty;
+}
+.aura-dbr__hero em { font-style: italic; }
+.aura-dbr__sub {
+  margin-top: 18px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+  max-width: 540px;
+}
+.aura-dbr__grid {
+  padding: 40px 56px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.aura-dbr__loading { opacity: 0.7; }
+
+/* Mobile (<600 px container) — tighten gutters, drop hero font, stack the
+   2-col bridge grid into a single column so each card has room to breathe. */
+@container dbr (max-width: 600px) {
+  .aura-dbr__header { padding: 14px 22px 0; }
+  .aura-dbr__hero { font-size: 44px; margin-top: 18px; }
+  .aura-dbr__sub { font-size: 14px; margin-top: 14px; }
+  .aura-dbr__grid {
+    padding: 28px 22px 0;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}

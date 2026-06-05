@@ -1,0 +1,24 @@
+// The catalog appends "(From "Movie Name")" to most soundtrack track titles. The
+// song name on its own is what people recognize, so strip the suffix at the
+// display layer. Original track.title in data stays untouched.
+export function cleanTitle(title) {
+  if (!title) return title;
+  return title
+    .replace(/\s*\(From\s+["“”'][^"“”']*["“”']\)\s*$/iu, '')
+    .replace(/\s*\(From\s+[^)]*\)\s*$/iu, '')
+    .trim();
+}
+
+// LRCLib's romanized lyrics carry stray capitals (kaNNumuchi, iDeeni) and
+// parenthetical backup-vocal annotations that fight AURA's lowercase serif
+// voice. Normalize for display only — the raw lyric stays in data so the
+// English/original toggle still works on the untouched source.
+export function cleanLyric(line) {
+  if (!line) return line;
+  return line
+    .replace(/[()[\]{}]/g, ' ')   // drop the bracket/paren glyphs, keep their content
+    .replace(/[*_~`]/g, '')        // markdown-ish junk that sometimes slips through
+    .replace(/\s+/g, ' ')          // collapse runs of whitespace
+    .trim()
+    .toLowerCase();
+}

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en" class="theme-dusk">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>MP harness</title>
+  <style>
+    /* Pin the shell to a true 390px so the headless screenshot (whose innerWidth
+       quirkily differs from --window-size) captures the real right edge. */
+    .aura-responsive-shell { width: 390px !important; left: 0 !important; right: auto !important; }
+  </style>
+</head>
+<body style="margin:0">
+  <div id="root"></div>
+  <script type="module" src="/mp-harness.jsx"></script>
+</body>
+</html>

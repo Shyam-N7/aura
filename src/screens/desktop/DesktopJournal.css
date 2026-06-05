@@ -1,0 +1,156 @@
+/* Desktop journal — editorial layout per design handoff. Large serif hero,
+   180px date column on the first entry, 140px on later entries. */
+
+.aura-djr {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: djr;
+}
+
+.aura-djr__header {
+  padding: 40px 56px 0;
+}
+.aura-djr__scroll {
+  padding-bottom: 64px;
+}
+.aura-djr__hero {
+  font-family: var(--font-serif);
+  font-size: 88px;
+  line-height: 0.94;
+  letter-spacing: -0.03em;
+  margin: 28px 0 0;
+  color: var(--color-ink);
+  font-weight: 400;
+  text-wrap: pretty;
+}
+.aura-djr__hero em { font-style: italic; }
+
+.aura-djr__entries {
+  padding: 48px 56px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.aura-djr__empty {
+  padding: 48px 56px 0;
+  max-width: 640px;
+}
+.aura-djr__empty-title {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-ink);
+}
+.aura-djr__empty-body {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+}
+.aura-djr__error {
+  padding: 48px 56px 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  max-width: 560px;
+}
+
+.aura-djr__entry {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 32px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--color-line);
+}
+.aura-djr__entry--first {
+  grid-template-columns: 180px 1fr;
+}
+
+.aura-djr__tag {
+  margin-top: 12px;
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-line);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-soft);
+  text-transform: uppercase;
+}
+
+.aura-djr__entry-headline {
+  font-family: var(--font-serif);
+  font-size: 40px;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+  text-wrap: pretty;
+}
+.aura-djr__entry--first .aura-djr__entry-headline {
+  font-size: 56px;
+}
+
+.aura-djr__entry-body {
+  margin-top: 16px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+  max-width: 720px;
+}
+.aura-djr__entry--first .aura-djr__entry-body {
+  font-size: 21px;
+}
+
+.aura-djr__tracks {
+  margin-top: 22px;
+}
+.aura-djr__thumb {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 160ms ease;
+}
+.aura-djr__thumb:hover {
+  transform: translateY(-1px);
+}
+
+/* Shared back-crumb pill */
+/* CrumbBack styling now lives co-located in CrumbBack.css so it travels with
+   the component into any code-split chunk that imports it. */
+
+/* Mobile (<600 px container) — collapse the 180/140 px date column into a
+   single-column flow with the tag chip floating above each headline.
+   Shrink hero + entry headlines so the long-form prose still breathes. */
+@container djr (max-width: 600px) {
+  .aura-djr__header { padding: 14px 22px 0; }
+  .aura-djr__hero { font-size: 44px; margin-top: 18px; }
+  .aura-djr__entries { padding: 28px 22px 0; gap: 28px; }
+  .aura-djr__empty,
+  .aura-djr__error { padding: 28px 22px 0; }
+  .aura-djr__empty-title { font-size: 19px; }
+  .aura-djr__empty-body,
+  .aura-djr__error { font-size: 14px; }
+  .aura-djr__entry,
+  .aura-djr__entry--first {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding-bottom: 24px;
+  }
+  .aura-djr__entry-headline { font-size: 28px; }
+  .aura-djr__entry--first .aura-djr__entry-headline { font-size: 34px; }
+  .aura-djr__entry-body { font-size: 15px; margin-top: 12px; }
+  .aura-djr__entry--first .aura-djr__entry-body { font-size: 16px; }
+  .aura-djr__tag { margin-top: 0; }
+}

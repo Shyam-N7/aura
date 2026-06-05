@@ -1,0 +1,182 @@
+/* Desktop sonic-dna — radar + axes + stat cards + top-mood gradient cards. */
+
+.aura-ddna {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: ddna;
+}
+
+.aura-ddna__header {
+  padding: 40px 56px 0;
+}
+.aura-ddna__scroll {
+  padding-bottom: 64px;
+}
+.aura-ddna__hero {
+  font-family: var(--font-serif);
+  font-size: 88px;
+  line-height: 0.94;
+  letter-spacing: -0.03em;
+  margin: 28px 0 0;
+  font-weight: 400;
+  color: var(--color-ink);
+  text-wrap: pretty;
+}
+.aura-ddna__hero em { font-style: italic; }
+
+.aura-ddna__radar-grid {
+  padding: 40px 56px 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 56px;
+  align-items: center;
+}
+
+.aura-ddna__empty {
+  padding: 48px 56px 0;
+  max-width: 600px;
+}
+.aura-ddna__empty-title {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-ink);
+}
+.aura-ddna__empty-body {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+}
+.aura-ddna__error {
+  padding: 48px 56px 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  max-width: 560px;
+}
+
+.aura-ddna__axes {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aura-ddna__axis {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.aura-ddna__axis-label {
+  width: 140px;
+  flex-shrink: 0;
+}
+.aura-ddna__axis-name {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  color: var(--color-ink);
+}
+.aura-ddna__axis-bar {
+  flex: 1;
+  height: 3px;
+  background: var(--color-line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.aura-ddna__axis-fill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.aura-ddna__month {
+  padding: 48px 56px 0;
+}
+.aura-ddna__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.aura-ddna__stat-card {
+  background: var(--color-surface);
+  border-radius: 14px;
+  padding: 24px 22px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+}
+.aura-ddna__stat-value {
+  font-family: var(--font-serif);
+  font-size: 72px;
+  line-height: 0.95;
+  margin-top: 14px;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+
+.aura-ddna__moods {
+  padding: 48px 56px 0;
+}
+.aura-ddna__moods-row {
+  display: flex;
+  gap: 16px;
+}
+.aura-ddna__mood {
+  padding: 22px;
+  border-radius: 14px;
+  min-height: 130px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 80%),
+    color-mix(in srgb, var(--color-accent), transparent 95%));
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 80%);
+}
+.aura-ddna__mood-label {
+  font-family: var(--font-serif);
+  font-size: 40px;
+  line-height: 1;
+  color: var(--color-ink);
+  letter-spacing: -0.015em;
+  text-transform: capitalize;
+}
+.aura-ddna__mood-share {
+  margin-top: 18px;
+  font-family: var(--font-serif);
+  font-size: 32px;
+  color: var(--color-accent);
+}
+
+/* Mobile (<600 px container) — collapse the auto/1fr radar grid to a single
+   column (radar above axes), drop stats to 2-col, stack moods vertically,
+   tighten gutters. */
+@container ddna (max-width: 600px) {
+  .aura-ddna__header { padding: 14px 22px 0; }
+  .aura-ddna__hero { font-size: 44px; margin-top: 18px; }
+  .aura-ddna__empty,
+  .aura-ddna__error { padding: 28px 22px 0; }
+  .aura-ddna__empty-title { font-size: 19px; }
+  .aura-ddna__empty-body,
+  .aura-ddna__error { font-size: 14px; }
+  .aura-ddna__radar-grid {
+    padding: 28px 22px 0;
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .aura-ddna__axis-label { width: 100px; }
+  .aura-ddna__axis-name { font-size: 17px; }
+  .aura-ddna__month { padding: 32px 22px 0; }
+  .aura-ddna__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .aura-ddna__stat-card { padding: 18px 16px; min-height: 116px; }
+  .aura-ddna__stat-value { font-size: 44px; margin-top: 10px; }
+  .aura-ddna__moods { padding: 32px 22px 0; }
+  .aura-ddna__moods-row { flex-direction: column; gap: 12px; }
+  .aura-ddna__mood { padding: 18px; min-height: 100px; }
+  .aura-ddna__mood-label { font-size: 28px; }
+  .aura-ddna__mood-share { font-size: 22px; margin-top: 12px; }
+}

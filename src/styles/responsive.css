@@ -1,0 +1,91 @@
+/* Responsive shell — the single layout authority at every breakpoint after
+   the iPhone-frame removal and the responsive flip. Renders via createPortal
+   into document.body from App.jsx Root. */
+.aura-responsive-shell {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+/* Reserve left for NavRail and right for the player+talk rail so the desktop
+   main column doesn't sit underneath either. CSS custom props let the rail
+   collapse modifiers adjust the reserved space without re-rendering. */
+.aura-responsive-shell--desktop {
+  --aura-nav-w:  224px;
+  --aura-rail-w: 420px;
+  padding-left:  var(--aura-nav-w);
+  padding-right: var(--aura-rail-w);
+  transition: padding 280ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-responsive-shell--desktop.aura-shell--nav-collapsed  { --aura-nav-w: 72px; }
+.aura-responsive-shell--desktop.aura-shell--rail-collapsed { --aura-rail-w: 0px; }
+/* Tablet-landscape: narrower nav (always 72px) + slimmer transport rail (320px).
+   Same shell mechanic as --desktop but tuned for 900–1279px viewports. */
+.aura-responsive-shell--tablet-landscape {
+  --aura-nav-w:  72px;
+  --aura-rail-w: 320px;
+  padding-left:  var(--aura-nav-w);
+  padding-right: var(--aura-rail-w);
+  transition: padding 280ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-responsive-shell--tablet-landscape.aura-shell--rail-collapsed { --aura-rail-w: 0px; }
+/* Tablet-portrait keeps the TopNavStrip + BottomMiniBar chrome it always
+   had, plus the centered-card "phone preview on a tablet" demo affordance. */
+.aura-responsive-shell--tablet-portrait {
+  padding-top: 64px;     /* TopNavStrip */
+  padding-bottom: 80px;  /* BottomMiniBar */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Mobile chrome: paired MobileTopBar + MobileBottomBar pills. Each is 52 px
+   tall, inset 14 px from sides, 16 px from top/bottom. Shell + stage span
+   the full viewport with no padding so scrollable content can pass UNDER
+   the floating pills and trigger the backdrop-filter blur.
+   Clearance lives on the screen root via ::before / ::after pseudo-element
+   spacers — they're part of the scrollable content (unlike padding-top,
+   which creates a *fixed* top inset on overflow:auto elements). The spacer
+   scrolls away with the rest of the content, letting items pass behind the
+   floating pills. The screen root is the direct child of `.animate-aura-
+   screen-in` (set by App.jsx's per-screen positioning wrapper). */
+.aura-responsive-shell--mobile .animate-aura-screen-in > *::before {
+  content: "";
+  display: block;
+  height: 74px;       /* 16 inset + 52 pill + ~6 breathing */
+  flex-shrink: 0;     /* survive flex parents (e.g. .aura-dq column layout) */
+}
+.aura-responsive-shell--mobile .animate-aura-screen-in > *::after {
+  content: "";
+  display: block;
+  height: 82px;
+  flex-shrink: 0;
+}
+
+.aura-responsive-shell__stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg);
+}
+/* Desktop + tablet-landscape: stage doesn't scroll; route-level container does. */
+.aura-responsive-shell--desktop .aura-responsive-shell__stage,
+.aura-responsive-shell--tablet-landscape .aura-responsive-shell__stage {
+  overflow: hidden;
+}
+/* Centered phone-preview card at tablet-portrait — keeps the "iPad showing a
+   phone design" demo affordance for design review. */
+.aura-responsive-shell--tablet-portrait .aura-responsive-shell__stage {
+  width: 402px;
+  height: 874px;
+  border-radius: 24px;
+  box-shadow:
+    0 30px 80px rgb(0 0 0 / 0.18),
+    0 4px 14px rgb(0 0 0 / 0.10);
+  overflow: hidden;
+}
+/* Mobile: full-bleed stage between the TopNavStrip + BottomMiniBar chrome. */
+.aura-responsive-shell--mobile .aura-responsive-shell__stage {
+  overflow: hidden;
+}
+

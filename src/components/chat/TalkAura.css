@@ -1,0 +1,4 @@
+.aura-thinking-dot {
+  animation: aura-soft 1s ease-in-out infinite;
+  animation-delay: var(--aura-thinking-delay);
+}

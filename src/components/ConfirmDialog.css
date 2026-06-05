@@ -1,0 +1,98 @@
+.aura-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.36);
+  backdrop-filter: blur(3px);
+  z-index: 50;
+  animation: aura-fadein 200ms ease both;
+}
+
+.aura-confirm {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 51;
+  transform-origin: center;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  border-radius: 18px;
+  box-shadow:
+    0 24px 56px rgb(0 0 0 / 0.32),
+    0 4px 12px rgb(0 0 0 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+  width: min(320px, calc(100% - 48px));
+  padding: 22px 22px 16px;
+  animation: aura-confirm-in 260ms cubic-bezier(.2, .8, .3, 1) both;
+}
+
+@keyframes aura-confirm-in {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.aura-confirm__title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--color-ink);
+  text-wrap: pretty;
+}
+
+.aura-confirm__body {
+  margin-top: 10px;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+}
+
+.aura-confirm__actions {
+  margin-top: 22px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.aura-confirm__btn {
+  border: 0;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aura-confirm__btn--cancel {
+  background: transparent;
+  color: var(--color-ink-soft);
+}
+.aura-confirm__btn--cancel:hover { color: var(--color-ink); }
+
+.aura-confirm__btn--confirm {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+.aura-confirm__btn--confirm:hover {
+  background: color-mix(in srgb, var(--color-ink), white 8%);
+}
+
+.aura-confirm__btn--danger {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.aura-confirm__btn--danger:hover {
+  background: color-mix(in srgb, var(--color-accent), black 8%);
+}
+
+.theme-midnight .aura-confirm-backdrop { background: rgb(0 0 0 / 0.55); }
+.theme-midnight .aura-confirm {
+  box-shadow:
+    0 24px 56px rgb(0 0 0 / 0.55),
+    0 4px 12px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+}

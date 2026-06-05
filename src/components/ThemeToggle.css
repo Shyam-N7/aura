@@ -1,0 +1,73 @@
+/* Sits inline next to the search affordance at every breakpoint. */
+.aura-theme-toggle {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  background: transparent;
+  flex-shrink: 0;
+  transition: transform 180ms cubic-bezier(.2, .7, .2, 1),
+              color 160ms ease,
+              background 160ms ease,
+              border-color 160ms ease;
+}
+
+.aura-theme-toggle:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+
+.aura-theme-toggle:active {
+  transform: scale(0.92);
+}
+
+.aura-theme-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.aura-theme-toggle__icon {
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+}
+
+/* Sun fades + rotates out when going dark; moon fades + rotates in. The shared
+   transform-origin keeps both spinning around the same point so the swap reads
+   as one motion. */
+.aura-theme-toggle__sun,
+.aura-theme-toggle__moon {
+  transform-origin: 12px 12px;
+  transition:
+    transform 380ms cubic-bezier(.4, .14, .3, 1),
+    opacity 260ms ease;
+}
+
+.aura-theme-toggle__sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.aura-theme-toggle__moon {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0);
+  fill: currentColor;
+  stroke: none;
+}
+
+.aura-theme-toggle.is-dark .aura-theme-toggle__sun {
+  opacity: 0;
+  transform: rotate(90deg) scale(0);
+}
+
+.aura-theme-toggle.is-dark .aura-theme-toggle__moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}

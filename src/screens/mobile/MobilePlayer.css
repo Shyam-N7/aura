@@ -1,0 +1,338 @@
+/* Dedicated phone now-playing player. One full-viewport surface, no scroll: an
+   art-derived blurred backdrop behind a large cover hero, with the transport
+   anchored in the thumb zone. Sizing is height-aware (the cover takes only the
+   leftover flex space) so it never overflows — from iPhone SE up. */
+.aura-mp {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: var(--color-ink);
+  background: var(--color-bg);
+}
+
+/* The mobile shell adds ::before/::after spacers to every screen root to clear
+   the floating MobileTopBar / MobileBottomBar (responsive.css). Those bars are
+   hidden on the player screen, so zero the spacers here — otherwise the 74px top
+   spacer shoves the column down and overflow:hidden clips the bottom actions
+   row (shuffle/like/add/repeat/queue). The player floats edge to edge instead. */
+.aura-responsive-shell--mobile .animate-aura-screen-in > .aura-mp::before,
+.aura-responsive-shell--mobile .animate-aura-screen-in > .aura-mp::after {
+  height: 0;
+}
+
+/* ── Backdrop: the cover, blown up + blurred. Works for real images and
+   procedural covers alike (same AlbumArt the app uses everywhere). ── */
+.aura-mp__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.aura-mp__backdrop .aura-album-art {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+  transform: scale(1.3);
+  filter: blur(48px) saturate(1.3);
+  opacity: 0.9;
+}
+
+/* Theme-aware scrim — keeps the warm dusk/midnight/bloom palette reading through
+   and guarantees legibility: art shows through the middle, solid surface at the
+   bottom where the meta + controls live. */
+.aura-mp__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-bg), transparent 28%) 0%,
+    color-mix(in srgb, var(--color-bg), transparent 58%) 26%,
+    color-mix(in srgb, var(--color-bg), transparent 52%) 50%,
+    var(--color-bg) 96%
+  );
+}
+
+.aura-mp__content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding:
+    calc(env(safe-area-inset-top) + 12px)
+    20px
+    calc(env(safe-area-inset-bottom) + 18px);
+}
+
+/* ── Top chrome ── */
+.aura-mp__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.aura-mp__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-bg), transparent 42%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+          backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  box-shadow:
+    0 4px 14px color-mix(in srgb, #000, transparent 86%),
+    inset 0 1px 0 color-mix(in srgb, #fff, transparent 80%);
+  transition: background 140ms ease, transform 100ms ease;
+}
+.aura-mp__chip:active { transform: scale(0.94); }
+
+.aura-mp__eyebrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+}
+.aura-mp__mood {
+  margin-top: 1px;
+  max-width: 60vw;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink);
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aura-mp__menu-wrap { position: relative; flex-shrink: 0; }
+.aura-mp__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+}
+
+/* ── Vertical volume — parked against the right edge, centred beside the cover.
+   Sits in the right margin (the square cover is capped at 78vw, leaving room).
+   No effect on iOS (the platform ignores programmatic volume), works elsewhere. */
+.aura-mp__vol {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+}
+
+/* ── Art hero — the cover takes only the leftover vertical space, capped at
+   78vw, so it's the biggest thing on screen yet never forces a scroll. ── */
+.aura-mp__hero {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.aura-mp__cover {
+  height: 100%;
+  aspect-ratio: 1;
+  max-height: min(78vw, 100%);
+  max-width: 100%;
+  cursor: pointer;
+}
+/* Let MorphingAlbumArt / AlbumArt fill the responsive square instead of their
+   fixed `size` px (same override the more-like-this mobile tiles use). */
+.aura-mp__cover .aura-morphing-art { width: 100%; height: 100%; }
+.aura-mp__cover .aura-album-art {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Meta ── */
+.aura-mp__meta {
+  flex-shrink: 0;
+  margin-top: 18px;
+  padding: 0 8px;
+  text-align: center;
+}
+.aura-mp__title {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  color: var(--color-ink);
+  text-wrap: pretty;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.aura-mp__artist {
+  margin-top: 5px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Scrubber (signature wave) ── */
+.aura-mp__scrub {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 460px;
+  margin: 18px auto 0;
+}
+.aura-mp__time {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+/* ── Primary transport ── */
+.aura-mp__transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  margin-top: 18px;
+  flex-shrink: 0;
+}
+.aura-mp__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: transparent;
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-ink);
+  transition: transform 100ms ease;
+}
+.aura-mp__nav:active { transform: scale(0.92); }
+.aura-mp__play {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--color-accent), transparent 56%);
+  transition: background 140ms ease, transform 100ms ease;
+}
+.aura-mp__play:hover { background: color-mix(in srgb, var(--color-accent), #000 6%); }
+.aura-mp__play:active { transform: scale(0.96); }
+/* Breathing glow while playing — reuses the app's aura-breathe keyframe. */
+.aura-mp__play::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-accent), transparent 55%) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+.aura-mp__play--playing::after { animation: aura-breathe 2.8s ease-in-out infinite; }
+
+/* ── Up next ── slim tappable strip linking to the queue. flex-shrink:0 keeps
+   it intact; the flex hero above gives up a little height to make room. */
+.aura-mp__upnext {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 86%;
+  margin: 14px auto 0;
+  padding: 4px 12px 4px 4px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-bg), transparent 40%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+          backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
+  transition: background 140ms ease, transform 100ms ease;
+}
+.aura-mp__upnext:active { transform: scale(0.985); }
+.aura-mp__upnext .aura-album-art { flex-shrink: 0; }
+.aura-mp__upnext-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.aura-mp__upnext-title {
+  margin-top: 0;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.12;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-mp__upnext-chev {
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+}
+
+/* ── Secondary actions ── */
+.aura-mp__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  max-width: 300px;
+  margin: 14px auto 0;
+  flex-shrink: 0;
+}
+.aura-mp__act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  transition: color 140ms ease, transform 100ms ease;
+}
+.aura-mp__act:active { transform: scale(0.92); }
+.aura-mp__act--on { color: var(--color-accent); }
+
+/* Very short phones: tighten the fixed rows so the flex cover keeps its share. */
+@media (max-height: 670px) {
+  .aura-mp__meta { margin-top: 12px; }
+  .aura-mp__title { font-size: 23px; }
+  .aura-mp__scrub { margin-top: 12px; }
+  .aura-mp__transport { margin-top: 12px; gap: 26px; }
+  .aura-mp__play { width: 64px; height: 64px; }
+  .aura-mp__nav { width: 50px; height: 50px; }
+  .aura-mp__upnext { margin-top: 10px; }
+  .aura-mp__actions { margin-top: 10px; }
+}

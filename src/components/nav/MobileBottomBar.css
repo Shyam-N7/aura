@@ -1,0 +1,165 @@
+/* Unified mobile bottom bar — single glass pill at the viewport bottom that
+   carries both the now-playing transport AND the nav items. Replaces the
+   stacked BottomMiniBar + BottomNav pair on mobile. */
+
+.aura-mobile-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 14px;
+  right: 14px;
+  z-index: 30;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  /* Faint white-shimmer gradient gives a real glass look even when nothing's
+     scrolling behind the pill (uniform-dark page = backdrop-filter has
+     nothing to blur). Matched to MobileTopBar so the two pills read as a
+     pair. */
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.02));
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+  color: var(--color-ink);
+}
+.theme-midnight .aura-mobile-bar {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015));
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.36),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+/* Now-playing tap target (art + title + artist) — opens the player screen. */
+.aura-mobile-bar__np {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+}
+.aura-mobile-bar__art {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+/* Force AlbumArt's outer wrapper to render circular at 36 px regardless of
+   the size prop's inline --size. */
+.aura-mobile-bar__art .aura-album-art {
+  --size: 36px !important;
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 9999px !important;
+  overflow: hidden;
+}
+/* Empty-state placeholder when no track is playing — same 36 px disc with
+   a dashed outline + a small play glyph. Taps through to search so the
+   user can pick something. */
+.aura-mobile-bar__art--empty {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  border: 1px dashed color-mix(in srgb, var(--color-ink), transparent 70%);
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-faint);
+}
+.aura-mobile-bar__np--empty .aura-mobile-bar__title {
+  color: var(--color-ink-soft);
+  font-style: italic;
+}
+.aura-mobile-bar__np--empty .aura-mobile-bar__artist {
+  color: var(--color-ink-faint);
+}
+.aura-mobile-bar__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.aura-mobile-bar__title {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.1;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-mobile-bar__artist {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Play/pause disc — primary action, sits between meta and the nav divider. */
+.aura-mobile-bar__play {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 0;
+  cursor: pointer;
+  background: var(--color-accent);
+  color: var(--color-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding-left: 1px;
+}
+.theme-midnight .aura-mobile-bar__play {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+
+/* Vertical divider between transport block and nav block. */
+.aura-mobile-bar__divider {
+  width: 1px;
+  height: 32px;
+  background: color-mix(in srgb, var(--color-ink), transparent 80%);
+  flex-shrink: 0;
+}
+
+/* Nav block — 4 items, optional active state. */
+.aura-mobile-bar__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.aura-mobile-bar__nav-item {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--color-ink-faint);
+  transition: color 140ms ease;
+}
+.aura-mobile-bar__nav-item--on { color: var(--color-accent); }
+.aura-mobile-bar__nav-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.aura-mobile-bar__nav-item--talk { padding: 6px 4px; }

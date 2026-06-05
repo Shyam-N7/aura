@@ -1,0 +1,1183 @@
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
+import { THEMES } from './data';
+import { useFeaturedTracks } from './hooks/useFeaturedTracks';
+
+// Mobile-first screens with no desktop variant — rendered as-is at every width
+// (the sensing/onboarding gates and the playlists screen).
+import { SensingScreen } from './screens/SensingScreen';
+import { OnboardingScreen } from './screens/OnboardingScreen';
+import { PlaylistsScreen } from './screens/PlaylistsScreen';
+
+import { WhyPanel } from './screens/overlays/WhyPanel';
+import { LyricsScreen } from './screens/overlays/LyricsScreen';
+import { CrowdScreen } from './screens/overlays/CrowdScreen';
+
+import { MorphLayer } from './components/player/MorphLayer';
+import { MobileBottomBar } from './components/nav/MobileBottomBar';
+import { MobileTopBar } from './components/nav/MobileTopBar';
+import { TalkAura } from './components/chat/TalkAura';
+import { Toast } from './components/Toast';
+import { AddToPlaylistSheet } from './components/AddToPlaylistSheet';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { PromptDialog } from './components/PromptDialog';
+
+import { useTweaks } from './tweaks/TweaksPanel';
+import { TweaksHost } from './tweaks/TweaksHost';
+import { useViewport, isDesktopBreakpoint, isCompactBreakpoint } from './hooks/useViewport';
+import { useRailToggles } from './hooks/useRailToggles';
+import { NavRail } from './components/nav/NavRail';
+import { TopNavStrip } from './components/nav/TopNavStrip';
+import { DesktopRail } from './components/player/DesktopRail';
+import { FloatingMini } from './components/player/FloatingMini';
+import { BottomMiniBar } from './components/player/BottomMiniBar';
+import { ScreenSkeleton } from './screens/desktop/ScreenSkeleton';
+import './styles/responsive.css';
+
+// Desktop screens are code-split — each becomes its own Vite chunk fetched on
+// first route hit. The named→default shim adapts our named exports to
+// React.lazy's default-export contract.
+const lazyNamed = (loader, name) => lazy(() => loader().then(m => ({ default: m[name] })));
+const DesktopHome               = lazyNamed(() => import('./screens/desktop/DesktopHome'),               'DesktopHome');
+const DesktopPlayer             = lazyNamed(() => import('./screens/desktop/DesktopPlayer'),             'DesktopPlayer');
+const MobilePlayer              = lazyNamed(() => import('./screens/mobile/MobilePlayer'),               'MobilePlayer');
+const DesktopJournal            = lazyNamed(() => import('./screens/desktop/DesktopJournal'),            'DesktopJournal');
+const DesktopDna                = lazyNamed(() => import('./screens/desktop/DesktopDna'),                'DesktopDna');
+const DesktopBridges            = lazyNamed(() => import('./screens/desktop/DesktopBridges'),            'DesktopBridges');
+const DesktopLibrary            = lazyNamed(() => import('./screens/desktop/DesktopLibrary'),            'DesktopLibrary');
+const DesktopSearch             = lazyNamed(() => import('./screens/desktop/DesktopSearch'),             'DesktopSearch');
+const DesktopTalk               = lazyNamed(() => import('./screens/desktop/DesktopTalk'),               'DesktopTalk');
+const DesktopQueue              = lazyNamed(() => import('./screens/desktop/DesktopQueue'),              'DesktopQueue');
+const DesktopPlaylistDetail     = lazyNamed(() => import('./screens/desktop/DesktopPlaylistDetail'),     'DesktopPlaylistDetail');
+const DesktopCatalogPlaylistDetail = lazyNamed(() => import('./screens/desktop/DesktopCatalogPlaylistDetail'),'DesktopCatalogPlaylistDetail');
+const DesktopLanguageHub        = lazyNamed(() => import('./screens/desktop/DesktopLanguageHub'),        'DesktopLanguageHub');
+const DesktopArtist             = lazyNamed(() => import('./screens/desktop/DesktopArtist'),             'DesktopArtist');
+const DesktopLiked              = lazyNamed(() => import('./screens/desktop/DesktopLiked'),              'DesktopLiked');
+
+// Suspense fallback labels — shown while a screen's lazy chunk is fetching.
+// Each entry mirrors the post-hydration loader copy in the destination screen
+// so the label persists smoothly across the chunk-load → data-load transition.
+const SCREEN_LABELS = {
+  player:                  'Loading player',
+  queue:                   'Loading queue',
+  search:                  'Loading search',
+  artist:                  'Loading artist',
+  library:                 'Loading library',
+  liked:                   'Loading liked songs',
+  playlists:               'Loading playlists',
+  'playlist-detail':       'Loading playlist',
+  'catalog-playlist-detail': 'Loading playlist',
+  journal:                 'Loading journal',
+  dna:                     'Building your sonic DNA',
+  bridges:                 'Loading bridges',
+  talk:                    'Opening chat',
+};
+
+import { useAudioPlayer } from './hooks/useAudioPlayer';
+import { useListeningRecorder } from './hooks/useListeningRecorder';
+import { useMediaSession } from './hooks/useMediaSession';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { ShortcutsOverlay } from './components/ShortcutsOverlay';
+import { SleepTimerSheet } from './components/SleepTimerSheet';
+import { SleepTimerOrb } from './components/SleepTimerOrb';
+import { TrackContextMenu } from './components/TrackContextMenu';
+import { hasOnboarded } from './lib/onboarding';
+import { useHashRoute } from './hooks/useHashRoute';
+import { parseHash, hashIsActive } from './lib/routes';
+import { loadQueue, saveQueueSoon } from './lib/persistentQueue';
+import { savePosition, flush as flushPosition, loadPosition, clearPosition } from './lib/persistPosition';
+import { getTrack } from './api/catalog';
+import { getRelated } from './api/related';
+import { requestSearchFocus } from './lib/searchFocus';
+import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
+import { toast } from './lib/toast';
+import { confirm } from './lib/confirm';
+import { prompt } from './lib/prompt';
+import { createPlaylist, addToPlaylist } from './api/playlists';
+
+// ── Shared-element morph ──────────────────────────────────────────
+// Viewport-relative rect — no more unscaling against the 402×874 stage,
+// which was retired during the responsive flip. The morph layer lives in
+// the same coordinate space as everything else now.
+function getRect(el) {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, width: r.width, height: r.height };
+}
+
+// Live morph targets — read at morph time so the animation always lands on
+// whatever element is currently on-screen. Fallback rects keep the morph
+// from crashing when the target hasn't mounted yet.
+function getPlayerArtRect() {
+  const el = document.getElementById('player-art');
+  if (el) return getRect(el);
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // Phone: the player mounts AFTER this is read, so match MobilePlayer's large,
+  // upper-centered cover (min(78vw, 46vh)) here — otherwise the morph lands on a
+  // small centered square and pops to the real art. Wider screens keep the
+  // desktop-sized fallback.
+  if (vw < 600) {
+    const size = Math.min(vw * 0.78, vh * 0.46);
+    return { left: (vw - size) / 2, top: (vh - size) / 2 - vh * 0.08, width: size, height: size, radius: 10 };
+  }
+  const size = Math.min(360, vw * 0.4, vh * 0.4);
+  return { left: (vw - size) / 2, top: (vh - size) / 2 - 20, width: size, height: size, radius: 6 };
+}
+// Radius lookup — bounding rects don't carry radius, so we re-attach it
+// based on which target we're animating into.
+const PLAYER_ART_RADIUS = 6;
+
+// Persisted by Claude's design-tool harness: this comment block is rewritten
+// in place via regex on disk, so don't move the markers or the const.
+const DEFAULT_TWEAKS = /*EDITMODE-BEGIN*/{
+  "djName": "AURA",
+  "theme": "dusk",
+  "mood": "ready",
+  "skipSensing": false
+}/*EDITMODE-END*/;
+
+function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
+  const isDesktop         = isDesktopBreakpoint(breakpoint);
+  const isCompact         = isCompactBreakpoint(breakpoint);
+  const isMobile          = breakpoint === 'mobile';
+  const isTabletLandscape = breakpoint === 'tablet-landscape';
+  const isTabletPortrait  = breakpoint === 'tablet-portrait';
+  const {
+    navCollapsed = false, toggleNav = () => {},
+    railCollapsed = false, toggleRail = () => {},
+    setRailCollapsed = () => {},
+  } = rails;
+  // SensingScreen is a 402×874 mobile-first welcome — looks lost on desktop
+  // viewports where the orb floats in empty space. Skip it at desktop+.
+  const shouldSkipSensing = t.skipSensing || isDesktop;
+  const isOnboarded = hasOnboarded();
+  // If the user lands on a deep link, parse it so route params survive even
+  // when the sensing/onboarding gate redirects them first.
+  const initialFromHash = hashIsActive() ? parseHash(window.location.hash) : null;
+  // Snapshot whether persisted queue exists — `#/player` cold-start without a
+  // queue renders blank, so fall back to home in that case (mirrors apply()).
+  const initialQueue = loadQueue();
+  const hasPersistedQueue = !!initialQueue?.tracks?.length;
+  const [screen, setScreen]         = useState(() => {
+    // Gates take precedence over deep links: a first-run user can't bypass
+    // sensing/onboarding by typing `#/artist/123` into the URL bar.
+    if (!shouldSkipSensing) return 'sensing';
+    if (!isOnboarded)       return 'onboarding';
+    if (!initialFromHash)   return 'home';
+    if (initialFromHash.screen === 'player' && !hasPersistedQueue) return 'home';
+    // Once onboarded, a stale `#/onboarding` deep link should drop into home
+    // instead of re-marking the user onboarded (harmless but confusing).
+    if (initialFromHash.screen === 'onboarding') return 'home';
+    return initialFromHash.screen;
+  });
+  const [overlay, setOverlay]       = useState(null);
+  const [talkOpen, setTalkOpen]     = useState(false);
+  // Unified playback queue. Source 'tonight\'s set' wraps on end; everything
+  // else stops at end. Insertions/reorders mutate `tracks` and adjust `idx`.
+  // Cold-start: hydrate from localStorage if present so a reload picks up
+  // where the user left off. Stale stream URLs get refetched below.
+  const [queue, setQueue] = useState(() => initialQueue ?? { tracks: [], idx: 0, source: "tonight's set" });
+  const [detailPlaylistId, setDetailPlaylistId] = useState(initialFromHash?.detailPlaylistId ?? null);
+  const [catalogPlaylistId,  setCatalogPlaylistId]  = useState(initialFromHash?.catalogPlaylistId  ?? null);
+  const [hubLang,          setHubLang]          = useState(initialFromHash?.hubLang          ?? null);
+  // Track which screen the detail/hub views were opened from, so BACK goes
+  // back to the right place (home vs playlists vs library vs language-hub).
+  const [detailReturn,      setDetailReturn]     = useState('playlists');
+  const [catalogReturn,       setCatalogReturn]      = useState('home');
+  const [artistKey,         setArtistKey]        = useState(initialFromHash?.artistKey ?? null);
+  const [artistReturn,      setArtistReturn]     = useState('home');
+  // Same back-stack pattern for player + queue so tapping back from the
+  // queue (which can be opened from the player) returns to the player
+  // instead of always dumping the user on home.
+  const [queueReturn,       setQueueReturn]      = useState('home');
+  const [playerReturn,      setPlayerReturn]     = useState('home');
+  const [progress, setProgress]     = useState(0);
+  const [audioTime, setAudioTime]   = useState(0);
+  const [playing, setPlaying]       = useState(false);
+  // True only when playback stops at a track's natural end with no auto-advance
+  // (end of an explicit queue, or sleep-at-end). Drives the lyrics idle screen's
+  // "Song ended" state; cleared whenever audio starts again (player 'play').
+  const [ended, setEnded]           = useState(false);
+  const [morph, setMorph]           = useState(null); // { track, fromRect, toRect, kind }
+  const morphTimer = useRef(null);
+  // While the player is closing, keep its wrapper mounted for ~220 ms so
+  // the screen-out animation (scale + fade + slide) can run before the
+  // wrapper unmounts. The destination screen is set immediately so it
+  // renders behind the fading player.
+  const [closingPlayer, setClosingPlayer] = useState(false);
+  const closingPlayerTimer = useRef(null);
+  // Same pattern for the lyrics overlay so its panel slides + fades out
+  // instead of just popping when the user closes it (Phase 12).
+  const [closingLyrics, setClosingLyrics] = useState(false);
+  const closingLyricsTimer = useRef(null);
+
+  const featured = useFeaturedTracks({ limit: 24 });
+  const pool     = featured.tracks;
+
+  // Hash routing — sync `location.hash` with screen + per-screen params both
+  // ways. Cold-land on `#/artist/abc` reads from initialFromHash above; later
+  // mutations get mirrored back out via the effect inside useHashRoute.
+  useHashRoute({
+    enabled: true,
+    current: { screen, artistKey, detailPlaylistId, catalogPlaylistId, hubLang },
+    apply: (p) => {
+      // #/player with no track yet → fall back to home so we don't render a
+      // blank screen. The user can navigate to /player once playback starts.
+      // #/onboarding once onboarded → home (mirrors cold-start gate above).
+      let target = p.screen;
+      if (target === 'player' && !queue.tracks.length) target = 'home';
+      if (target === 'onboarding' && hasOnboarded()) target = 'home';
+      setScreen(target);
+      if (target === 'artist')                setArtistKey(p.artistKey ?? null);
+      if (target === 'playlist-detail')       setDetailPlaylistId(p.detailPlaylistId ?? null);
+      if (target === 'catalog-playlist-detail') setCatalogPlaylistId(p.catalogPlaylistId ?? null);
+      if (target === 'language-hub')          setHubLang(p.hubLang ?? null);
+    },
+  });
+
+  // Until the user has interacted, the queue is empty and we derive the active
+  // view from the featured pool. Any mutation (pick, enqueue, reorder, remove)
+  // writes into `queue` and from then on the queue is the source of truth.
+  const viewTracks = queue.tracks.length ? queue.tracks : pool;
+  const viewIdx    = queue.tracks.length ? queue.idx    : 0;
+  const viewSource = queue.tracks.length ? queue.source : "tonight's set";
+  const isFeatured = viewSource === "tonight's set";
+  const track      = viewTracks[viewIdx] ?? null;
+  const next       = viewTracks[viewIdx + 1]
+                  ?? (isFeatured && viewTracks.length ? viewTracks[0] : null);
+
+  // Refs let event subscribers (player 'ended') read the latest state without
+  // re-subscribing on every queue tick.
+  const viewRef = useRef({ tracks: viewTracks, idx: viewIdx, source: viewSource });
+  viewRef.current = { tracks: viewTracks, idx: viewIdx, source: viewSource };
+
+  const player = useAudioPlayer();
+  useListeningRecorder({ player, track, mood: t.mood, language: track?.language });
+  useMediaSession({ track, playing, player, setPlaying, goNext: () => goNext(), goPrev: () => goPrev() });
+  useKeyboardShortcuts({
+    enabled: isDesktop,
+    playing, setPlaying, player, track,
+    goNext: () => goNext(),
+    goPrev: () => goPrev(),
+    onCycleRepeat: () => cycleRepeat(),
+    onShuffle:     () => shuffleQueue(),
+    onFocusSearch: () => {
+      // Navigate to the search route if we're not there; the bus buffers the
+      // focus request so DesktopSearch picks it up after it mounts.
+      if (screen !== 'search') setScreen('search');
+      requestSearchFocus();
+    },
+  });
+
+  // ── Auto-radio: endless similar-track continuation ────────────────────
+  // When the queue runs out on a non-wrapping source, we play a track similar
+  // to the one that just ended (matching artist family / language / vibe).
+  // Triggered by 'ended' AND by the user pressing next on the last track —
+  // both consume the same prefetched candidate.
+  const autoNextRef          = useRef(null);   // { seedId, candidate } | null
+  const autoFetchInFlightRef = useRef(false);  // a getRelated() is currently in flight
+  // 'ended' | 'next' | null — set when the caller couldn't consume a candidate
+  // synchronously (fetch still in flight) so the prefetch resolution knows to
+  // apply directly + how to clean up on failure.
+  const pendingApplyRef      = useRef(null);
+  // Render mirror of autoNextRef. Refs don't trigger re-renders, but the queue
+  // screen needs to surface the prefetched candidate as a "coming up" tile —
+  // mutate both in lockstep at every callsite that touches autoNextRef.
+  const [autoNextDisplay, setAutoNextDisplay] = useState(null);
+
+  // Repeat mode: off | all | one. Persisted to localStorage. The 'ended'
+  // subscriber reads via ref so we don't re-subscribe on every cycle.
+  const [repeatMode, setRepeatMode] = useState(() => readStoredRepeat());
+  const repeatModeRef = useRef(repeatMode);
+  const loadedTrackIdRef = useRef(null);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+  useEffect(() => {
+    try { localStorage.setItem('aura.repeat', repeatMode); } catch { /* ignore */ }
+  }, [repeatMode]);
+  // Cycle off → all → one → off. Drop any cached auto-radio candidate at the
+  // same moment we enter a repeat mode — keeps the "after this set" tile from
+  // sticking around when it could no longer be reached. (Done in the handler
+  // rather than a useEffect to avoid the set-state-in-effect lint rule.)
+  const cycleRepeat = () => {
+    const next = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+    setRepeatMode(next);
+    if (next !== 'off') {
+      autoNextRef.current = null;
+      setAutoNextDisplay(null);
+    }
+  };
+
+  // Builds the auto-radio queue from `cur` if a candidate is ready. Returns
+  // null if no usable candidate — caller decides whether to wait or pause.
+  const consumeAutoNext = (cur) => {
+    const seed = cur.tracks[cur.idx];
+    const auto = autoNextRef.current;
+    if (!auto?.candidate || !seed?.id || auto.seedId !== seed.id) return null;
+    autoNextRef.current = null;
+    setAutoNextDisplay(null);
+    const seedArtist = (seed.artist ?? '').toLowerCase();
+    return {
+      tracks: [...cur.tracks, auto.candidate],
+      idx: cur.idx + 1,
+      source: seedArtist ? `more like ${seedArtist}` : 'auto radio',
+    };
+  };
+
+  // Functional setQueue that appends the candidate AT APPLY TIME — re-validates
+  // against the freshest queue state so a user enqueue / track change between
+  // fetch start and resolution doesn't trample anything.
+  const applyAutoRadioToQueue = (seedId, candidate) => setQueue(q => {
+    if (q.idx + 1 < q.tracks.length) return q;       // user enqueued mid-fetch
+    if (q.source === "tonight's set") return q;       // wraps now
+    const seedNow = q.tracks[q.idx];
+    if (seedNow?.id !== seedId) return q;             // seed track changed
+    if (q.tracks.some(t => t.id === candidate.id)) return q;  // dedupe
+    const seedArtist = (seedNow.artist ?? '').toLowerCase();
+    return {
+      tracks: [...q.tracks, candidate],
+      idx: q.idx + 1,
+      source: seedArtist ? `more like ${seedArtist}` : 'auto radio',
+    };
+  });
+
+  // Prefetch a continuation candidate when the current track becomes the last
+  // in a non-wrapping queue. Fires once per (last-track, source) pair; aborts
+  // on track change or unmount. On resolve, either stashes the candidate for
+  // later consumption OR applies it directly if the user is already waiting
+  // (pendingApplyRef set from a Next click or an 'ended' event).
+  useEffect(() => {
+    const atEnd = viewIdx === viewTracks.length - 1;
+    // Treat repeat all/one as wrapping — no point fetching a candidate that
+    // the 'ended' handler will ignore in favor of looping/replaying.
+    const wraps = viewSource === "tonight's set" || repeatMode === 'all' || repeatMode === 'one';
+    if (!atEnd || wraps || !track?.id) return undefined;
+    if (autoNextRef.current?.seedId === track.id) return undefined;
+    const ctl = new AbortController();
+    autoNextRef.current = null;
+    setAutoNextDisplay(null);
+    autoFetchInFlightRef.current = true;
+    const seedId       = track.id;
+    const seedLanguage = track.language;
+    getRelated(seedId, { lang: seedLanguage, signal: ctl.signal })
+      .then(list => {
+        autoFetchInFlightRef.current = false;
+        const seen = new Set(viewTracks.map(t => t.id));
+        const pick = (list ?? []).find(t => t?.id && !seen.has(t.id));
+        const pending = pendingApplyRef.current;
+        if (!pick) {
+          // No usable candidate. Pause only if the user was *waiting* on
+          // end-of-track resolution. A pending Next click leaves the current
+          // track playing (clicks that did nothing have always been silent).
+          if (pending === 'ended') { setPlaying(false); setEnded(true); }
+          pendingApplyRef.current = null;
+          return;
+        }
+        if (pending) {
+          pendingApplyRef.current = null;
+          applyAutoRadioToQueue(seedId, pick);
+          // User was waiting on this resolution — flip to playing so the load
+          // effect autoplays the new track even if the audio element ended
+          // (its paused property is true post-'ended', so we need this signal).
+          setPlaying(true);
+        } else {
+          autoNextRef.current = { seedId, candidate: pick };
+          setAutoNextDisplay({ seedId, candidate: pick });
+        }
+      })
+      .catch(() => {
+        autoFetchInFlightRef.current = false;
+        if (pendingApplyRef.current === 'ended') { setPlaying(false); setEnded(true); }
+        pendingApplyRef.current = null;
+      });
+    return () => ctl.abort();
+    // viewTracks intentionally omitted from deps — the effect only needs to
+    // re-fire when the *current* track or its position changes. Including the
+    // full array would re-fetch on every queue mutation (including the one
+    // this effect itself triggers).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewIdx, viewTracks.length, track?.id, track?.language, viewSource, repeatMode]);
+
+  // Subscribe to player events. 'ended' advances within the queue; on featured
+  // we wrap around, on explicit sequences auto-radio takes over (or pauses if
+  // no candidate). viewRef keeps us out of stale closures so we only subscribe
+  // once per player instance.
+  useEffect(() => {
+    const offProgress = player.on('progress', (p, currentTimeSec) => {
+      setProgress(p);
+      setAudioTime(currentTimeSec ?? 0);
+      const t = viewRef.current.tracks[viewRef.current.idx];
+      if (t && t.id === loadedTrackIdRef.current) savePosition(t.id, p);
+    });
+    const offEnded    = player.on('ended', () => {
+      clearPosition();
+      // Repeat-one wins: replay current track from 0 regardless of position.
+      if (repeatModeRef.current === 'one') {
+        player.seek(0);
+        player.play();
+        return;
+      }
+      const cur = viewRef.current;
+      const canAdvance = cur.idx + 1 < cur.tracks.length;
+      // Repeat-all wraps any queue (not just "tonight's set") at the end.
+      const wraps = !canAdvance
+        && (cur.source === "tonight's set" || repeatModeRef.current === 'all')
+        && cur.tracks.length;
+      // If the user armed "sleep at end of set", a moment where we'd otherwise
+      // wrap or stop is the sleep trigger — fire it and pause regardless.
+      if (!canAdvance && fireEndOfSetIfArmed()) {
+        setPlaying(false);
+        setEnded(true);
+        return;
+      }
+      if (canAdvance)      setQueue({ ...cur, idx: cur.idx + 1 });
+      else if (wraps)      setQueue({ ...cur, idx: 0 });
+      else {
+        // Queue exhausted on a non-wrapping source — try auto-radio.
+        const auto = consumeAutoNext(cur);
+        if (auto) {
+          setQueue(auto);
+          // Audio element is in 'ended' state (paused). setPlaying(true) so the
+          // load effect's `if (playing) player.play()` actually fires for the
+          // newly appended track.
+          setPlaying(true);
+        }
+        else if (autoFetchInFlightRef.current) {
+          // Prefetch still running. Keep `playing: true` so the load effect
+          // autoplays when the resolution applies the queue mutation.
+          pendingApplyRef.current = 'ended';
+        } else {
+          setPlaying(false);
+          setEnded(true);
+        }
+      }
+    });
+    const offPlay     = player.on('play', () => setEnded(false));
+    return () => { offProgress(); offEnded(); offPlay(); };
+  }, [player]);
+
+  // Flush playback position to localStorage on tab close.
+  useEffect(() => {
+    const handler = () => flushPosition();
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
+  // Sleep timer expiry → pause playback. Toast for visibility.
+  useEffect(() => subscribeSleepFire((reason) => {
+    setPlaying(false);
+    toast(reason === 'end-of-set' ? 'set ended · sleeping.' : 'sleep timer · paused.');
+  }), []);
+
+  // Persist queue (debounced) on every meaningful change.
+  useEffect(() => { saveQueueSoon(queue); }, [queue]);
+
+  // Cold-start: persisted queue tracks lost their stream URLs (CDN tokens
+  // rotate). Refetch fresh URLs for the active + next track so playback
+  // can start cleanly. Others lazy-refetch when they become current.
+  useEffect(() => {
+    if (!queue.tracks.length) return;
+    const idsToHydrate = [queue.tracks[queue.idx], queue.tracks[queue.idx + 1]]
+      .filter(t => t && !t.streamUrl)
+      .map(t => t.id);
+    if (idsToHydrate.length === 0) return;
+    let cancelled = false;
+    Promise.all(idsToHydrate.map(id => getTrack(id).catch(() => null))).then(fresh => {
+      if (cancelled) return;
+      const byId = new Map(fresh.filter(Boolean).map(t => [t.id, t]));
+      setQueue(q => ({
+        ...q,
+        tracks: q.tracks.map(t => byId.has(t.id) ? { ...t, ...byId.get(t.id) } : t),
+      }));
+    });
+    return () => { cancelled = true; };
+    // Only run once on mount with the hydrated queue — subsequent fetches
+    // happen at the track-load layer when a non-hydrated track becomes
+    // current. Including queue in deps would loop on every setQueue write.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load the active track whenever its identity OR stream URL changes. The
+  // streamUrl dep covers the persisted-queue cold-start case where a track
+  // is restored without a CDN URL and gets it lazily from `getTrack`.
+  useEffect(() => {
+    if (!track) return;
+    let cancelled = false;
+    loadedTrackIdRef.current = null;
+    player.load(track).then(() => {
+      if (cancelled) return;
+      loadedTrackIdRef.current = track.id;
+      const saved = loadPosition();
+      if (saved && saved.trackId === track.id && saved.progress > 0.01 && saved.progress < 0.98) {
+        player.seek(saved.progress);
+      }
+      if (playing && screen !== 'sensing') player.play();
+    }).catch(err => console.warn('[player] load failed', err));
+    return () => { cancelled = true; };
+    // playing/screen captured in .then() — reconciled by the play/pause effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player, track?.id, track?.streamUrl]);
+
+  // Lazy stream-URL refetch for any track that loses its URL (cold-start
+  // hydration didn't cover it, or it's track 3+ becoming current). Merges
+  // the fresh URL back into the queue — the load effect above picks it up.
+  useEffect(() => {
+    if (!track || track.streamUrl) return;
+    let cancelled = false;
+    getTrack(track.id).then(fresh => {
+      if (cancelled || !fresh) return;
+      setQueue(q => ({
+        ...q,
+        tracks: q.tracks.map(t => t.id === fresh.id ? { ...t, ...fresh } : t),
+      }));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track?.id, track?.streamUrl]);
+
+  // Sync play/pause state (and freeze playback during the sensing intro).
+  useEffect(() => {
+    if (screen === 'sensing' || !playing) {
+      player.pause();
+      flushPosition();
+    } else {
+      player.play();
+    }
+  }, [player, playing, screen]);
+
+  // Operate on the hydrated view: when the user has never interacted, queue is
+  // empty and we derive from pool; on first navigation we promote pool into
+  // queue.tracks so subsequent mutations stick.
+  const withCurrent = (mutator) => setQueue(q => {
+    const cur = q.tracks.length ? q : { tracks: pool, idx: 0, source: "tonight's set" };
+    return mutator(cur);
+  });
+  // Next / Prev clicks always intend "play me music" — every advance flips
+  // playing → true so the load effect autoplays the new track even when the
+  // user had paused before clicking (without this, a paused → next/prev just
+  // swaps the metadata and stays silent).
+  const goNext = () => {
+    const q = viewRef.current.tracks.length
+      ? viewRef.current
+      : { tracks: pool, idx: 0, source: "tonight's set" };
+    if (q.idx + 1 < q.tracks.length) {
+      setQueue({ ...q, idx: q.idx + 1 });
+      setPlaying(true);
+      return;
+    }
+    if (q.tracks.length && (q.source === "tonight's set" || repeatModeRef.current === 'all')) {
+      setQueue({ ...q, idx: 0 });
+      setPlaying(true);
+      return;
+    }
+    // Last track of a non-wrapping source → auto-radio.
+    const auto = consumeAutoNext(q);
+    if (auto) {
+      setQueue(auto);
+      setPlaying(true);
+      return;
+    }
+    if (autoFetchInFlightRef.current) {
+      pendingApplyRef.current = 'next';
+      setPlaying(true);  // when the fetch lands and applies, load effect autoplays
+    }
+  };
+  const goPrev = () => {
+    const q = viewRef.current.tracks.length
+      ? viewRef.current
+      : { tracks: pool, idx: 0, source: "tonight's set" };
+    if (q.idx > 0) {
+      setQueue({ ...q, idx: q.idx - 1 });
+      setPlaying(true);
+      return;
+    }
+    if (q.tracks.length && (q.source === "tonight's set" || repeatModeRef.current === 'all')) {
+      setQueue({ ...q, idx: q.tracks.length - 1 });
+      setPlaying(true);
+    }
+    // First track of a non-wrapping source → no-op (no "previous radio" concept).
+  };
+
+  // Morph helper — if we have a source element, animate the album art from
+  // that rect into the player's art slot before mounting the player. Used by
+  // every "open the player" path so the entrance is consistent.
+  const morphInto = (target, srcEl, arrive) => {
+    const fromRect = srcEl && getRect(srcEl);
+    if (fromRect && fromRect.width > 0) {
+      const toRect = { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS };
+      setMorph({ track: target, fromRect, toRect, kind: 'open' });
+      clearTimeout(morphTimer.current);
+      morphTimer.current = setTimeout(() => {
+        arrive();
+        requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
+      }, 470);
+    } else {
+      arrive();
+    }
+  };
+
+  const pickLiveTrack = (t, srcEl) => {
+    const fromScreen = screen;
+    morphInto(t, srcEl, () => {
+      setQueue({ tracks: [t], idx: 0, source: 'your pick' });
+      setShuffleActive(false);
+      setPlaying(true);
+      setOverlay(null);
+      setPlayerReturn(fromScreen);
+      setScreen('player');
+    });
+  };
+
+  const pickLiveSequence = (tracks, startIdx = 0, source = 'your selection', srcEl) => {
+    if (!tracks?.length) return;
+    const idx = Math.max(0, Math.min(startIdx, tracks.length - 1));
+    const fromScreen = screen;
+    morphInto(tracks[idx], srcEl, () => {
+      setQueue({ tracks, idx, source });
+      setShuffleActive(false);
+      setPlaying(true);
+      setOverlay(null);
+      setPlayerReturn(fromScreen);
+      setScreen('player');
+    });
+  };
+
+  // Open the player on a track from the featured pool. Seeds the queue with
+  // the pool starting at the picked idx so the rest of "tonight's set" remains.
+  const pickById = (id, srcEl) => {
+    const idx = pool.findIndex(x => x.id === id);
+    if (idx < 0) return;
+    const fromScreen = screen;
+    morphInto(pool[idx], srcEl, () => {
+      setQueue({ tracks: pool, idx, source: "tonight's set" });
+      setShuffleActive(false);
+      setPlaying(true);
+      setPlayerReturn(fromScreen);
+      setScreen('player');
+      setOverlay(null);
+    });
+  };
+  // Jump to position i within the *current* queue (not the pool).
+  const pickFromQueue = (i) => withCurrent(q => ({ ...q, idx: Math.max(0, Math.min(i, q.tracks.length - 1)) }));
+
+  // Queue mutations exposed to track context menus. Source flips from
+  // "tonight's set" → "your set" on first insertion so wrap-around turns off.
+  const enqueueNext = (t) => withCurrent(q => {
+    const tracks = [...q.tracks];
+    tracks.splice(q.idx + 1, 0, t);
+    return { ...q, tracks, source: q.source === "tonight's set" ? 'your set' : q.source };
+  });
+  const enqueueLast = (t) => withCurrent(q => ({
+    ...q,
+    tracks: [...q.tracks, t],
+    source: q.source === "tonight's set" ? 'your set' : q.source,
+  }));
+  const removeFromQueue = (i) => withCurrent(q => {
+    if (i < 0 || i >= q.tracks.length) return q;
+    const tracks = q.tracks.filter((_, k) => k !== i);
+    let idx = q.idx;
+    if (i < q.idx) idx -= 1;
+    else if (i === q.idx) idx = Math.min(q.idx, tracks.length - 1);
+    return { ...q, tracks, idx: Math.max(0, idx) };
+  });
+  const reorderQueue = (from, to) => withCurrent(q => {
+    if (from === to || from < 0 || to < 0 || from >= q.tracks.length || to >= q.tracks.length) return q;
+    const tracks = [...q.tracks];
+    const [moved] = tracks.splice(from, 1);
+    tracks.splice(to, 0, moved);
+    let idx = q.idx;
+    if (from === q.idx) idx = to;
+    else if (from < q.idx && to >= q.idx) idx -= 1;
+    else if (from > q.idx && to <= q.idx) idx += 1;
+    return { ...q, tracks, idx };
+  });
+  // Spotify-style clear: keep the currently playing track, drop everything
+  // else. The lone surviving track keeps queue.tracks.length === 1, so
+  // withCurrent's pool fallback (empty → "tonight's set" pool) stays away —
+  // any subsequent enqueueNext/Last lands in this fresh queue, not the pool.
+  const clearQueue = async () => {
+    const ok = await confirm({
+      title:        'clear queue?',
+      body:         "we'll keep the currently playing track.",
+      confirmLabel: 'clear',
+      danger:       true,
+    });
+    if (!ok) return;
+    setQueue(q => {
+      const cur = q.tracks.length ? q : { tracks: pool, idx: 0, source: "tonight's set" };
+      const t = cur.tracks[cur.idx];
+      if (!t) return { tracks: [], idx: 0, source: 'your set' };
+      return { tracks: [t], idx: 0, source: 'your set' };
+    });
+    setShuffleActive(false);
+    toast('queue cleared.');
+  };
+  // Sticky shuffle indicator. Tap (off → on) shuffles tracks[idx+1..] and
+  // turns the button accent. Tap (on → off) just clears the indicator — the
+  // queue order stays as-is (we don't store the pre-shuffle order, and most
+  // users wanting an unshuffled set will pick a fresh source anyway).
+  // Re-shuffle = tap off → tap on. Auto-resets to false whenever the queue
+  // is replaced wholesale (clear / pickLive / new source).
+  const [shuffleActive, setShuffleActive] = useState(false);
+  const shuffleQueue = () => {
+    if (shuffleActive) {
+      setShuffleActive(false);
+      return;
+    }
+    setQueue(q => {
+      const cur = q.tracks.length ? q : { tracks: pool, idx: 0, source: "tonight's set" };
+      if (cur.idx >= cur.tracks.length - 1) return cur;  // nothing to shuffle
+      const head = cur.tracks.slice(0, cur.idx + 1);
+      const tail = cur.tracks.slice(cur.idx + 1);
+      for (let i = tail.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [tail[i], tail[j]] = [tail[j], tail[i]];
+      }
+      return { ...cur, tracks: [...head, ...tail] };
+    });
+    setShuffleActive(true);
+    toast('shuffled.');
+  };
+  // Save the current queue (or featured pool if queue not yet promoted) as a
+  // new playlist. Partial-failure tolerant — we don't roll back if some
+  // addToPlaylist calls fail; user sees a "saved X of Y" toast.
+  const saveQueueAsPlaylist = async () => {
+    const tracksToSave = viewRef.current.tracks.length ? viewRef.current.tracks : pool;
+    if (!tracksToSave.length) return;
+    const name = await prompt({
+      title:       'save queue as playlist',
+      body:        `${tracksToSave.length} ${tracksToSave.length === 1 ? 'track' : 'tracks'}`,
+      placeholder: 'playlist name',
+      submitLabel: 'save',
+      cancelLabel: 'cancel',
+    });
+    if (!name) return;
+    try {
+      const playlist = await createPlaylist({ name });
+      const results = await Promise.allSettled(
+        tracksToSave.map(tk => addToPlaylist(playlist.id, tk.id)),
+      );
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      toast(ok === tracksToSave.length ? 'saved.' : `saved ${ok} of ${tracksToSave.length}.`);
+    } catch (err) {
+      toast("couldn't save.");
+      console.warn('[save-queue]', err);
+    }
+  };
+
+  // Leave the player to another screen. Play the screen-out animation on
+  // the player wrapper for a Telegram-style dismiss (scale + fade + slight
+  // slide down). The previous diagonal art-to-orb morph was removed — it
+  // looked like a regression on mobile where the orb isn't visible, so
+  // the art flew to the top-left of the viewport for no clear reason.
+  const leavePlayer = (nextScreen) => {
+    if (!track) { setScreen(nextScreen); return; }
+    clearTimeout(closingPlayerTimer.current);
+    // Switch screens immediately so the destination renders BEHIND the
+    // fading player wrapper. Keep the player wrapper mounted via
+    // `closingPlayer` so its screen-out animation can play out.
+    setClosingPlayer(true);
+    setScreen(nextScreen);
+    closingPlayerTimer.current = setTimeout(() => setClosingPlayer(false), 220);
+  };
+  const onNav = (target) => {
+    setOverlay(null);
+    // Direct nav resets player/queue back-stack — a fresh nav shouldn't
+    // carry stale return state from a prior drill-down.
+    setPlayerReturn('home');
+    setQueueReturn('home');
+    if (screen === 'player' && target !== 'player') leavePlayer(target);
+    else setScreen(target);
+  };
+
+  if (screen === 'sensing') {
+    return (
+      <>
+        <SensingScreen djName={t.djName} mood={t.mood} onReady={() => setScreen(hasOnboarded() ? 'home' : 'onboarding')}/>
+        <TweaksHost t={t} setTweak={setTweak}/>
+      </>
+    );
+  }
+
+  if (screen === 'onboarding') {
+    // If the user originally landed on a deep link, route them there now that
+    // they've cleared the gate. `#/player` without a queue still falls back to
+    // home so they don't see an empty player.
+    const postOnboardDest = (() => {
+      const wanted = initialFromHash?.screen;
+      if (!wanted) return 'home';
+      // Gate screens are not real destinations — if the URL still reads
+      // `#/onboarding` or `#/sensing` (the hash mirror wrote it on first
+      // render), don't bounce the user back to themselves on submit.
+      if (wanted === 'onboarding' || wanted === 'sensing') return 'home';
+      if (wanted === 'player' && !queue.tracks.length) return 'home';
+      return wanted;
+    })();
+    return (
+      <>
+        <OnboardingScreen pool={pool} onDone={() => setScreen(postOnboardDest)}/>
+        {/* Rendered AFTER OnboardingScreen so it paints on top at the same
+            z-index. OnboardingScreen has `position: fixed; inset: 0` and
+            would cover the pill if the pill came first in DOM order. */}
+        {isMobile && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak} showAccount={false}/>}
+        <TweaksHost t={t} setTweak={setTweak}/>
+      </>
+    );
+  }
+
+  // At compact (mobile + tablet-portrait), the player screen has no transport
+  // controls of its own — the BottomMiniBar pill provides them. Keep it
+  // visible on the player screen too (otherwise user is stuck with no way to
+  // pause/skip until they back out). At desktop, the right rail handles
+  // transport, so hide the (non-existent) mini there as before.
+  const showMini = !overlay && (isDesktop ? screen !== 'player' : true);
+
+  // Artist navigation — accepts either a string (artist name) from Home tiles
+  // or a `{ id, name }` object from "fans also like" inside the artist screen.
+  const onOpenArtist = (key) => {
+    const k = typeof key === 'string' ? { name: key } : key;
+    if (!k || (!k.id && !k.name)) return;
+    setArtistKey(k);
+    setArtistReturn(screen === 'artist' ? artistReturn : screen);
+    setScreen('artist');
+  };
+
+  // Suspense fallback label mirrors what each screen's own loader says
+  // once its chunk hydrates, so the user sees one continuous label across
+  // the chunk-load → data-load handoff instead of two flickering ones.
+  const skeletonLabel = screen === 'language-hub' && hubLang
+    ? `Loading ${hubLang.charAt(0).toUpperCase()}${hubLang.slice(1)}`
+    : (SCREEN_LABELS[screen] ?? 'Loading');
+
+  return (
+    <>
+      <div className="absolute inset-0 bg-bg text-ink overflow-hidden">
+        <Suspense fallback={<ScreenSkeleton label={skeletonLabel}/>}>
+        {/* Unified screen dispatch — the Desktop* screens render at every
+            breakpoint. PlaylistsScreen / OnboardingScreen / SensingScreen are
+            the only mobile-specific screens still rendered as-is. */}
+        {screen === 'home' && (
+          <div key="home" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopHome tracks={pool}
+              loading={featured.status === 'loading'}
+              error={featured.error}
+              onRetry={featured.refetch}
+              djName={t.djName} mood={t.mood}
+              onPick={pickById} onPickLive={pickLiveTrack}
+              onOpenJournal={() => setScreen('journal')}
+              onOpenDna={() => setScreen('dna')}
+              onOpenBridges={() => setScreen('bridges')}
+              onOpenBridge={() => setScreen('bridges')}
+              onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('home'); setScreen('catalog-playlist-detail'); }}
+              onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('home'); setScreen('playlist-detail'); }}
+              onOpenPlaylists={() => setScreen('playlists')}
+              onOpenSearch={() => setScreen('search')}
+              onOpenArtist={onOpenArtist}
+              t={t} setTweak={setTweak}/>
+          </div>
+        )}
+        {(screen === 'player' || closingPlayer) && track && (
+          <div key="player"
+            className={`absolute inset-0 ${closingPlayer ? 'animate-aura-screen-out' : 'animate-aura-screen-in'}`}>
+            {isMobile ? (
+              <MobilePlayer
+                track={track} progress={progress} playing={playing}
+                nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidate : null)}
+                mood={t.mood} djName={t.djName}
+                repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+                onShuffle={shuffleQueue} shuffleActive={shuffleActive}
+                onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
+                onSeek={(p) => player.seek(p)} player={player}
+                onBack={() => leavePlayer(playerReturn)}
+                openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
+                openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}/>
+            ) : (
+              <DesktopPlayer
+                track={track} nextTrack={next} progress={progress} audioTime={audioTime} playing={playing}
+                mood={t.mood} djName={t.djName} player={player}
+                repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+                onShuffle={shuffleQueue} shuffleActive={shuffleActive}
+                onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
+                onSeek={(p) => player.seek(p)}
+                onBack={() => leavePlayer(playerReturn)}
+                openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
+                openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}
+                showRelated={!isDesktop || isTabletLandscape}
+                onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+            )}
+          </div>
+        )}
+        {screen === 'queue' && (
+          <div key="queue" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopQueue tracks={viewTracks} currentIdx={viewIdx} source={viewSource} djName={t.djName}
+              onPick={pickFromQueue} onClose={() => setScreen(queueReturn)} onRemove={removeFromQueue}
+              onReorder={reorderQueue} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
+              onClear={clearQueue} onShuffle={shuffleQueue} shuffleActive={shuffleActive} onSave={saveQueueAsPlaylist}
+              repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+              autoNext={autoNextDisplay?.candidate ?? null}
+              onPlayAutoNext={() => {
+                const auto = consumeAutoNext(viewRef.current);
+                if (auto) { setQueue(auto); setPlaying(true); }
+              }}/>
+          </div>
+        )}
+        {screen === 'search' && (
+          <div key="search" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopSearch djName={t.djName} onClose={() => setScreen('home')}
+              onPickLive={pickLiveTrack}
+              onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
+              onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('search'); setScreen('playlist-detail'); }}/>
+          </div>
+        )}
+        {screen === 'talk' && (
+          <div key="talk" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopTalk djName={t.djName} mood={t.mood} onPickSequence={pickLiveSequence}/>
+          </div>
+        )}
+        {screen === 'library' && (
+          <div key="library" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopLibrary
+              onOpenPlaylists={() => setScreen('playlists')}
+              onPlaySequence={pickLiveSequence}
+              onPickLive={pickLiveTrack}
+              onPlayNext={enqueueNext}
+              onAddToQueue={enqueueLast}
+              onOpenLiked={() => setScreen('liked')}
+              onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('library'); setScreen('playlist-detail'); }}
+              onOpenLangHub={(L) => { setHubLang(L); setScreen('language-hub'); }}/>
+          </div>
+        )}
+        {screen === 'liked' && (
+          <div key="liked" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopLiked onClose={() => setScreen('library')}
+              onPlaySequence={pickLiveSequence} onPickLive={pickLiveTrack} onPlayOne={pickLiveTrack}
+              onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </div>
+        )}
+        {screen === 'playlists' && (
+          <div key="playlists" className="absolute inset-0 animate-aura-screen-in">
+            <PlaylistsScreen onClose={() => setScreen('library')}
+              onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('playlists'); setScreen('playlist-detail'); }}/>
+          </div>
+        )}
+        {screen === 'playlist-detail' && detailPlaylistId && (
+          <div key={`pl-${detailPlaylistId}`} className="absolute inset-0 animate-aura-screen-in">
+            <DesktopPlaylistDetail playlistId={detailPlaylistId}
+              onClose={() => setScreen(detailReturn)} onPlaySequence={pickLiveSequence}
+              onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </div>
+        )}
+        {screen === 'catalog-playlist-detail' && catalogPlaylistId && (
+          <div key={`cat-${catalogPlaylistId}`} className="absolute inset-0 animate-aura-screen-in">
+            <DesktopCatalogPlaylistDetail playlistId={catalogPlaylistId}
+              onClose={() => setScreen(catalogReturn)} onPlaySequence={pickLiveSequence}
+              onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </div>
+        )}
+        {screen === 'language-hub' && hubLang && (
+          <div key={`hub-${hubLang}`} className="absolute inset-0 animate-aura-screen-in">
+            <DesktopLanguageHub lang={hubLang}
+              onClose={() => setScreen('home')} onPickLive={pickLiveTrack}
+              onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('language-hub'); setScreen('catalog-playlist-detail'); }}/>
+          </div>
+        )}
+        {screen === 'artist' && artistKey && (
+          <div key={`ar-${artistKey.id || artistKey.name}`} className="absolute inset-0 animate-aura-screen-in">
+            <DesktopArtist artistKey={artistKey}
+              onClose={() => setScreen(artistReturn)}
+              onPickLive={pickLiveTrack}
+              onPlaySequence={pickLiveSequence}
+              onPlayNext={enqueueNext}
+              onAddToQueue={enqueueLast}
+              onOpenArtist={onOpenArtist}/>
+          </div>
+        )}
+
+        {/* Shared-element morph layer — sits above screens so source/target are covered cleanly */}
+        {morph && <MorphLayer {...morph}/>}
+        {screen === 'journal' && (
+          <div key="journal" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopJournal djName={t.djName} onPickLive={pickLiveTrack} onClose={() => setScreen('home')}/>
+          </div>
+        )}
+        {screen === 'dna' && (
+          <div key="dna" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopDna onClose={() => setScreen('home')}/>
+          </div>
+        )}
+        {screen === 'bridges' && (
+          <div key="bridges" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopBridges onPickSequence={pickLiveSequence}
+              onPickBridge={(bridge, tracks) => pickLiveSequence(tracks, 0, `bridge · ${bridge.from} → ${bridge.to}`)}
+              onClose={() => setScreen('home')}/>
+          </div>
+        )}
+        </Suspense>
+
+        {overlay === 'why'    && track && <WhyPanel     track={track} mood={t.mood} djName={t.djName} onClose={() => setOverlay(null)}/>}
+        {(overlay === 'lyrics' || closingLyrics) && track && (
+          <LyricsScreen
+            track={track}
+            audioTime={audioTime}
+            playing={playing}
+            ended={ended}
+            onSeekToTime={(sec) => { const d = player.getDurationSec(); if (d > 0) player.seek(sec / d); }}
+            closing={closingLyrics}
+            onClose={() => {
+              if (closingLyrics) return;
+              clearTimeout(closingLyricsTimer.current);
+              setClosingLyrics(true);
+              closingLyricsTimer.current = setTimeout(() => {
+                setOverlay(null);
+                setClosingLyrics(false);
+              }, 220);
+            }}
+          />
+        )}
+        {overlay === 'crowd'  && track && <CrowdScreen  track={track} mood={t.mood} onClose={() => setOverlay(null)}/>}
+
+        {/* Mobile chrome: paired glass pills — MobileTopBar (brand + theme) at
+            the top, MobileBottomBar (now-playing + nav) at the bottom. Both
+            hide on the player screen so DesktopPlayer's floating back / ⋯
+            buttons aren't covered and the page swiper claims the full surface. */}
+        {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}/>}
+        {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileBottomBar
+          track={track} playing={playing}
+          onTogglePlay={() => setPlaying(p => !p)}
+          onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}
+          active={screen} onNav={onNav} onTalk={() => setTalkOpen(true)}/>}
+        {/* Tablet-portrait chrome: TopNavStrip top + BottomMiniBar bottom.
+            NavRail + DesktopRail are desktop-only. */}
+        {isTabletPortrait && <TopNavStrip djName={t.djName} active={screen} onNav={onNav}
+          onTalk={() => setTalkOpen(true)} t={t} setTweak={setTweak}/>}
+        {isTabletPortrait && showMini && !morph && <BottomMiniBar track={track} progress={progress} playing={playing} player={player}
+          onTogglePlay={() => setPlaying(p => !p)} onPrev={goPrev} onNext={goNext}
+          onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}/>}
+        {isDesktop && <NavRail djName={t.djName} mood={t.mood} active={screen}
+          onNav={onNav}
+          collapsed={isTabletLandscape ? true : navCollapsed}
+          onToggle={isTabletLandscape ? undefined : toggleNav}/>}
+        {isDesktop && (
+          <DesktopRail
+            track={track} nextTrack={next} progress={progress} playing={playing} player={player}
+            collapsed={railCollapsed} onToggle={toggleRail}
+            slim={isTabletLandscape}
+            onTogglePlay={() => setPlaying(p => !p)} onPrev={goPrev} onNext={goNext}
+            onSeek={(p) => player.seek(p)}
+            onOpenLyrics={() => setOverlay('lyrics')} onOpenWhy={() => setOverlay('why')}
+            onOpenQueue={() => { setOverlay(null); setQueueReturn(screen); setScreen('queue'); }}
+            onPickLive={pickLiveTrack}
+            onPlayNext={enqueueNext}
+            onAddToQueue={enqueueLast}
+            repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+            onShuffle={shuffleQueue} shuffleActive={shuffleActive}/>
+        )}
+        {isDesktop && railCollapsed && track && (
+          <FloatingMini track={track} playing={playing} player={player}
+            onTogglePlay={() => setPlaying(p => !p)} onPrev={goPrev} onNext={goNext}
+            onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}
+            onExpandRail={() => setRailCollapsed(false)}/>
+        )}
+        {/* TalkAura modal still triggered by compact chrome's onTalk; will be
+            unified into the screen='talk' route in a later phase. */}
+        {isCompact && talkOpen && <TalkAura djName={t.djName} mood={t.mood}
+          onClose={() => setTalkOpen(false)} onPickSequence={pickLiveSequence}/>}
+        <Toast/>
+        <AddToPlaylistSheet/>
+        <ConfirmDialog/>
+        <PromptDialog/>
+        <ShortcutsOverlay/>
+        <SleepTimerSheet/>
+        <SleepTimerOrb railCollapsed={railCollapsed} isDesktop={isDesktop}/>
+        {isDesktop && <TrackContextMenu
+          onPickLive={pickLiveTrack}
+          onPlayNext={enqueueNext}
+          onAddToQueue={enqueueLast}
+          onOpenArtist={onOpenArtist}/>}
+      </div>
+      <TweaksHost t={t} setTweak={setTweak}/>
+    </>
+  );
+}
+
+function readStoredTheme() {
+  try {
+    const v = localStorage.getItem('aura.theme');
+    if (v === 'dusk' || v === 'midnight' || v === 'bloom') return v;
+  } catch { /* localStorage disabled */ }
+  return null;
+}
+
+function readStoredRepeat() {
+  try {
+    const v = localStorage.getItem('aura.repeat');
+    if (v === 'off' || v === 'all' || v === 'one') return v;
+  } catch { /* localStorage disabled */ }
+  return 'off';
+}
+
+export function Root({ user } = {}) {
+  const storedTheme = useMemo(() => readStoredTheme(), []);
+  // Seed initial tweaks from the stored theme and the authed user's saved DJ
+  // name. useTweaks only reads this on mount, which is correct — the user is
+  // already resolved by the time the app view renders.
+  const [t, setTweak] = useTweaks({
+    ...DEFAULT_TWEAKS,
+    ...(storedTheme ? { theme: storedTheme } : {}),
+    ...(user?.djName ? { djName: user.djName } : {}),
+  });
+  const theme = THEMES[t.theme] || THEMES.dusk;
+  const { breakpoint } = useViewport();
+  const rails = useRailToggles();
+  // Skip the initial write — the value already matches whatever
+  // readStoredTheme() returned (or the default for fresh users).
+  const themeMounted = useRef(false);
+  useEffect(() => {
+    if (!themeMounted.current) { themeMounted.current = true; return; }
+    try { localStorage.setItem('aura.theme', t.theme); } catch { /* ignore */ }
+  }, [t.theme]);
+  // Sync body background to the theme so the responsive shell never reveals a
+  // mismatched edge color during reflows / reduced-motion view transitions.
+  useEffect(() => {
+    document.body.style.background = theme.bg;
+  }, [theme.bg]);
+  // Mirror the theme class onto <html> so popovers / sheets that portal to
+  // document.body (queue ⋯, mlt ⋯, etc.) still match the `.theme-midnight
+  // .selector` descendant rules — they're siblings of the App root, not
+  // descendants, so they'd otherwise resolve to the :root dusk defaults.
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.remove('theme-dusk', 'theme-midnight', 'theme-bloom');
+    html.classList.add(`theme-${t.theme}`);
+  }, [t.theme]);
+
+  const content = (
+    <div className={`theme-${t.theme} absolute inset-0`}>
+      <App t={t} setTweak={setTweak} breakpoint={breakpoint} rails={rails}/>
+    </div>
+  );
+
+  // Portal the responsive shell to body so position:fixed inside it is sized
+  // relative to the viewport, not the React mount node. Every breakpoint
+  // (mobile through large-desktop) flows through this single path.
+  const isDesktop         = isDesktopBreakpoint(breakpoint);
+  const isMobile          = breakpoint === 'mobile';
+  const isTabletLandscape = breakpoint === 'tablet-landscape';
+  const isTabletPortrait  = breakpoint === 'tablet-portrait';
+  const isDesktopReal     = isDesktop && !isTabletLandscape;
+  return createPortal(
+    <div className={[
+      'aura-responsive-shell',
+      `theme-${t.theme}`,
+      isMobile          ? 'aura-responsive-shell--mobile' : '',
+      isDesktopReal     ? 'aura-responsive-shell--desktop' : '',
+      isTabletLandscape ? 'aura-responsive-shell--tablet-landscape' : '',
+      isTabletPortrait  ? 'aura-responsive-shell--tablet-portrait'  : '',
+      isDesktopReal     && rails.navCollapsed  ? 'aura-shell--nav-collapsed'  : '',
+      (isDesktopReal || isTabletLandscape) && rails.railCollapsed ? 'aura-shell--rail-collapsed' : '',
+    ].filter(Boolean).join(' ')}>
+      <div className="aura-responsive-shell__stage">{content}</div>
+    </div>,
+    document.body,
+  );
+}

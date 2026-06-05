@@ -1,0 +1,135 @@
+.aura-float-mini {
+  position: fixed;
+  right: 16px;
+  bottom: 20px;
+  z-index: 32;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Right padding clears the rounded pill corner — at ~52px height the
+     border-radius: 9999px curves inward 26px, so the volume icon (last
+     child) needs ≥16px of right padding to sit inside the safe rect
+     instead of behind the curve. */
+  padding: 6px 18px 6px 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-bg), transparent 8%);
+  border: 1px solid var(--color-line);
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 0.18),
+    0 4px 10px rgb(0 0 0 / 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  cursor: grab;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  max-width: 320px;
+  animation: aura-float-rise 280ms cubic-bezier(.2, .7, .2, 1);
+  user-select: none;
+  touch-action: none;
+}
+.aura-float-mini--dragging {
+  cursor: grabbing;
+  animation: none;
+}
+.theme-midnight .aura-float-mini {
+  background: color-mix(in srgb, var(--color-bg), transparent 24%);
+}
+@keyframes aura-float-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.aura-float-mini__art {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.aura-float-mini__meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.aura-float-mini__title {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.aura-float-mini__artist {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  margin-top: 2px;
+}
+.aura-float-mini__sleep {
+  margin-left: 2px;
+  color: var(--color-accent);
+}
+
+.aura-float-mini__ctrls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.aura-float-mini__btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-ink-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-float-mini__btn:hover {
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+}
+.theme-midnight .aura-float-mini__btn:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+.aura-float-mini__btn--play {
+  background: var(--color-accent);
+  color: var(--color-ink);
+  /* same 30x30 footprint as prev/next so the trio reads as one row instead
+     of the play disc dominating the pill */
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--color-accent), transparent 70%);
+}
+.theme-midnight .aura-float-mini__btn--play {
+  background: var(--color-ink);
+  color: var(--color-bg);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--color-ink), transparent 70%);
+}
+.aura-float-mini__btn--play:hover {
+  background: var(--color-accent);
+  color: var(--color-ink);
+  filter: brightness(1.05);
+}
+.theme-midnight .aura-float-mini__btn--play:hover {
+  background: var(--color-ink);
+  color: var(--color-bg);
+  filter: brightness(1.05);
+}

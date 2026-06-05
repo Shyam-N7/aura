@@ -1,0 +1,13 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+
+# Local Claude Code settings — may contain machine-specific allow-rules (e.g. a
+# curl command with the catalog URL). Keep it out of the repo.
+.claude/settings.local.json
+
+# Superseded standalone landing/auth export (links to an old prototype, uses
+# retired fonts/vocab). Kept locally as reference; never published.
+aura-export/

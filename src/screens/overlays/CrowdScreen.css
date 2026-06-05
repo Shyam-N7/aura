@@ -1,0 +1,3 @@
+.aura-crowd-avatar {
+  background: linear-gradient(135deg, var(--avatar-c0), var(--avatar-c1));
+}

@@ -1,0 +1,168 @@
+/* "more like this" — related-songs LIST (compact rectangle rows stacked
+   vertically). Used at mobile and tablet-landscape widths inside the player.
+   Replaces the earlier horizontal scroll-snap carousel — scanning a list of
+   rows is simpler than remembering to scroll a hidden horizontal shelf.
+   All colors via theme tokens (dusk/midnight/bloom). */
+.aura-mlt {
+  margin-top: 20px;
+}
+
+/* Section label — was using Tailwind `mb-2`; broken out so the mobile
+   sticky-glass treatment can layer on without fighting utility classes. */
+.aura-mlt__header {
+  margin-bottom: 8px;
+}
+
+.aura-mlt__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Each card-wrap holds one row: art + meta + the absolute-positioned ⋯
+   chip. Position relative so the popover can pin off the wrap. */
+.aura-mlt__card-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+/* The card button fills the row. Padding-right reserves room for the ⋯ chip
+   on the right edge so the title doesn't slide under it on long names. */
+.aura-mlt__card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 44px 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  min-width: 0;
+  transition: background 140ms ease;
+}
+.aura-mlt__card:hover { background: rgb(0 0 0 / 0.04); }
+.aura-mlt__card:active { background: rgb(0 0 0 / 0.06); }
+
+.aura-mlt__art {
+  flex-shrink: 0;
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+.aura-mlt__art .aura-album-art {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+}
+
+.aura-mlt__card-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.aura-mlt__card-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-mlt__card-artist {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ⋯ chip — pinned to the right edge of each row, vertically centered.
+   Always visible on touch (no hover gate); minimum 36 px square hit area. */
+.aura-mlt__more {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 9999px;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-soft);
+  background: transparent;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-mlt__more:hover {
+  background: color-mix(in srgb, var(--color-ink), transparent 92%);
+  color: var(--color-ink);
+}
+.aura-mlt__more:active { transform: translateY(-50%) scale(0.92); }
+
+/* Popover — positioned with inline position:fixed + top/bottom/right from the
+   component so it escapes the panel's overflow clip; pair with .aura-pl-menu
+   for the themed glass + items. Sized DOWN from the shared defaults since
+   the menu is scoped to this list's denser context. */
+.aura-mlt__menu {
+  overflow-y: auto;
+  min-width: 140px;
+  padding: 3px;
+  border-radius: 10px;
+}
+.aura-mlt__menu .aura-pl-menu-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+/* Loading / states — mirror RailExtras' dot+label. Centered in the section
+   so the spinner doesn't pin to the left edge while waiting on the network
+   (looked stranded inside the wider mobile panel). */
+.aura-mlt__loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+.aura-mlt__loading-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  box-shadow: 0 0 12px var(--color-accent);
+  animation: aura-soft 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.aura-mlt__loading-text {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--color-ink-soft);
+}
+
+/* Left-column variant (tablet-landscape 2-col player) — fix the host's width
+   to the album-art / .aura-dp__meta column so a long title doesn't widen the
+   grid's `auto` track and squeeze the lyrics column. The rows themselves
+   inherit width from this host. */
+.aura-mlt-host--left {
+  width: 360px;
+  max-width: 100%;
+  min-width: 0;
+}
+.aura-mlt-host--left .aura-mlt { margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-mlt__loading-dot { animation: none; }
+  .aura-mlt__more { transition: none; }
+}

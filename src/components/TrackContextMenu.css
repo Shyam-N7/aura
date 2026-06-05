@@ -1,0 +1,54 @@
+/* `aura-fadein` keyframe is defined globally in src/styles/animations.css. */
+.aura-ctx-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 0.22),
+    0 4px 10px rgb(0 0 0 / 0.10);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  font-family: var(--font-sans);
+  animation: aura-fadein 120ms ease both;
+}
+.theme-midnight .aura-ctx-menu {
+  background: color-mix(in srgb, var(--color-bg), transparent 6%);
+}
+
+.aura-ctx-menu__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink-soft);
+  text-align: left;
+  transition: background 100ms ease, color 100ms ease;
+}
+.aura-ctx-menu__item:hover {
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+}
+.theme-midnight .aura-ctx-menu__item:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+.aura-ctx-menu__item-icon {
+  display: inline-flex;
+  opacity: 0.7;
+}
+
+.aura-ctx-menu__sep {
+  height: 1px;
+  background: var(--color-line);
+  margin: 4px 6px;
+}

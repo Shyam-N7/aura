@@ -1,0 +1,215 @@
+/* Floating sleep-timer indicator.
+   Position (right/bottom) is set inline from JS so it can be dragged AND
+   shift with the right rail. CSS only handles look + animation. */
+
+.aura-sleep-orb {
+  position: fixed;
+  z-index: 33;
+  height: 52px;
+  width: 52px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--color-bg), transparent 8%);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 82%);
+  border-radius: 9999px;
+  cursor: grab;
+  color: var(--color-ink);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  touch-action: none;        /* prevent scroll while dragging */
+  user-select: none;
+  /* `right` transitions so the orb glides when the rail opens/closes. `width`
+     transitions for hover-expand. `transform` for in/out + bob. */
+  transition: width 320ms cubic-bezier(.2, .7, .2, 1),
+              right 320ms cubic-bezier(.2, .7, .2, 1),
+              border-color 180ms ease;
+  animation:
+    aura-sleep-orb-in 480ms cubic-bezier(.2, .7, .2, 1) both,
+    aura-sleep-orb-glow 3.6s ease-in-out infinite 480ms,
+    aura-sleep-orb-bob 5.4s ease-in-out infinite 480ms;
+}
+.aura-sleep-orb:hover:not(.aura-sleep-orb--dragging) {
+  width: 156px;
+  border-color: color-mix(in srgb, var(--color-accent), transparent 50%);
+}
+.aura-sleep-orb--dragging {
+  cursor: grabbing;
+  /* Pause the bob so the orb visibly tracks the pointer instead of fighting
+     a 3px vertical wobble. */
+  animation:
+    aura-sleep-orb-in 480ms cubic-bezier(.2, .7, .2, 1) both,
+    aura-sleep-orb-glow 3.6s ease-in-out infinite 480ms;
+  transition: width 320ms cubic-bezier(.2, .7, .2, 1),
+              border-color 180ms ease;
+}
+
+.aura-sleep-orb__ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 52px;
+  height: 52px;
+  pointer-events: none;
+}
+.aura-sleep-orb__ring-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-ink), transparent 92%);
+  stroke-width: 2.2;
+}
+.aura-sleep-orb__ring-fill {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--color-accent), transparent 50%));
+  transition: stroke-dasharray 900ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-sleep-orb__ring-head {
+  fill: var(--color-accent);
+  filter: drop-shadow(0 0 4px var(--color-accent));
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: aura-sleep-orb-head 1.8s ease-in-out infinite;
+  transition: cx 900ms cubic-bezier(.2, .7, .2, 1),
+              cy 900ms cubic-bezier(.2, .7, .2, 1);
+}
+
+.aura-sleep-orb__icon {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  animation: aura-sleep-orb-breathe 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.aura-sleep-orb__star {
+  fill: currentColor;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: aura-sleep-orb-twinkle 2.6s ease-in-out infinite;
+}
+.aura-sleep-orb__star--a { animation-delay: 0s; }
+.aura-sleep-orb__star--b { animation-delay: 0.9s; }
+.aura-sleep-orb__star--c { animation-delay: 1.7s; }
+
+.aura-sleep-orb__label {
+  flex: 1;
+  padding-right: 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 200ms ease 80ms,
+              transform 240ms cubic-bezier(.2, .7, .2, 1) 80ms;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  pointer-events: none;
+}
+.aura-sleep-orb:hover:not(.aura-sleep-orb--dragging) .aura-sleep-orb__label {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Drag grip — only appears when the pill is expanded so the user knows
+   they can grab it. Subtle dotted handle. */
+.aura-sleep-orb__grip {
+  width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--color-ink), transparent 60%);
+  opacity: 0;
+  transition: width 280ms cubic-bezier(.2, .7, .2, 1),
+              opacity 200ms ease 80ms;
+  pointer-events: none;
+}
+.aura-sleep-orb:hover:not(.aura-sleep-orb--dragging) .aura-sleep-orb__grip {
+  width: 16px;
+  opacity: 1;
+  padding-right: 12px;
+}
+.aura-sleep-orb__grip svg { fill: currentColor; }
+
+/* Urgent: final 60s — quicker breath, brighter border. */
+.aura-sleep-orb--urgent .aura-sleep-orb__icon { animation-duration: 1.5s; }
+.aura-sleep-orb--urgent {
+  border-color: color-mix(in srgb, var(--color-accent), transparent 50%);
+}
+
+@keyframes aura-sleep-orb-in {
+  from { opacity: 0; transform: scale(0.5) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
+@keyframes aura-sleep-orb-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+@keyframes aura-sleep-orb-breathe {
+  0%, 100% { transform: scale(1);   opacity: 0.92; }
+  50%      { transform: scale(1.1); opacity: 1; }
+}
+@keyframes aura-sleep-orb-twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.6); }
+  50%      { opacity: 1;    transform: scale(1.25); }
+}
+@keyframes aura-sleep-orb-head {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.3); opacity: 0.75; }
+}
+@keyframes aura-sleep-orb-glow {
+  0%, 100% {
+    box-shadow:
+      0 14px 32px rgb(0 0 0 / 0.18),
+      0 3px 8px  rgb(0 0 0 / 0.10),
+      inset 0 1px 0 rgb(255 255 255 / 0.7),
+      0 0 16px 0 color-mix(in srgb, var(--color-accent), transparent 80%);
+  }
+  50% {
+    box-shadow:
+      0 16px 36px rgb(0 0 0 / 0.20),
+      0 3px 8px   rgb(0 0 0 / 0.10),
+      inset 0 1px 0 rgb(255 255 255 / 0.7),
+      0 0 30px 4px color-mix(in srgb, var(--color-accent), transparent 64%);
+  }
+}
+
+.theme-midnight .aura-sleep-orb {
+  background: color-mix(in srgb, var(--color-bg), transparent 22%);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 74%);
+  animation:
+    aura-sleep-orb-in 480ms cubic-bezier(.2, .7, .2, 1) both,
+    aura-sleep-orb-glow-dark 3.6s ease-in-out infinite 480ms,
+    aura-sleep-orb-bob 5.4s ease-in-out infinite 480ms;
+}
+.theme-midnight .aura-sleep-orb--dragging {
+  animation:
+    aura-sleep-orb-in 480ms cubic-bezier(.2, .7, .2, 1) both,
+    aura-sleep-orb-glow-dark 3.6s ease-in-out infinite 480ms;
+}
+@keyframes aura-sleep-orb-glow-dark {
+  0%, 100% {
+    box-shadow:
+      0 14px 32px rgb(0 0 0 / 0.55),
+      0 3px 8px   rgb(0 0 0 / 0.28),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 0 18px 0 color-mix(in srgb, var(--color-accent), transparent 78%);
+  }
+  50% {
+    box-shadow:
+      0 16px 36px rgb(0 0 0 / 0.6),
+      0 3px 8px   rgb(0 0 0 / 0.30),
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 0 34px 6px color-mix(in srgb, var(--color-accent), transparent 60%);
+  }
+}

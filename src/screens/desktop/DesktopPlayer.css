@@ -1,0 +1,209 @@
+/* Player view — lyrics-focused, two columns. `@container dp` keeps the layout
+   coupled to its own width (not the viewport); the min-width:600px block lets
+   the left column scroll on short tablet-landscape heights. Phones (<600px) use
+   the dedicated MobilePlayer, not this screen. */
+
+.aura-dp {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* Hard-cap horizontal overflow at the root so no inner flex child can
+     trigger horizontal scroll. Volume-slider value changes were causing
+     a perceived "shake" when scrollbar flickered in/out. */
+  overflow-x: hidden;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: dp;
+  background:
+    radial-gradient(circle at 18% -10%, color-mix(in srgb, var(--color-accent), transparent 86%), transparent 55%),
+    radial-gradient(circle at 92% 14%, color-mix(in srgb, var(--color-accent), transparent 90%), transparent 50%);
+}
+
+.aura-dp__topbar {
+  padding: 24px 48px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.aura-dp__back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 11px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-dp__back:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+}
+
+.aura-dp__topbar-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.aura-dp__mood {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-ink);
+  text-transform: capitalize;
+}
+
+.aura-dp__grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 48px;
+  padding: 48px 56px 0;
+}
+
+.aura-dp__left {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 0;
+  overflow: hidden;
+}
+.aura-dp__meta {
+  width: 360px;
+}
+.aura-dp__title {
+  font-family: var(--font-serif);
+  font-size: 38px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+  margin-top: 14px;
+  text-wrap: pretty;
+}
+.aura-dp__artist {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--color-ink-soft);
+}
+
+.aura-dp__lyrics-message {
+  margin-top: 28px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+  max-width: 680px;
+}
+.aura-dp__lyrics-message--lg {
+  margin-top: 48px;
+  font-size: 20px;
+}
+
+.aura-dp__lang-toggle {
+  display: flex;
+  gap: 8px;
+}
+.aura-dp__pill {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: transparent;
+  color: var(--color-ink-soft);
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.aura-dp__pill--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.aura-dp__right {
+  padding-top: 12px;
+  padding-bottom: 56px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.aura-dp__lyrics-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 720px;
+}
+
+.aura-dp__line {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+  /* Upcoming lines sit 6 px below their natural slot; the active line
+     lifts into place. Past lines settle 2 px above. The wave-like
+     motion reads as cinematic rather than gimmicky once tied to the
+     existing color/size transitions. */
+  transform: translateY(6px);
+  opacity: 0.85;
+  transition: color 380ms ease, font-size 380ms ease,
+              transform 380ms cubic-bezier(.22, 1, .36, 1),
+              opacity 380ms ease;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.aura-dp__line:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent), transparent 60%);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.aura-dp__line--past {
+  color: var(--color-ink-faint);
+  transform: translateY(-2px);
+  opacity: 0.6;
+}
+.aura-dp__line--active {
+  font-size: 44px;
+  color: var(--color-ink);
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Tablet-landscape 2-col player: the "more like this" carousel sits below the
+   album art in the left column. On short landscape heights (e.g. 1024×768) art
+   + meta + carousel can run taller than the column, so allow it to scroll
+   instead of clipping via the default overflow:hidden. No-op at desktop, where
+   the content fits and no carousel renders. */
+@container dp (min-width: 600px) {
+  .aura-dp__left {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 16px;
+  }
+  .aura-dp__left::-webkit-scrollbar { width: 6px; }
+  .aura-dp__left::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-ink), transparent 82%);
+    border-radius: 9999px;
+  }
+}

@@ -1,0 +1,18 @@
+.aura-morphing-art {
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+}
+
+.aura-morphing-art__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.aura-morphing-art__layer--out {
+  animation: aura-fade-out 0.9s ease forwards;
+}
+
+.aura-morphing-art__layer--in {
+  animation: aura-fade-in 0.9s ease forwards;
+}

@@ -1,0 +1,361 @@
+.aura-dq {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  /* Defense: drag-reorder applies a transform that can push past the right
+     edge during a release frame, briefly spawning a horizontal scrollbar.
+     Clip it. */
+  overflow-x: hidden;
+  /* Prevent rubber-band / overscroll past the last row — without this, a
+     trackpad or smooth-wheel scroll lets the user pull the content past the
+     end and reveals a blank tail below the queue. */
+  overscroll-behavior: none;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: dq;
+}
+.aura-dq__header {
+  padding: 40px 56px 0;
+}
+.aura-dq__hero {
+  font-family: var(--font-serif);
+  font-size: 76px;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  margin: 28px 0 0;
+  font-weight: 400;
+  color: var(--color-ink);
+}
+.aura-dq__hero em { font-style: italic; }
+
+.aura-dq__list {
+  padding: 24px 56px 64px;
+}
+
+/* Past-tracks slide animation. Past rows always render (so the
+   transition can run) but are wrapped in a grid container whose
+   row template animates from 1fr → 0fr when collapsed. Works for
+   unknown content heights; no flash, no view-transition snapshot. */
+.aura-dq__past-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 320ms cubic-bezier(.4, 0, .2, 1),
+              opacity 240ms ease;
+  opacity: 1;
+}
+.aura-dq__past-wrap--collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.aura-dq__past-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.aura-dq__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Required so flex children with their own min-content (long titles, etc.)
+     can shrink instead of pushing the row past the container width. */
+  min-width: 0;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-bg);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+.aura-dq__row--past { opacity: 0.55; }
+.aura-dq__row--dragging {
+  background: color-mix(in srgb, var(--color-surface), white 4%);
+  box-shadow:
+    0 16px 36px rgb(0 0 0 / 0.22),
+    0 4px 12px rgb(0 0 0 / 0.10);
+  border-radius: 10px;
+  cursor: grabbing;
+}
+
+.aura-dq__handle {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: grab;
+  color: var(--color-ink-faint);
+  opacity: 0.55;
+  transition: opacity 160ms ease, color 160ms ease;
+  flex-shrink: 0;
+}
+.aura-dq__handle:hover { opacity: 1; color: var(--color-ink); }
+.aura-dq__handle:active { cursor: grabbing; }
+
+.aura-dq__more {
+  background: transparent;
+  border: 0;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  border-radius: 8px;
+  opacity: 0.55;
+  transition: opacity 140ms ease, background 140ms ease, color 140ms ease;
+}
+.aura-dq__row:hover .aura-dq__more { opacity: 0.9; }
+.aura-dq__more:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+  opacity: 1;
+}
+
+.aura-dq__idx {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-faint);
+  width: 32px;
+  flex-shrink: 0;
+}
+.aura-dq__idx--current { color: var(--color-accent); }
+
+.aura-dq__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-ink);
+  min-width: 0;
+}
+.aura-dq__title {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.aura-dq__title-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-dq__now-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--color-accent);
+}
+.aura-dq__now {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-accent), transparent 85%);
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+.aura-dq__x {
+  background: transparent;
+  border: 0;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  border-radius: 8px;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-dq__x:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-accent);
+}
+
+/* Header action (clear, shuffle, save, repeat). Sans regular, sentence case. */
+.aura-dq__action-btn {
+  background: transparent;
+  border: 0;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink-soft);
+  border-radius: 9999px;
+  transition: color 140ms ease, background 140ms ease, opacity 140ms ease;
+}
+.aura-dq__action-btn:hover {
+  color: var(--color-ink);
+  background: rgb(0 0 0 / 0.05);
+}
+.aura-dq__action-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+.aura-dq__action-btn--on {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), transparent 88%);
+}
+.aura-dq__action-btn--on:hover {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), transparent 80%);
+}
+
+/* Overflow ⋯ button — sits at the end of the action row, opens a
+   menu of less-frequent actions (Save as playlist / Add to a
+   playlist / Clear queue). Same visual register as the
+   .aura-dq__more per-row dots. */
+.aura-dq__overflow-btn {
+  background: transparent;
+  border: 0;
+  padding: 8px 8px;
+  margin-left: 2px;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-dq__overflow-btn:hover,
+.aura-dq__overflow-btn--on {
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+}
+
+/* Anchor the overflow menu to the right edge of the action row so
+   it doesn't drift off-screen on narrow widths. The shared
+   .aura-pl-menu default positions at `top: 100%` — that works here
+   since the parent `.flex items-center gap-1 relative` provides
+   the positioning context. */
+.aura-dq__overflow-menu {
+  right: 0;
+  left: auto;
+}
+
+/* Coming-up tile: faded continuation candidate prefetched by auto-radio. */
+.aura-dq__autonext {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-top: 1px dashed var(--color-line);
+  margin-top: 24px;
+  padding: 20px 0 8px;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 180ms ease;
+}
+.aura-dq__autonext:hover { opacity: 1; }
+.aura-dq__autonext-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  margin-bottom: 14px;
+}
+.aura-dq__autonext-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.aura-dq__autonext-meta {
+  flex: 1;
+  min-width: 0;
+}
+.aura-dq__autonext-title {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-dq__autonext-cta {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent);
+  flex-shrink: 0;
+  padding-left: 12px;
+}
+
+@container dq (max-width: 600px) {
+  .aura-dq__header { padding: 14px 22px 0; }
+  .aura-dq__hero { font-size: 44px; margin-top: 18px; line-height: 0.98; }
+  .aura-dq__list { padding: 18px 22px 0; }
+  .aura-dq__row { gap: 10px; padding: 10px 0; }
+  .aura-dq__idx { display: none; }
+  .aura-dq__main { gap: 10px; }
+  .aura-dq__main .aura-album-art { --size: 40px !important; }
+  .aura-dq__title { font-size: 15px; line-height: 1.2; gap: 6px; }
+  .aura-dq__title-text {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .aura-dq__now { display: none; }
+  .aura-dq__duration { display: none; }
+  /* Touch-target bumps — every per-row + header control becomes ≥ 36-40 px
+     to clear the iOS/Android touch floor. Visual size stays compact via
+     inline-flex centering of the existing icon/text content. */
+  .aura-dq__more,
+  .aura-dq__x {
+    opacity: 1;
+    padding: 10px;
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .aura-dq__handle {
+    padding: 10px 6px;
+    min-width: 36px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+  }
+  .aura-dq__header .flex,
+  .aura-dq__header > .flex.items-center { flex-wrap: wrap; }
+  .aura-dq__action-btn {
+    font-size: 11px;
+    padding: 8px 12px;
+    min-height: 36px;
+  }
+  .aura-dq__overflow-btn {
+    padding: 10px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .aura-dq__autonext { padding: 14px 0 4px; margin-top: 16px; }
+  .aura-dq__autonext-label { font-size: 9px; margin-bottom: 8px; }
+  .aura-dq__autonext-title {
+    font-size: 16px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .aura-dq__autonext-row { gap: 10px; }
+  .aura-dq__autonext-cta { font-size: 10px; padding-left: 8px; }
+}

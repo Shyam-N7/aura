@@ -1,0 +1,315 @@
+.aura-dse {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--color-ink);
+  container-type: inline-size;
+  container-name: dse;
+}
+.aura-dse__header {
+  padding: 40px 56px 0;
+}
+
+.aura-dse__close {
+  position: absolute;
+  top: 28px;
+  right: 32px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink-soft);
+  border-radius: 9999px;
+  cursor: pointer;
+  z-index: 3;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-dse__close:hover {
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+}
+
+.aura-dse__input-wrap {
+  margin-top: 22px;
+  border-bottom: 1px solid var(--color-line);
+  cursor: text;
+  transition: border-color 180ms ease;
+}
+.aura-dse__input-wrap:focus-within {
+  border-bottom-color: var(--color-accent);
+}
+.aura-dse__input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  padding: 12px 0;
+  color: var(--color-ink);
+  caret-color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: -0.005em;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.aura-dse__input::placeholder {
+  color: var(--color-ink-faint);
+  opacity: 0.7;
+}
+/* type=search defaults add a clear button in some browsers — kill it. */
+.aura-dse__input::-webkit-search-decoration,
+.aura-dse__input::-webkit-search-cancel-button,
+.aura-dse__input::-webkit-search-results-button,
+.aura-dse__input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  display: none;
+}
+
+.aura-dse__langs {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.aura-dse__lang {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.aura-dse__lang:hover {
+  background: rgb(0 0 0 / 0.04);
+  color: var(--color-ink);
+}
+.aura-dse__lang--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+.aura-dse__lang--on:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.aura-dse__result-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.aura-dse__more {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgb(0 0 0 / 0.45);
+  border: 0;
+  padding: 6px;
+  cursor: pointer;
+  color: rgb(255 255 255 / 0.95);
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 140ms ease, background 140ms ease;
+  z-index: 2;
+}
+.aura-dse__result-wrap:hover .aura-dse__more {
+  opacity: 1;
+}
+.aura-dse__more:hover {
+  background: rgb(0 0 0 / 0.65);
+}
+
+/* The shared `.aura-pl-menu` defaults to `top: 100%` which works on row
+   layouts (queue / library) but lands below the entire ~270 px result tile
+   here, overlapping the row underneath. Pin it just under the ⋯ button so
+   the popover hovers over the tile's own album art. */
+.aura-dse__result-wrap .aura-pl-menu {
+  top: 38px;
+  right: 4px;
+}
+
+/* Results layout — main column with a sidebar (recents + trending) at the
+   right gutter when there's room. Stacks below 1100 px. */
+.aura-dse__layout {
+  padding: 32px 56px 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+}
+@media (min-width: 1100px) {
+  .aura-dse__layout { grid-template-columns: minmax(0, 1fr) 240px; }
+}
+.aura-dse__main {
+  min-width: 0;
+}
+.aura-dse__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 44px;
+}
+
+/* Sidebar */
+.aura-dse__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  align-self: start;
+  position: sticky;
+  top: 24px;
+}
+.aura-dse__sidebar-section {
+  display: flex;
+  flex-direction: column;
+}
+.aura-dse__sidebar-heading {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+.aura-dse__sidebar-clear {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color 140ms ease, background 140ms ease;
+}
+.aura-dse__sidebar-clear:hover {
+  color: var(--color-ink);
+  background: rgb(0 0 0 / 0.04);
+}
+.aura-dse__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.aura-dse__chip {
+  padding: 6px 12px;
+  border-radius: 9999px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 55%);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.aura-dse__chip:hover {
+  background: rgb(0 0 0 / 0.05);
+  border-color: var(--color-ink);
+}
+.aura-dse__section-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.005em;
+  color: var(--color-ink);
+  margin-bottom: 16px;
+}
+
+.aura-dse__hint {
+  padding-top: 32px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+}
+
+/* Auto-fill so tiles stay around ~200 px regardless of main-column width.
+   When the right rail is collapsed (more space) more columns fit per row;
+   when expanded fewer fit. No max-width cap — let the grid use whatever
+   space the column has so we don't leave a big empty gutter on the right. */
+.aura-dse__playlists,
+.aura-dse__results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 18px;
+}
+
+.aura-dse__playlist,
+.aura-dse__result {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 160ms ease;
+}
+.aura-dse__playlist:hover,
+.aura-dse__result:hover { transform: translateY(-1px); }
+
+.aura-dse__cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--color-line);
+  display: block;
+}
+.aura-dse__cover--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 55%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 56px;
+}
+
+.aura-dse__title-text {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile (<600 px container) — tighten the editorial spacing to AURA's 22 px
+   gutter convention, drop a couple of font sizes that don't fit at narrow
+   widths, and pack the result tiles into a 2-column grid. The close button
+   sits behind the floating MobileTopBar pill (and the bottom nav handles
+   "back" duty on mobile), so hide it here. */
+@container dse (max-width: 600px) {
+  .aura-dse__header { padding: 14px 22px 0; }
+  .aura-dse__layout { padding: 22px 22px 0; gap: 28px; }
+  .aura-dse__input { font-size: 24px; padding: 10px 0; }
+  .aura-dse__section-title { font-size: 22px; margin-bottom: 12px; }
+  .aura-dse__playlists,
+  .aura-dse__results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .aura-dse__title-text { font-size: 15px; }
+  .aura-dse__cover--fallback { font-size: 40px; }
+  /* Sidebar stacks below results on mobile — sticky doesn't make sense in a
+     single-column flow, so park it static. */
+  .aura-dse__sidebar { position: static; top: auto; gap: 22px; }
+  .aura-dse__close { display: none; }
+}

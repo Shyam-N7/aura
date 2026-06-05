@@ -1,0 +1,136 @@
+/* `aura-fadein` keyframe is defined globally in src/styles/animations.css. */
+.aura-sleep-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.36);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 50;
+  animation: aura-fadein 200ms ease both;
+}
+
+.aura-sleep {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 51;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  border-radius: 18px;
+  box-shadow:
+    0 24px 56px rgb(0 0 0 / 0.32),
+    0 4px 12px rgb(0 0 0 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+  width: min(340px, calc(100% - 48px));
+  padding: 22px 22px 16px;
+  font-family: var(--font-sans);
+  animation: aura-shortcuts-in 240ms cubic-bezier(.2, .8, .3, 1) both;
+}
+
+.aura-sleep__title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--color-ink);
+}
+
+.aura-sleep__active {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.aura-sleep__active-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.aura-sleep__count {
+  font-family: var(--font-serif);
+  font-size: 38px;
+  line-height: 1;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+.aura-sleep__count--text {
+  font-style: italic;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+.aura-sleep__caption {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.aura-sleep__list {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.aura-sleep__btn {
+  padding: 11px 0;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  white-space: nowrap;
+}
+.aura-sleep__btn:hover {
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+  color: var(--color-ink);
+}
+.aura-sleep__btn--end {
+  font-size: 9.5px;
+}
+
+.aura-sleep__actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.aura-sleep__action {
+  border: 1px solid transparent;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.aura-sleep__action:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 78%);
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+.aura-sleep__action--cancel { margin-right: auto; color: var(--color-accent); }
+.aura-sleep__action--cancel:hover {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent), transparent 55%);
+  background: color-mix(in srgb, var(--color-accent), transparent 90%);
+}
+
+.theme-midnight .aura-sleep-backdrop { background: rgb(0 0 0 / 0.55); }
+.theme-midnight .aura-sleep {
+  box-shadow:
+    0 24px 56px rgb(0 0 0 / 0.55),
+    0 4px 12px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
