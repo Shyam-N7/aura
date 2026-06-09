@@ -10,10 +10,6 @@
   right: 14px;
   z-index: 30;
   height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
   border-radius: 9999px;
   /* Faint white-shimmer gradient gives a real glass look even when nothing's
      scrolling behind the pill (uniform-dark page = backdrop-filter has
@@ -36,9 +32,151 @@
     inset 0 1px 0 rgb(255 255 255 / 0.12);
 }
 
+/* ── Morph layers ─────────────────────────────────────────────────────────
+   Two absolutely-stacked layers fill the pill; `.is-searching` cross-fades
+   between them. Only opacity + transform animate (composite, no reflow → the
+   blurred pill is never re-rasterised) and the pill never resizes. Opacity
+   (220ms) settles before transform (320ms) for a readable hand-off. */
+.aura-mobile-top__bar-content,
+.aura-mobile-top__searchfield {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: inherit;
+  transition: opacity 220ms cubic-bezier(.2, .7, .2, 1),
+              transform 320ms cubic-bezier(.2, .7, .2, 1);
+  will-change: opacity, transform;
+}
+.aura-mobile-top__bar-content { justify-content: space-between; }
+.aura-mobile-top__searchfield {
+  gap: 8px;
+  opacity: 0;
+  transform: translateX(28px);
+  pointer-events: none;
+}
+.aura-mobile-top.is-searching .aura-mobile-top__bar-content {
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+}
+.aura-mobile-top.is-searching .aura-mobile-top__searchfield {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  transition-delay: 40ms, 0ms;   /* opacity waits so the trio clears before the field paints */
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-mobile-top__bar-content,
+  .aura-mobile-top__searchfield { transition: none; }
+}
+
 .aura-mobile-top__brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
+/* Brand-as-search: flex-fills the bar up to the action trio so a tap anywhere
+   left of the controls opens search. Chrome-less (no border/bg) so it still
+   reads as plain identity; the negative left margin + matching padding extend
+   the hit area to the pill's edge without shifting the logo. */
+.aura-mobile-top__brand--tap {
+  flex: 1;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  margin: 0 0 0 -8px;
+  padding: 6px 8px;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 120ms ease;
+}
+.aura-mobile-top__brand--tap:active { opacity: 0.6; }
+
+/* Right-side action trio: search · theme · account, evenly spaced so they read
+   as one group, set well clear of the status text on the left. */
+.aura-mobile-top__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+/* Search button — matches the theme toggle's bordered-glyph recipe so the trio
+   is visually consistent (the avatar shares the same 34px round + border). */
+.aura-mobile-top__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  -webkit-tap-highlight-color: transparent;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+.aura-mobile-top__action:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+.aura-mobile-top__action:active { transform: scale(0.92); }
+.aura-mobile-top__action:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ── Search field (layer 2): back ‹ · magnifier · input · clear ✕ ── */
+.aura-mobile-top__sf-back,
+.aura-mobile-top__sf-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0;
+  /* Bordered-circle recipe — same as the top-bar action trio so back/clear read
+     as buttons and sit consistently with the rest of the bar. */
+  border: 1px solid var(--color-line);
+  background: transparent;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+  -webkit-tap-highlight-color: transparent;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+.aura-mobile-top__sf-back:hover,
+.aura-mobile-top__sf-clear:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+.aura-mobile-top__sf-back:active,
+.aura-mobile-top__sf-clear:active { transform: scale(0.9); }
+.aura-mobile-top__sf-mag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+}
+.aura-mobile-top__sf-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 16px;   /* ≥16px keeps iOS Safari from zooming the page on focus */
+  color: var(--color-ink);
+  caret-color: var(--color-accent);
+}
+.aura-mobile-top__sf-input::placeholder { color: var(--color-ink-faint); }

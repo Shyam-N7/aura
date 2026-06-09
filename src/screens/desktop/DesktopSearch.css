@@ -6,6 +6,37 @@
   container-type: inline-size;
   container-name: dse;
 }
+
+/* Mobile: tapping the top bar opens search — give it a softer, slightly longer
+   rise + fade than the generic screen-in so the open reads as the surface
+   smoothly expanding into place. Overrides .animate-aura-screen-in on the
+   wrapper (higher specificity via the shell scope). */
+.aura-responsive-shell--mobile .aura-search-screen {
+  animation: aura-search-in 460ms cubic-bezier(.22, 1, .36, 1) both;
+  transform-origin: top center;
+}
+@keyframes aura-search-in {
+  from { opacity: 0; transform: translateY(22px) scale(0.965); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Exit: sinks + fades back. Kept under .animate-aura-screen-in (still on the
+   wrapper) so the mobile shell's top-spacer ::before survives the close — and
+   tuned to 320ms so it lands on the same frame as the top bar collapsing back.
+   Source order after .aura-search-screen wins the equal-specificity tie. */
+.aura-responsive-shell--mobile .aura-search-screen--closing {
+  animation: aura-search-out 320ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes aura-search-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(22px) scale(0.965); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-responsive-shell--mobile .aura-search-screen,
+  .aura-responsive-shell--mobile .aura-search-screen--closing { animation: none; }
+}
+/* Headerless (mobile): the top bar is the input, so the header holds only the
+   language filters — drop the gap that assumed an input above them. */
+.aura-dse--headerless .aura-dse__langs { margin-top: 0; }
 .aura-dse__header {
   padding: 40px 56px 0;
 }

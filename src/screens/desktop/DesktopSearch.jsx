@@ -7,7 +7,8 @@ import { useDebounced } from '../../hooks/useDebounced';
 import { pushRecentSearch } from '../../hooks/useRecentSearches';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { subscribeSearchFocus } from '../../lib/searchFocus';
+import { subscribeSearchFocus, requestSearchFocus } from '../../lib/searchFocus';
+import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
@@ -17,8 +18,10 @@ import './DesktopSearch.css';
 
 const LANGS = ['all', 'tamil', 'english', 'hindi', 'malayalam', 'kannada'];
 
-export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddToQueue, onOpenPlaylist }) {
-  const [q, setQ] = useState('');
+// `headerless` (mobile): the top bar IS the search input, so hide this screen's
+// own input + intro labels and keep only the language filters + results below.
+export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddToQueue, onOpenPlaylist, headerless = false }) {
+  const { query: q, setQuery: setQ } = useSearchQuery();
   const [lang, setLang] = useState('all');
   const [hit, setHit] = useState({ key: '', results: [], playlists: [], error: null });
   const [menu, setMenu] = useState(null);
@@ -27,13 +30,20 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
   const inputRef = useRef(null);
 
   useEffect(() => {
+    if (headerless) return undefined;   // no own input to focus — top bar owns it
     const id = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(id);
-  }, []);
-  useEffect(() => subscribeSearchFocus(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }), []);
+  }, [headerless]);
+  useEffect(() => {
+    // On mobile the top bar owns the input + the focus bus; subscribing here too
+    // would let this (input-less) screen consume the buffered focus and swallow
+    // the keyboard. Desktop keeps the subscription for the `/` shortcut.
+    if (headerless) return undefined;
+    return subscribeSearchFocus(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  }, [headerless]);
   const trimmed = debouncedQ.trim();
   const status = !trimmed ? 'idle'
     : hit.key === wantKey ? (hit.error ? 'error' : 'ok')
@@ -68,25 +78,29 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
   const addToList    = (t) => { setMenu(null); openAddToPlaylist(t); };
 
   return (
-    <div className="aura-dse" onClick={() => setMenu(null)}>
-      {onClose && (
-        <button type="button" onClick={onClose} aria-label="close search" className="aura-dse__close">
+    <div className={`aura-dse ${headerless ? 'aura-dse--headerless' : ''}`} onClick={() => setMenu(null)}>
+      {onClose && !headerless && (
+        <button type="button" onClick={() => { setSearchQuery(''); onClose(); }} aria-label="close search" className="aura-dse__close">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <path d="M2 2 L12 12 M12 2 L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
           </svg>
         </button>
       )}
       <div className="aura-dse__header">
-        <MonoLabel className="text-ink-faint" size={10}>Search · Catalog + Your playlists</MonoLabel>
-        <div className="aura-dse__input-wrap" onClick={() => inputRef.current?.focus()}>
-          <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Search songs, artists, or moods"
-            className="aura-dse__input" autoFocus type="search"
-            autoComplete="off" spellCheck={false}/>
-        </div>
-        <MonoLabel className="text-ink-faint mt-2.5 block" size={10}>
-          {djName} surfaces matches as you type.
-        </MonoLabel>
+        {!headerless && (
+          <>
+            <MonoLabel className="text-ink-faint" size={10}>Search · Catalog + Your playlists</MonoLabel>
+            <div className="aura-dse__input-wrap" onClick={() => inputRef.current?.focus()}>
+              <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
+                placeholder="Search songs, artists, or moods"
+                className="aura-dse__input" autoFocus type="search"
+                autoComplete="off" spellCheck={false}/>
+            </div>
+            <MonoLabel className="text-ink-faint mt-2.5 block" size={10}>
+              {djName} surfaces matches as you type.
+            </MonoLabel>
+          </>
+        )}
         <div className="aura-dse__langs">
           {LANGS.map(L => (
             <button key={L} onClick={() => setLang(L)}
@@ -187,7 +201,12 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
             </div>
           )}
         </div>
-        <SearchSidebar lang={lang} onPick={(picked) => { setQ(picked); inputRef.current?.focus(); }}/>
+        <SearchSidebar lang={lang} onPick={(picked) => {
+          setQ(picked);
+          // Headerless (mobile): the input lives in the top bar — refocus it via
+          // the bus so the keyboard reopens (inputRef here is null).
+          if (headerless) requestSearchFocus(); else inputRef.current?.focus();
+        }}/>
       </div>
     </div>
   );
