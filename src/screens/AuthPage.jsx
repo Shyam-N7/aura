@@ -346,10 +346,12 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     setPending(true);
     trace('reset submit →', pendingEmail);
     try {
-      const user = await resetPassword({ email: pendingEmail, code: otpCode, password: newPassword });
-      trace('reset ok → signed in');
-      toast('password updated.');
-      onAuthed?.(user);
+      await resetPassword({ email: pendingEmail, code: otpCode, password: newPassword });
+      trace('reset ok → re-login');
+      switchMode('signin');     // back to the sign-in form (resets step + fields)
+      setEmail(pendingEmail);   // prefill their email
+      setPassword('');          // fresh password entry
+      setFormError('password updated — sign in with your new password.');
     } catch (err) {
       trace('reset failed:', err?.code || err?.message);
       // If the code went stale between steps, bounce back to the code step.
@@ -363,7 +365,7 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     } finally {
       setPending(false);
     }
-  }, [otpCode, newPassword, pendingEmail, onAuthed]);
+  }, [otpCode, newPassword, pendingEmail, switchMode]);
 
   /* ── Social handlers ────────────────────────────────────────────────── */
   const handleApple = useCallback(() => { toast('coming soon.'); }, []);

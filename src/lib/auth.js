@@ -158,7 +158,8 @@ export async function verifyResetCode({ email, code }) {
   return data;
 }
 
-// Verify the reset code + set a new password. On success creates a session.
+// Verify the reset code + set a new password. Does NOT create a session — the
+// user re-logs in with the new password afterward. Returns { ok: true }.
 export async function resetPassword({ email, code, password }) {
   trace('resetPassword →', email, `(code len ${String(code).length})`);
   const res = await fetch('/api/auth/reset-password', {
@@ -167,10 +168,9 @@ export async function resetPassword({ email, code, password }) {
     body: JSON.stringify({ email, code, password }),
   });
   const data = await res.json();
-  trace('/reset-password', res.status, res.ok ? '→ signed in' : data);
+  trace('/reset-password', res.status, res.ok ? '→ ok (re-login)' : data);
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'reset failed'), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft });
-  setSession(data.token, data.user);
-  return data.user;
+  return data;
 }
 
 export async function fetchMe() {

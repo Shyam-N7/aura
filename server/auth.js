@@ -263,10 +263,11 @@ router.post('/verify-reset-otp', async (req, res) => {
 });
 
 // ── Reset password — verify code + set new password (step 2 of 2) ─────
-// On success sets the new hash, marks the email verified (control was proven),
-// and signs the user in (returns { token, user }). The code is verified
-// non-destructively, then consumed only AFTER the password update commits — so a
-// failed update never strands the user on a code that's already been deleted.
+// On success sets the new hash and marks the email verified (control proven),
+// then returns { ok: true } WITHOUT a session — the user re-logs in with the new
+// password. The code is verified non-destructively, then consumed only AFTER the
+// password update commits — so a failed update never strands the user on a code
+// that's already been deleted.
 router.post('/reset-password', async (req, res) => {
   try {
     const { email, code, password } = req.body ?? {};
@@ -282,7 +283,7 @@ router.post('/reset-password', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 12);
     const upd = await pool.query(
-      'UPDATE users SET password_hash = $1, email_verified = TRUE, last_login_at = $2 WHERE email = $3 RETURNING *',
+      'UPDATE users SET password_hash = $1, email_verified = TRUE, last_login_at = $2 WHERE email = $3',
       [hash, Date.now(), e],
     );
     if (!upd.rowCount) { trace('[reset] no matching account row'); return res.status(409).json({ error: 'account not found', code: 'no_account' }); }
@@ -290,9 +291,9 @@ router.post('/reset-password', async (req, res) => {
     // Password committed — now retire the code so it can't be replayed.
     await consumeOtp(e, 'reset');
 
-    trace('[reset] password updated → signing in:', e);
-    const token = signToken(upd.rows[0].id);
-    res.json({ token, user: sanitizeUser(upd.rows[0]) });
+    trace('[reset] password updated → require re-login:', e);
+    // No session minted — the user signs in again with the new password.
+    res.json({ ok: true });
   } catch (err) {
     console.error('[auth/reset-password]', err);
     res.status(500).json({ error: 'reset failed' });
