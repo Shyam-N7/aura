@@ -253,6 +253,10 @@ const migrations = [
       CREATE INDEX idx_email_otps_expiry ON email_otps(expires_at);
     `);
   },
+  async function v8_mood_reason(client) {
+    // Song-grounded one-liner explaining the inferred mood (the "reading you" read).
+    await client.query(`ALTER TABLE mood_snapshots ADD COLUMN reason TEXT`);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

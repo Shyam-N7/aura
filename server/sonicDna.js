@@ -38,7 +38,7 @@ export async function getSonicDna(userId) {
 
   const { rows: events } = await pool.query(
     `SELECT e.id, e.track_id, e.ts, e.kind, e.mood, e.language, e.position_sec,
-            t.artist, t.duration_sec
+            t.title, t.artist, t.duration_sec
      FROM listening_events e
      LEFT JOIN tracks t ON t.id = e.track_id
      WHERE e.user_id = $1 AND e.ts >= $2`,
@@ -60,12 +60,18 @@ export async function getSonicDna(userId) {
   const languageCounts = {};
   const artistCounts   = {};
   const moodCounts     = {};
+  const trackCounts    = new Map(); // track_id → { label: "title — artist", n }
   const seenTracks     = new Set();
   for (const e of plays) {
     const l = e.language ?? 'unknown';
     languageCounts[l] = (languageCounts[l] ?? 0) + 1;
     if (e.artist) artistCounts[e.artist] = (artistCounts[e.artist] ?? 0) + 1;
     if (e.mood)   moodCounts[e.mood]     = (moodCounts[e.mood] ?? 0) + 1;
+    if (e.title) {
+      const cur = trackCounts.get(e.track_id) ?? { label: `${e.title}${e.artist ? ` — ${e.artist}` : ''}`, n: 0 };
+      cur.n++;
+      trackCounts.set(e.track_id, cur);
+    }
     seenTracks.add(e.track_id);
   }
 
@@ -130,6 +136,7 @@ export async function getSonicDna(userId) {
 
   // Sort + truncate aggregates for the Gemini narrative
   const topArtists = Object.entries(artistCounts).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  const topTracks  = [...trackCounts.values()].sort((a, b) => b.n - a.n).slice(0, 8).map(t => t.label);
   const skipRate   = totalPlays > 0 ? skips / (totalPlays + skips) : 0;
   const repeatRate = familiarity;
 
@@ -137,7 +144,7 @@ export async function getSonicDna(userId) {
   let shift     = '—';
   try {
     const narrative = await generateDnaNarrative({
-      axes, languageCounts, topArtists, plays: totalPlays, skipRate, repeatRate,
+      axes, languageCounts, topArtists, topTracks, plays: totalPlays, skipRate, repeatRate,
     });
     signature = narrative.signature || signature;
     shift     = narrative.shift     || shift;

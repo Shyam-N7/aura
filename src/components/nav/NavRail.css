@@ -252,6 +252,14 @@
   flex-shrink: 0;
 }
 
+.aura-nav-rail__signal-reason {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-ink-soft);
+}
+
 .aura-nav-rail__signal-bar {
   margin-top: 12px;
   height: 3px;

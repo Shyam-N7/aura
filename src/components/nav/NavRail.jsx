@@ -74,6 +74,7 @@ export function NavRail({ djName = 'aura', mood, active, onNav, collapsed = fals
   const updatedAt = snapshot?.ts ? softTime(snapshot.ts) : null;
   const confidence = inferred ? snapshot.confidence : null;
   const drift      = inferred ? snapshot.drift : null;
+  const reason     = inferred ? snapshot.reason : null;
 
   return (
     <aside className={`aura-nav-rail ${collapsed ? 'aura-nav-rail--collapsed' : ''}`}>
@@ -131,6 +132,7 @@ export function NavRail({ djName = 'aura', mood, active, onNav, collapsed = fals
             <span>{liveMood ?? '—'}</span>
             {drift && <DriftGlyph drift={drift}/>}
           </div>
+          {reason && <div className="aura-nav-rail__signal-reason">{reason}</div>}
           {confidence != null && (
             <div className="aura-nav-rail__signal-bar"
               aria-label={`confidence ${Math.round(confidence * 100)} percent`}>

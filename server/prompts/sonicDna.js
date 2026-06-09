@@ -4,10 +4,13 @@
 import { Type } from '@google/genai';
 import { generateJson } from '../llm.js';
 
-const SYSTEM = `You are AURA's profiler. Given a listener's recent listening
-aggregates, produce two extremely short tag-style strings:
-- "signature": 2-4 lowercase words separated by " · " that capture the listener's taste fingerprint (e.g. "patient · word-led · curious")
-- "shift": one short observation about recent direction (e.g. "leaning warmer this month (+0.12)" or "more tamil, less english")
+const SYSTEM = `You are AURA's profiler. Given a listener's recent listening — their actual top
+tracks plus aggregate signals — produce two extremely short tag-style strings:
+- "signature": 2-4 lowercase words separated by " · " capturing their taste fingerprint, grounded
+  in the songs/artists and the axes (e.g. "patient · word-led · ballad-deep")
+- "shift": one short observation about recent musical direction, grounded in the tracks + axes
+  (e.g. "leaning warmer, more ballads" or "more new artists this month"). Do NOT make language the
+  headline — mention a language only as a minor supporting detail, if at all.
 Do not be flowery. Use only what the data supports.`;
 
 const SCHEMA = {
@@ -20,7 +23,7 @@ const SCHEMA = {
   propertyOrdering: ['signature', 'shift'],
 };
 
-export async function generateDnaNarrative({ axes, languageCounts, topArtists, plays, skipRate, repeatRate }) {
+export async function generateDnaNarrative({ axes, languageCounts, topArtists, topTracks, plays, skipRate, repeatRate }) {
   const langStr = Object.entries(languageCounts ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4)
@@ -34,8 +37,9 @@ export async function generateDnaNarrative({ axes, languageCounts, topArtists, p
     `  axes:        ${axStr}`,
     `  languages:   ${langStr}`,
     `  top artists: ${(topArtists ?? []).slice(0, 4).join(', ')}`,
+    `  top tracks:  ${(topTracks ?? []).slice(0, 8).join('; ') || '—'}`,
     ``,
-    `Return JSON with "signature" and "shift".`,
+    `Return JSON grounded in the tracks above, with "signature" and "shift".`,
   ].join('\n');
 
   return generateJson({

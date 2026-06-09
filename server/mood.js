@@ -19,7 +19,7 @@ async function totalPlayCount(userId) {
 
 export async function getCurrentMood(userId) {
   const { rows } = await pool.query(`
-    SELECT id, ts, mood, confidence, drift, events_seen
+    SELECT id, ts, mood, confidence, drift, reason, events_seen
     FROM mood_snapshots
     WHERE user_id = $1
     ORDER BY ts DESC
@@ -51,10 +51,10 @@ export async function inferMood(userId) {
   const result = await generateMoodInference({ events });
   const playsTotal = await totalPlayCount(userId);
   const { rows } = await pool.query(`
-    INSERT INTO mood_snapshots (user_id, ts, mood, confidence, drift, events_seen)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING id, ts, mood, confidence, drift, events_seen
-  `, [userId, Date.now(), result.mood, result.confidence, result.drift, playsTotal]);
+    INSERT INTO mood_snapshots (user_id, ts, mood, confidence, drift, reason, events_seen)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id, ts, mood, confidence, drift, reason, events_seen
+  `, [userId, Date.now(), result.mood, result.confidence, result.drift, result.reason ?? null, playsTotal]);
   return rows[0];
 }
 
