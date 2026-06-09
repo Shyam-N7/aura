@@ -19,7 +19,7 @@ export function DesktopQueue({
   onPlayNext, onAddToQueue,
   onClear, onShuffle, shuffleActive = false, onSave,
   repeatMode = 'off', onCycleRepeat,
-  autoNext, onPlayAutoNext,
+  autoNextBatch, onPlayAutoNext,
 }) {
   const [menuId, setMenuId] = useState(null);
   // Per-row ⋯ popover lives in the scrolling queue list. We pin it with
@@ -247,11 +247,11 @@ export function DesktopQueue({
         <h1 className="aura-dq__hero">
           <em>{source}</em>.
         </h1>
-        <div className="mt-3.5 flex items-baseline justify-between gap-4 flex-wrap">
-          <MonoLabel className="text-ink-faint" size={10}>
+        <div className="mt-3.5 flex items-baseline justify-between gap-4 flex-wrap aura-dq__meta-row">
+          <MonoLabel className="text-ink-faint aura-dq__count" size={10}>
             {visibleCount} {visibleCount === 1 ? 'track' : 'tracks'}
           </MonoLabel>
-          <div className="flex items-center gap-1 relative">
+          <div className="flex items-center gap-1 relative aura-dq__meta-actions">
             {currentIdx > 0 && (
               <button type="button"
                 title={hidePast ? 'Show tracks you’ve already played' : 'Hide tracks you’ve already played'}
@@ -274,7 +274,7 @@ export function DesktopQueue({
               <button type="button"
                 title={repeatMode === 'one' ? 'Repeat the current track' : repeatMode === 'all' ? 'Repeat the queue' : 'Repeat is off — tap to cycle'}
                 onClick={onCycleRepeat}
-                className={`aura-dq__action-btn ${repeatMode !== 'off' ? 'aura-dq__action-btn--on' : ''}`}
+                className={`aura-dq__action-btn aura-dq__action-btn--repeat ${repeatMode !== 'off' ? 'aura-dq__action-btn--on' : ''}`}
                 aria-label={`Repeat: ${repeatMode}`}>
                 {repeatMode === 'one' ? 'Repeat 1' : repeatMode === 'all' ? 'Repeat all' : 'Repeat'}
               </button>
@@ -327,26 +327,29 @@ export function DesktopQueue({
         )}
         {/* Current + future tracks — flat in the list */}
         {tracks.slice(currentIdx).map((t, j) => renderRow(t, currentIdx + j))}
-        {/* AURA's prefetched continuation candidate, surfaced as a faded
-            "coming up" tile when sitting on the last non-wrapping track.
-            Hidden in repeat modes (the candidate would never be reached). */}
-        {autoNext && currentIdx === tracks.length - 1 && source !== "tonight's set" && repeatMode === 'off' && (
-          <button type="button"
-            onClick={onPlayAutoNext}
-            className="aura-dq__autonext"
-            aria-label={`play next: ${autoNext.title}`}>
-            <div className="aura-dq__autonext-label">Up next · Picked by AURA</div>
-            <div className="aura-dq__autonext-row">
-              <AlbumArt track={autoNext} size={54} radius={4}/>
-              <div className="aura-dq__autonext-meta">
-                <div className="aura-dq__autonext-title">{cleanTitle(autoNext.title)}</div>
-                <MonoLabel className="text-ink-soft mt-1.5 block truncate" size={9.5}>
-                  {autoNext.artist ?? ''}
-                </MonoLabel>
-              </div>
-              <span className="aura-dq__autonext-cta">Play</span>
-            </div>
-          </button>
+        {/* AURA's prefetched continuation batch, surfaced as a faded "coming up"
+            list when sitting on the last non-wrapping track. Clicking a row
+            fills the whole batch into the queue and plays from that row. Hidden
+            in repeat modes (the batch would never be reached). */}
+        {autoNextBatch?.length > 0 && currentIdx === tracks.length - 1 && source !== "tonight's set" && repeatMode === 'off' && (
+          <div className="aura-dq__radio">
+            <div className="aura-dq__radio-label">Up next · Picked by AURA</div>
+            {autoNextBatch.map((t, i) => (
+              <button key={t.id + i} type="button"
+                onClick={() => onPlayAutoNext?.(i)}
+                className="aura-dq__radio-row"
+                aria-label={`play next: ${t.title}`}>
+                <AlbumArt track={t} size={44} radius={4}/>
+                <div className="aura-dq__radio-meta">
+                  <div className="aura-dq__radio-title">{cleanTitle(t.title)}</div>
+                  <MonoLabel className="text-ink-soft mt-1.5 block truncate" size={9.5}>
+                    {t.artist ?? ''}
+                  </MonoLabel>
+                </div>
+                <span className="aura-dq__radio-cta">Play</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>

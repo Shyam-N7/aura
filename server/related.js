@@ -62,11 +62,16 @@ function cacheSet(k, v) {
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
-export async function getRelatedTracks(pid, { lang } = {}) {
+export async function getRelatedTracks(pid, { lang, limit } = {}) {
   if (!pid) return [];
+  // Callers ask for different counts: the related rail wants 8, auto-radio
+  // prefetches a ~15-track batch to fill the queue. Clamp the request, cache
+  // the full sorted list once, and slice per call so a larger ask never needs
+  // a second upstream round-trip.
+  const want = Number.isFinite(limit) ? Math.min(20, Math.max(1, Math.floor(limit))) : 8;
   const key = `${pid}|${lang ?? ''}`;
   const hit = cacheGet(key);
-  if (hit) return hit;
+  if (hit) return hit.slice(0, want);
 
   // Look up the seed so we can dedupe by normalized title+artist (not just id).
   // The catalog often returns the same song under multiple ids (single / OST / extended)
@@ -97,7 +102,7 @@ export async function getRelatedTracks(pid, { lang } = {}) {
     try {
       const radio = await searchSongs(`${seed.artist} ${seed.language ?? ''}`.trim(), {
         lang: lang || seed.language || undefined,
-        limit: 10,
+        limit: Math.max(10, want),
       });
       tracks = radio;
     } catch { /* leave empty */ }
@@ -127,8 +132,8 @@ export async function getRelatedTracks(pid, { lang } = {}) {
       .map(x => x.t);
   }
 
-  tracks = tracks.slice(0, 8);
+  tracks = tracks.slice(0, 20);   // keep up to the max; callers slice to their limit
   if (tracks.length > 0) cacheTracks(tracks);
   cacheSet(key, tracks);
-  return tracks;
+  return tracks.slice(0, want);
 }

@@ -77,7 +77,8 @@ app.get('/api/catalog/track/:id', async (req, res) => {
 app.get('/api/tracks/:id/related', async (req, res) => {
   try {
     const lang = req.query.lang ? String(req.query.lang) : undefined;
-    const tracks = await getRelatedTracks(req.params.id, { lang });
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const tracks = await getRelatedTracks(req.params.id, { lang, limit });
     res.json({ tracks });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
