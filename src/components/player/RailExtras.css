@@ -98,14 +98,6 @@
   color: var(--color-ink);
 }
 
-/* Rail popover — positioned with `position: fixed` + inline `top`/`right`/
-   `maxHeight` from RailExtras.jsx so it escapes the rail's `overflow-y: auto`
-   clip. Flips above the row when below-space is tight. Only `overflow-y: auto`
-   is set here (the inline `maxHeight` triggers the menu's own scroll when room
-   is cramped). */
-.aura-rail-extras__menu {
-  overflow-y: auto;
-}
 .aura-rail-extras__row-title {
   font-family: var(--font-serif);
   font-size: 14.5px;

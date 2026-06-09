@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { THEMES } from './data';
 import { useFeaturedTracks } from './hooks/useFeaturedTracks';
@@ -398,6 +398,19 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewIdx, viewTracks.length, track?.id, track?.language, viewSource, repeatMode]);
 
+  // play() can reject on mobile (autoplay policy) or a dead/expired stream URL —
+  // never let it fail silently. Log it; on an autoplay block, drop to paused so
+  // the play button reappears and the user's next tap (a real gesture) resumes.
+  const safePlay = useCallback(() => {
+    player.play()?.catch((err) => {
+      console.warn('[player] play() rejected:', err?.name || '', err?.message || '');
+      if (err?.name === 'NotAllowedError') {
+        setPlaying(false);
+        toast('tap play to resume.');
+      }
+    });
+  }, [player]);
+
   // Subscribe to player events. 'ended' advances within the queue; on featured
   // we wrap around, on explicit sequences auto-radio takes over (or pauses if
   // no candidate). viewRef keeps us out of stale closures so we only subscribe
@@ -414,7 +427,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       // Repeat-one wins: replay current track from 0 regardless of position.
       if (repeatModeRef.current === 'one') {
         player.seek(0);
-        player.play();
+        safePlay();
         return;
       }
       const cur = viewRef.current;
@@ -423,6 +436,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       const wraps = !canAdvance
         && (cur.source === "tonight's set" || repeatModeRef.current === 'all')
         && cur.tracks.length;
+      if (import.meta.env.DEV) console.log('[player] ended →', { idx: cur.idx, len: cur.tracks.length, canAdvance, wraps: !!wraps });
       // If the user armed "sleep at end of set", a moment where we'd otherwise
       // wrap or stop is the sleep trigger — fire it and pause regardless.
       if (!canAdvance && fireEndOfSetIfArmed()) {
@@ -453,8 +467,25 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       }
     });
     const offPlay     = player.on('play', () => setEnded(false));
-    return () => { offProgress(); offEnded(); offPlay(); };
-  }, [player]);
+    // Audio element errored mid-playback — most often an expired CDN stream URL.
+    // Refetch the current track's URL once so the load effect reloads + retries;
+    // capped per track so a genuinely dead track can't loop.
+    let errRetry = { id: null, tries: 0 };
+    const offError = player.on('error', () => {
+      const cur = viewRef.current;
+      const t = cur.tracks[cur.idx];
+      if (!t) return;
+      if (errRetry.id !== t.id) errRetry = { id: t.id, tries: 0 };
+      if (errRetry.tries >= 1) { console.warn('[player] giving up on track after retry:', t.id); return; }
+      errRetry.tries += 1;
+      getTrack(t.id).then(fresh => {
+        // No fresh URL → the track is genuinely dead; the spent retry stops a loop.
+        if (!fresh?.streamUrl) return;
+        setQueue(q => ({ ...q, tracks: q.tracks.map(x => x.id === fresh.id ? { ...x, ...fresh } : x) }));
+      }).catch(() => {});
+    });
+    return () => { offProgress(); offEnded(); offPlay(); offError(); };
+  }, [player, safePlay]);
 
   // Flush playback position to localStorage on tab close.
   useEffect(() => {
@@ -511,7 +542,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       if (saved && saved.trackId === track.id && saved.progress > 0.01 && saved.progress < 0.98) {
         player.seek(saved.progress);
       }
-      if (playing && screen !== 'sensing') player.play();
+      if (playing && screen !== 'sensing') safePlay();
     }).catch(err => console.warn('[player] load failed', err));
     return () => { cancelled = true; };
     // playing/screen captured in .then() — reconciled by the play/pause effect below.
@@ -541,9 +572,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       player.pause();
       flushPosition();
     } else {
-      player.play();
+      safePlay();
     }
-  }, [player, playing, screen]);
+  }, [player, playing, screen, safePlay]);
 
   // Operate on the hydrated view: when the user has never interacted, queue is
   // empty and we derive from pool; on first navigation we promote pool into

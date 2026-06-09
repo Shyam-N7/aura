@@ -7,15 +7,17 @@ import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
+import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
+import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
 // Read-only editorial playlist from the catalog at desktop. Same shape as
 // DesktopPlaylistDetail but no remove (it's not a user-owned list).
 export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
   const [hit, setHit]       = useState({ data: null, error: null });
-  const [menuId, setMenuId] = useState(null);
+  const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
   useEffect(() => {
@@ -34,13 +36,13 @@ export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequen
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? 'this playlist').toLowerCase());
   };
 
-  const playOne    = (t) => { setMenuId(null); onPlayOne?.(t); };
-  const playNext   = (t) => { setMenuId(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue = (t) => { setMenuId(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList  = (t) => { setMenuId(null); openAddToPlaylist(t); };
+  const playOne    = (t) => { setMenu(null); onPlayOne?.(t); };
+  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
+  const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
+  const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
 
   return (
-    <div className="aura-dpd" onClick={() => setMenuId(null)}>
+    <div className="aura-dpd" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -97,7 +99,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequen
                 </button>
                 <div className="relative">
                   <button type="button"
-                    onClick={(e) => { e.stopPropagation(); setMenuId(m => m === t.id ? null : t.id); }}
+                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
                     aria-label="more"
                     className="aura-dpd__more">
                     <svg width="4" height="16" viewBox="0 0 4 16">
@@ -106,13 +108,13 @@ export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequen
                       <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
                     </svg>
                   </button>
-                  {menuId === t.id && (
-                    <div className="aura-pl-menu" onClick={(e) => e.stopPropagation()}>
+                  {menu?.id === t.id && (
+                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
                       <button onClick={() => playOne(t)}    className="aura-pl-menu-item">play song</button>
                       <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
                       <button onClick={() => addToQueue(t)} className="aura-pl-menu-item">add to queue</button>
                       <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to my playlist</button>
-                    </div>
+                    </AnchoredMenu>
                   )}
                 </div>
               </div>

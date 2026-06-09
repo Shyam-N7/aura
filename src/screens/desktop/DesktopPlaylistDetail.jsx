@@ -9,12 +9,14 @@ import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
+import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
+import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
 export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
   const [hit, setHit]     = useState({ data: null, error: null });
-  const [menuId, setMenuId] = useState(null);
+  const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   const tracks = hit.data?.tracks ?? [];
 
   const remove = async (track) => {
-    setMenuId(null);
+    setMenu(null);
     const ok = await confirm({
       title: `Remove “${track.title}”?`,
       body:  'This only removes it from this playlist. Your likes are untouched.',
@@ -53,17 +55,17 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
     }
   };
 
-  const playOne = (track) => { setMenuId(null); onPlayOne?.(track); };
-  const playNext = (track) => { setMenuId(null); onPlayNext?.(track); toast('Queued next.'); };
-  const addToQueue = (track) => { setMenuId(null); onAddToQueue?.(track); toast('Added to queue.'); };
-  const addElsewhere = (track) => { setMenuId(null); openAddToPlaylist(track); };
+  const playOne = (track) => { setMenu(null); onPlayOne?.(track); };
+  const playNext = (track) => { setMenu(null); onPlayNext?.(track); toast('Queued next.'); };
+  const addToQueue = (track) => { setMenu(null); onAddToQueue?.(track); toast('Added to queue.'); };
+  const addElsewhere = (track) => { setMenu(null); openAddToPlaylist(track); };
 
   const playAll = () => {
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? 'this playlist').toLowerCase());
   };
 
   return (
-    <div className="aura-dpd" onClick={() => setMenuId(null)}>
+    <div className="aura-dpd" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -129,7 +131,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                 </button>
                 <div className="relative">
                   <button type="button"
-                    onClick={(e) => { e.stopPropagation(); setMenuId(m => m === t.id ? null : t.id); }}
+                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
                     aria-label="more"
                     className="aura-dpd__more">
                     <svg width="4" height="16" viewBox="0 0 4 16">
@@ -138,8 +140,8 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                       <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
                     </svg>
                   </button>
-                  {menuId === t.id && (
-                    <div className="aura-pl-menu" onClick={(e) => e.stopPropagation()}>
+                  {menu?.id === t.id && (
+                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={206}>
                       <button onClick={() => playOne(t)}      className="aura-pl-menu-item">play song</button>
                       <button onClick={() => playNext(t)}     className="aura-pl-menu-item">play next</button>
                       <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">add to queue</button>
@@ -147,7 +149,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                       <button onClick={() => remove(t)}       className="aura-pl-menu-item aura-pl-menu-item--danger">
                         remove from this playlist
                       </button>
-                    </div>
+                    </AnchoredMenu>
                   )}
                 </div>
               </div>

@@ -6,6 +6,9 @@ const subscribers = new Set();
 
 function notify() { subscribers.forEach(fn => fn()); }
 
+// Dev-only request trace for the auth flow (stripped from production builds).
+const trace = (...a) => { if (import.meta.env.DEV) console.log('[auth]', ...a); };
+
 try {
   const raw = localStorage.getItem(USER_KEY);
   if (raw) _user = JSON.parse(raw);
@@ -127,24 +130,44 @@ export async function resendOtp(email) {
 // Request a password-reset code. Anti-enumeration: resolves for any normal
 // response. Returns { ok, cooldownSec }; throws on cooldown 429.
 export async function requestReset(email) {
+  trace('requestReset →', email);
   const res = await fetch('/api/auth/forgot', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
   const data = await res.json();
+  trace('/forgot', res.status, data);
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'request failed'), { status: res.status, code: data.code, retryAfterSec: data.retryAfterSec });
+  return data;
+}
+
+// Verify a reset code WITHOUT consuming it — gates the new-password step so a
+// wrong code is caught before the user types a password. Returns { ok:true };
+// throws with { status, code, attemptsLeft } on a bad/expired/locked code.
+export async function verifyResetCode({ email, code }) {
+  trace('verifyResetCode →', email, `(code len ${String(code).length})`);
+  const res = await fetch('/api/auth/verify-reset-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  const data = await res.json();
+  trace('/verify-reset-otp', res.status, data);
+  if (!res.ok) throw Object.assign(new Error(data.error ?? 'verification failed'), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft });
   return data;
 }
 
 // Verify the reset code + set a new password. On success creates a session.
 export async function resetPassword({ email, code, password }) {
+  trace('resetPassword →', email, `(code len ${String(code).length})`);
   const res = await fetch('/api/auth/reset-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code, password }),
   });
   const data = await res.json();
+  trace('/reset-password', res.status, res.ok ? '→ signed in' : data);
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'reset failed'), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft });
   setSession(data.token, data.user);
   return data.user;

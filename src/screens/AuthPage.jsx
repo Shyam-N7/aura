@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { signup, login, googleLogin, verifyOtp, resendOtp, requestReset, resetPassword } from '../lib/auth';
+import { signup, login, googleLogin, verifyOtp, resendOtp, requestReset, verifyResetCode, resetPassword } from '../lib/auth';
 import { toast } from '../lib/toast';
 import { AuraMark } from '../components/primitives/AuraMark';
 import './AuthPage.css';
@@ -23,6 +23,12 @@ const STRENGTH_LABELS = [
 
 /* ── Email validation ────────────────────────────────────────────────── */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/* ── Dev-only UI flow trace (stripped from production builds) ─────────── */
+const trace = (...a) => { if (import.meta.env.DEV) console.log('[auth-ui]', ...a); };
+
+// "— N attempts left" suffix for a wrong-code error (server returns attemptsLeft).
+const attemptsSuffix = (n) => (Number.isFinite(n) ? ` — ${n} attempt${n === 1 ? '' : 's'} left` : '');
 
 /* ── Inline SVGs from the reference (icons tint via currentColor) ─────── */
 function BackArrowSvg() {
@@ -74,8 +80,8 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 /* ══════════════════════════════════════════════════════════════════════ */
 export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
   const [mode, setMode] = useState(initialMode === 'signup' ? 'signup' : 'signin');
-  // 'form' = sign in / sign up; 'otp' = enter signup code;
-  // 'forgot-request' = enter email; 'forgot-reset' = code + new password.
+  // 'form' = sign in / sign up; 'otp' = enter signup code; 'forgot-request' =
+  // enter email; 'forgot-code' = enter reset code; 'forgot-newpw' = set password.
   const [step, setStep] = useState('form');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -243,7 +249,7 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
       const user = await verifyOtp({ email: pendingEmail, code: otpCode });
       onAuthed?.(user);
     } catch (err) {
-      setFormError(err?.message || 'verification failed.');
+      setFormError((err?.message || 'verification failed.') + attemptsSuffix(err?.attemptsLeft));
       // Stale/locked code → let them resend right away.
       if (['expired', 'no_code', 'locked', 'signup_expired'].includes(err?.code)) setResendCooldown(0);
     } finally {
@@ -255,10 +261,14 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
   const handleResendCode = useCallback(async () => {
     if (resendCooldown > 0 || !pendingEmail) return;
     setFormError('');
+    trace('resend code →', pendingEmail, `(step: ${step})`);
+    const isReset = step === 'forgot-code' || step === 'forgot-newpw';
     try {
-      if (step === 'forgot-reset') await requestReset(pendingEmail);
+      if (isReset) await requestReset(pendingEmail);
       else await resendOtp(pendingEmail);
       setResendCooldown(60);
+      // A new code invalidates the old one — send them back to enter the fresh code.
+      if (isReset) { setStep('forgot-code'); setOtpCode(''); }
       toast('code sent.');
     } catch (err) {
       if (err?.code === 'cooldown' && err.retryAfterSec) setResendCooldown(err.retryAfterSec);
@@ -274,22 +284,26 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     if (!addr || !EMAIL_RE.test(addr)) { setErrors({ email: 'that email looks off.' }); return; }
     setErrors({});
     setPending(true);
+    trace('forgot-request →', addr);
     try {
       await requestReset(addr);
+      trace('code requested → step: forgot-code');
       setPendingEmail(addr);
-      setStep('forgot-reset');
+      setStep('forgot-code');
       setOtpCode('');
       setNewPassword('');
       setResendCooldown(60);
     } catch (err) {
       if (err?.code === 'cooldown' && err.retryAfterSec) {
-        // A code was sent recently — still advance to the reset step.
+        // A code was sent recently — still advance to the code step.
+        trace('cooldown active → step: forgot-code, retryAfter', err.retryAfterSec);
         setPendingEmail(addr);
-        setStep('forgot-reset');
+        setStep('forgot-code');
         setOtpCode('');
         setNewPassword('');
         setResendCooldown(err.retryAfterSec);
       } else {
+        trace('forgot-request failed:', err?.message);
         const m = err?.message || 'could not send code.';
         setFormError(m);
         toast(m);
@@ -299,21 +313,53 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     }
   }, [email]);
 
-  /* ── Reset password — verify code + set new password ────────────────── */
-  const handleResetPassword = useCallback(async (e) => {
+  /* ── Reset password — step 1: verify code, then step 2: set password ──── */
+  // Step 1: verify the code without consuming it, then reveal the password step.
+  const handleVerifyResetCode = useCallback(async (e) => {
     e.preventDefault();
     setFormError('');
     if (otpCode.length !== 6) { setFormError('enter the 6-digit code.'); return; }
+    setPending(true);
+    trace('verify reset code →', pendingEmail, `(code len ${otpCode.length})`);
+    try {
+      await verifyResetCode({ email: pendingEmail, code: otpCode });
+      trace('code ok → step: forgot-newpw');
+      setNewPassword('');
+      setErrors({});
+      setStep('forgot-newpw');
+    } catch (err) {
+      trace('code rejected:', err?.code || err?.message);
+      setFormError((err?.message || 'that code isn’t right.') + attemptsSuffix(err?.attemptsLeft));
+      // Stale/locked code → let them resend right away.
+      if (['expired', 'no_code', 'locked'].includes(err?.code)) setResendCooldown(0);
+    } finally {
+      setPending(false);
+    }
+  }, [otpCode, pendingEmail]);
+
+  // Step 2: set the new password (server re-verifies the code, then consumes it).
+  const handleResetPassword = useCallback(async (e) => {
+    e.preventDefault();
+    setFormError('');
     if (newPassword.length < 6) { setErrors({ password: 'at least six characters.' }); return; }
     setErrors({});
     setPending(true);
+    trace('reset submit →', pendingEmail);
     try {
       const user = await resetPassword({ email: pendingEmail, code: otpCode, password: newPassword });
+      trace('reset ok → signed in');
       toast('password updated.');
       onAuthed?.(user);
     } catch (err) {
-      setFormError(err?.message || 'reset failed.');
-      if (['expired', 'no_code', 'locked'].includes(err?.code)) setResendCooldown(0);
+      trace('reset failed:', err?.code || err?.message);
+      // If the code went stale between steps, bounce back to the code step.
+      if (['expired', 'no_code', 'locked', 'mismatch', 'bad_format'].includes(err?.code)) {
+        setFormError((err?.message || 'that code is no longer valid.') + attemptsSuffix(err?.attemptsLeft));
+        setStep('forgot-code');
+        if (['expired', 'no_code', 'locked'].includes(err?.code)) setResendCooldown(0);
+      } else {
+        setFormError(err?.message || 'reset failed.');
+      }
     } finally {
       setPending(false);
     }
@@ -605,7 +651,7 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
                 <header className="form-head">
                   <span className="mono">reset · forgot password</span>
                   <h2>reset your <em>password.</em></h2>
-                  <p className="sub">Enter your email and we&apos;ll send a code to reset it.</p>
+                  <p className="sub">Enter your email. If it&apos;s registered, we&apos;ll send a 6-digit reset code.</p>
                 </header>
 
                 <form onSubmit={handleForgotRequest} noValidate>
@@ -637,19 +683,19 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
               </>
             )}
 
-            {/* ──────────── Forgot — set new password ──────────── */}
-            {step === 'forgot-reset' && (
+            {/* ──────────── Forgot — step 1: enter the code ──────────── */}
+            {step === 'forgot-code' && (
               <>
                 <header className="form-head">
                   <span className="mono">reset · check your inbox</span>
-                  <h2>set a new <em>password.</em></h2>
+                  <h2>enter your <em>code.</em></h2>
                   <p className="sub">
-                    Enter the 6-digit code we sent to{' '}
-                    <span style={{ color: 'var(--ink)' }}>{pendingEmail}</span> and choose a new password.
+                    If an account exists for{' '}
+                    <span style={{ color: 'var(--ink)' }}>{pendingEmail}</span>, we&apos;ve sent a 6-digit code. Enter it to continue.
                   </p>
                 </header>
 
-                <form onSubmit={handleResetPassword} noValidate>
+                <form onSubmit={handleVerifyResetCode} noValidate>
                   <div className="field">
                     <label htmlFor="reset-otp">Reset code</label>
                     <input
@@ -665,6 +711,32 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
                     />
                   </div>
 
+                  {formError && <p className="form-error">{formError}</p>}
+
+                  <button className="auth-submit" type="submit" disabled={pending || otpCode.length !== 6}>
+                    <span>{pending ? 'Checking…' : 'Continue'}</span>
+                    <SubmitArrowSvg />
+                  </button>
+                </form>
+
+                {resendLine}
+
+                <div className="form-foot">
+                  <a href="#" onClick={(e) => { e.preventDefault(); backToForm(); }}>Back to sign in.</a>
+                </div>
+              </>
+            )}
+
+            {/* ──────────── Forgot — step 2: set new password ──────────── */}
+            {step === 'forgot-newpw' && (
+              <>
+                <header className="form-head">
+                  <span className="mono">reset · new password</span>
+                  <h2>set a new <em>password.</em></h2>
+                  <p className="sub">Your code checked out. Choose a new password for your account.</p>
+                </header>
+
+                <form onSubmit={handleResetPassword} noValidate>
                   <div className="field">
                     <label htmlFor="reset-pw">New password</label>
                     <input
@@ -678,20 +750,23 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
                       onChange={(e) => setNewPassword(e.target.value)}
                     />
                     {errors.password && <span className="field-error">{errors.password}</span>}
+
+                    <div className={`strength show s${scorePassword(newPassword)}`}>
+                      <div className="bar"><i /><i /><i /><i /></div>
+                      <span className="label">{STRENGTH_LABELS[scorePassword(newPassword)]}</span>
+                    </div>
                   </div>
 
                   {formError && <p className="form-error">{formError}</p>}
 
-                  <button className="auth-submit" type="submit" disabled={pending || otpCode.length !== 6}>
+                  <button className="auth-submit" type="submit" disabled={pending || newPassword.length < 6}>
                     <span>{pending ? 'Resetting…' : 'Reset password'}</span>
                     <SubmitArrowSvg />
                   </button>
                 </form>
 
-                {resendLine}
-
                 <div className="form-foot">
-                  <a href="#" onClick={(e) => { e.preventDefault(); backToForm(); }}>Back to sign in.</a>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setFormError(''); setOtpCode(''); setStep('forgot-code'); }}>Re-enter code.</a>
                 </div>
               </>
             )}

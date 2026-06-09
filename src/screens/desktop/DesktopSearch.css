@@ -129,14 +129,10 @@
 .aura-dse__more:hover {
   background: rgb(0 0 0 / 0.65);
 }
-
-/* The shared `.aura-pl-menu` defaults to `top: 100%` which works on row
-   layouts (queue / library) but lands below the entire ~270 px result tile
-   here, overlapping the row underneath. Pin it just under the ⋯ button so
-   the popover hovers over the tile's own album art. */
-.aura-dse__result-wrap .aura-pl-menu {
-  top: 38px;
-  right: 4px;
+/* Touch / compact can't hover-reveal, so the ⋯ would never appear — keep it
+   visible there (it sits on the tile's art with its own dark chip for contrast). */
+@media (hover: none), (max-width: 899px) {
+  .aura-dse__more { opacity: 1; }
 }
 
 /* Results layout — main column with a sidebar (recents + trending) at the

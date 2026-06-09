@@ -64,7 +64,11 @@ export async function issueOtp(email, { purpose = 'signup' } = {}) {
 //   { ok: true }
 //   { ok: false, reason: 'no_code' | 'expired' | 'locked' }
 //   { ok: false, reason: 'mismatch', attemptsLeft }
-export async function verifyOtp(email, code, { purpose = 'signup' } = {}) {
+// `consume: false` validates the code WITHOUT deleting it — used to gate a
+// multi-step flow (e.g. "verify code" then "set password") where the code must
+// survive the first check and is consumed only once the action commits. A wrong
+// code still burns an attempt regardless of `consume`.
+export async function verifyOtp(email, code, { purpose = 'signup', consume = true } = {}) {
   const now = Date.now();
   const { rows } = await pool.query(
     `SELECT * FROM email_otps WHERE email = $1 AND purpose = $2 ORDER BY created_at DESC LIMIT 1`,
@@ -91,6 +95,16 @@ export async function verifyOtp(email, code, { purpose = 'signup' } = {}) {
   }
 
   // Single-use — clear every code for this (email, purpose) so it can't replay.
-  await pool.query('DELETE FROM email_otps WHERE email = $1 AND purpose = $2', [email, purpose]);
+  // Skipped when peeking (consume:false); the caller consumes once it commits.
+  if (consume) {
+    await pool.query('DELETE FROM email_otps WHERE email = $1 AND purpose = $2', [email, purpose]);
+  }
   return { ok: true };
+}
+
+// Deletes the active code(s) for (email, purpose). Call after a verified action
+// commits (e.g. the password was actually updated) so a failed follow-up step
+// never burns the user's still-valid code prematurely.
+export async function consumeOtp(email, purpose) {
+  await pool.query('DELETE FROM email_otps WHERE email = $1 AND purpose = $2', [email, purpose]);
 }

@@ -9,6 +9,7 @@ import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { subscribeSearchFocus } from '../../lib/searchFocus';
 import { ctxOpen } from '../../lib/trackContextMenu';
+import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { SearchSidebar } from './SearchSidebar';
 import '../PlaylistsScreen.css';
@@ -20,7 +21,7 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
   const [q, setQ] = useState('');
   const [lang, setLang] = useState('all');
   const [hit, setHit] = useState({ key: '', results: [], playlists: [], error: null });
-  const [menuId, setMenuId] = useState(null);
+  const [menu, setMenu] = useState(null);
   const debouncedQ = useDebounced(q, 300);
   const wantKey = `${debouncedQ}|${lang}`;
   const inputRef = useRef(null);
@@ -61,13 +62,13 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
     return () => ctl.abort();
   }, [debouncedQ, lang, wantKey, trimmed]);
 
-  const playNow      = (t) => { setMenuId(null); onPickLive?.(t); };
-  const playNextItem = (t) => { setMenuId(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue   = (t) => { setMenuId(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList    = (t) => { setMenuId(null); openAddToPlaylist(t); };
+  const playNow      = (t) => { setMenu(null); onPickLive?.(t); };
+  const playNextItem = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
+  const addToQueue   = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
+  const addToList    = (t) => { setMenu(null); openAddToPlaylist(t); };
 
   return (
-    <div className="aura-dse" onClick={() => setMenuId(null)}>
+    <div className="aura-dse" onClick={() => setMenu(null)}>
       {onClose && (
         <button type="button" onClick={onClose} aria-label="close search" className="aura-dse__close">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
@@ -155,7 +156,7 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
                       </div>
                     </button>
                     <button type="button"
-                      onClick={(e) => { e.stopPropagation(); setMenuId(m => m === t.id ? null : t.id); }}
+                      onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
                       aria-label="more"
                       className="aura-dse__more">
                       <svg width="4" height="16" viewBox="0 0 4 16">
@@ -164,13 +165,13 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
                         <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
                       </svg>
                     </button>
-                    {menuId === t.id && (
-                      <div className="aura-pl-menu" onClick={(e) => e.stopPropagation()}>
+                    {menu?.id === t.id && (
+                      <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
                         <button onClick={() => playNow(t)}      className="aura-pl-menu-item">Play song</button>
                         <button onClick={() => playNextItem(t)} className="aura-pl-menu-item">Play next</button>
                         <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">Add to queue</button>
                         <button onClick={() => addToList(t)}    className="aura-pl-menu-item">Add to playlist</button>
-                      </div>
+                      </AnchoredMenu>
                     )}
                   </div>
                 ))}

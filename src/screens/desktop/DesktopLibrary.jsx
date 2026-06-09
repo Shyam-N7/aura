@@ -8,6 +8,7 @@ import { listPlaylists } from '../../api/playlists';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
+import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import '../PlaylistsScreen.css';
 import './DesktopLibrary.css';
@@ -19,7 +20,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   const [liked, setLiked]         = useState(null);
   const [playlists, setPlaylists] = useState(null);
   const [loading, setLoading]     = useState(true);
-  const [menuId, setMenuId]       = useState(null);
+  const [menu, setMenu]           = useState(null);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -33,13 +34,13 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
 
   const hasAnyData = summary && summary.tracksPlayed > 0;
 
-  const playNow    = (t) => { setMenuId(null); onPickLive?.(t); };
-  const playNext   = (t) => { setMenuId(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addQueue   = (t) => { setMenuId(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList  = (t) => { setMenuId(null); openAddToPlaylist(t); };
+  const playNow    = (t) => { setMenu(null); onPickLive?.(t); };
+  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
+  const addQueue   = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
+  const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
 
   return (
-    <div className="aura-dlib" onClick={() => setMenuId(null)}>
+    <div className="aura-dlib" onClick={() => setMenu(null)}>
       <div className="aura-dlib__header">
         <MonoLabel className="text-ink-faint" size={10}>
           library · your year of listening
@@ -88,7 +89,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
                   </div>
                 </button>
                 <button type="button"
-                  onClick={(e) => { e.stopPropagation(); setMenuId(m => m === t.id ? null : t.id); }}
+                  onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
                   aria-label="more"
                   className="aura-dlib__more">
                   <svg width="4" height="16" viewBox="0 0 4 16">
@@ -97,13 +98,13 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
                     <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
                   </svg>
                 </button>
-                {menuId === t.id && (
-                  <div className="aura-pl-menu" onClick={(e) => e.stopPropagation()}>
+                {menu?.id === t.id && (
+                  <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
                     <button onClick={() => playNow(t)}    className="aura-pl-menu-item">play song</button>
                     <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
                     <button onClick={() => addQueue(t)}   className="aura-pl-menu-item">add to queue</button>
                     <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to playlist</button>
-                  </div>
+                  </AnchoredMenu>
                 )}
               </div>
             ))}

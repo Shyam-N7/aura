@@ -1,7 +1,9 @@
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { registerSW } from 'virtual:pwa-register';
 import { Root } from './App';
 import { useAuth } from './lib/auth';
+import { toast } from './lib/toast';
 
 import '@fontsource/hanken-grotesk/400.css';
 import '@fontsource/hanken-grotesk/500.css';
@@ -45,6 +47,16 @@ function AppRoot() {
     const onPop = () => setLoc({ path: window.location.pathname, search: window.location.search });
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Register the service worker after mount. registerType:'prompt' means a
+  // waiting update never force-reloads — it applies on the next natural reopen;
+  // we surface a quiet "reopen to update" toast (the toast bus buffers it, so it
+  // still shows even if raised before the in-app toast host has mounted).
+  useEffect(() => {
+    registerSW({
+      onNeedRefresh() { toast('a new version is ready — reopen aura to update.'); },
+    });
   }, []);
 
   const view = useMemo(() => {

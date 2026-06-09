@@ -8,7 +8,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (not 'autoUpdate'): never reload the page on our own when a new
+      // SW activates — that was refreshing the app out from under users when
+      // they reopened it. The new version simply waits and applies on the next
+      // natural reopen; main.jsx surfaces a quiet "reopen to update" toast.
+      registerType: 'prompt',
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'AURA — your contemplative AI DJ',

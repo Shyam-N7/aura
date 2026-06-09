@@ -2,9 +2,12 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
 import { signToken, requireAuth } from './middleware/auth.js';
-import { issueOtp, verifyOtp, sweepExpired } from './otp.js';
+import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
 
 const router = Router();
+
+// Dev-only flow trace — silent when NODE_ENV=production (e.g. on Vercel).
+const trace = (...a) => { if (process.env.NODE_ENV !== 'production') console.log(...a); };
 
 function genId() {
   let s = 'u_';
@@ -218,24 +221,52 @@ router.post('/forgot', async (req, res) => {
     const { email } = req.body ?? {};
     if (!email) return res.status(400).json({ error: 'email required' });
     const e = norm(email);
+    trace('[forgot] request:', e);
     sweepExpired();
 
     const { rows } = await pool.query('SELECT password_hash FROM users WHERE email = $1', [e]);
     if (rows.length && rows[0].password_hash) {
+      trace('[forgot] account has a password → issuing reset code');
       await issueOtp(e, { purpose: 'reset' });
+    } else {
+      trace('[forgot] no resettable account → 200, no code (anti-enumeration)');
     }
     res.json({ ok: true, cooldownSec: 60 });
   } catch (err) {
-    if (err.statusCode === 429) return res.status(429).json({ error: err.message, code: 'cooldown', retryAfterSec: err.retryAfterSec });
+    if (err.statusCode === 429) { trace('[forgot] cooldown → 429, retryAfter', err.retryAfterSec, 's'); return res.status(429).json({ error: err.message, code: 'cooldown', retryAfterSec: err.retryAfterSec }); }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     console.error('[auth/forgot]', err);
     res.status(500).json({ error: 'request failed' });
   }
 });
 
-// ── Reset password — verify code + set new password ──────────────────
+// ── Forgot password — verify the reset code (step 1 of 2) ────────────
+// Non-destructive check so the two-step UI can confirm the code before asking
+// for a new password; the code is consumed later by /reset-password, only once
+// the password actually changes. Anti-enumeration is preserved: a non-existent /
+// passwordless account has no code, so this returns the generic no_code.
+router.post('/verify-reset-otp', async (req, res) => {
+  try {
+    const { email, code } = req.body ?? {};
+    if (!email || !code) return res.status(400).json({ error: 'email and code required' });
+    if (!/^\d{6}$/.test(String(code))) return res.status(400).json({ error: 'enter the 6-digit code', code: 'bad_format' });
+
+    const e = norm(email);
+    trace('[reset] peek-verify:', e);
+    const result = await verifyOtp(e, code, { purpose: 'reset', consume: false });
+    if (!result.ok) { trace('[reset] peek rejected:', result.reason); return otpFail(res, result); }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[auth/verify-reset-otp]', err);
+    res.status(500).json({ error: 'verification failed' });
+  }
+});
+
+// ── Reset password — verify code + set new password (step 2 of 2) ─────
 // On success sets the new hash, marks the email verified (control was proven),
-// and signs the user in (returns { token, user }).
+// and signs the user in (returns { token, user }). The code is verified
+// non-destructively, then consumed only AFTER the password update commits — so a
+// failed update never strands the user on a code that's already been deleted.
 router.post('/reset-password', async (req, res) => {
   try {
     const { email, code, password } = req.body ?? {};
@@ -244,16 +275,22 @@ router.post('/reset-password', async (req, res) => {
     if (!/^\d{6}$/.test(String(code))) return res.status(400).json({ error: 'enter the 6-digit code', code: 'bad_format' });
 
     const e = norm(email);
-    const result = await verifyOtp(e, code, { purpose: 'reset' });
-    if (!result.ok) return otpFail(res, result);
+    trace('[reset] verify:', e, `(code len ${String(code).length})`);
+    const result = await verifyOtp(e, code, { purpose: 'reset', consume: false });
+    if (!result.ok) { trace('[reset] code rejected:', result.reason); return otpFail(res, result); }
+    trace('[reset] code ok → updating password');
 
     const hash = await bcrypt.hash(password, 12);
     const upd = await pool.query(
       'UPDATE users SET password_hash = $1, email_verified = TRUE, last_login_at = $2 WHERE email = $3 RETURNING *',
       [hash, Date.now(), e],
     );
-    if (!upd.rowCount) return res.status(409).json({ error: 'account not found', code: 'no_account' });
+    if (!upd.rowCount) { trace('[reset] no matching account row'); return res.status(409).json({ error: 'account not found', code: 'no_account' }); }
 
+    // Password committed — now retire the code so it can't be replayed.
+    await consumeOtp(e, 'reset');
+
+    trace('[reset] password updated → signing in:', e);
     const token = signToken(upd.rows[0].id);
     res.json({ token, user: sanitizeUser(upd.rows[0]) });
   } catch (err) {

@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { listPlaylists, createPlaylist, deletePlaylist } from '../api/playlists';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
+import { AnchoredMenu } from '../components/AnchoredMenu';
 import './PlaylistsScreen.css';
 
 export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
   const [hit, setHit]       = useState({ data: null, error: null });
   const [creating, setCreating] = useState(false);
   const [newName, setNewName]   = useState('');
-  const [menuId, setMenuId]     = useState(null);
+  const [menu, setMenu]         = useState(null);
   const inputRef = useRef(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
@@ -43,7 +44,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
   };
 
   const remove = async (playlist) => {
-    setMenuId(null);
+    setMenu(null);
     const ok = await confirm({
       title: `Delete “${playlist.name}”?`,
       body:  'The playlist will be removed. Songs you’ve liked stay in your library.',
@@ -64,7 +65,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
 
   return (
     <div className="absolute inset-0 bg-bg text-ink pt-5 overflow-auto pb-24 animate-aura-sheet-in"
-         onClick={() => setMenuId(null)}>
+         onClick={() => setMenu(null)}>
       <div className="pt-1 px-7 flex justify-between items-center">
         <span className="aura-pl-eyebrow">Playlists</span>
         <button onClick={onClose} className="aura-pl-back">
@@ -152,7 +153,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
                 </div>
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); setMenuId(m => m === p.id ? null : p.id); }}
+                onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === p.id ? null : { id: p.id, el }); }}
                 aria-label="More"
                 className="aura-pl-overflow bg-transparent border-0 p-2 cursor-pointer text-ink-soft">
                 <svg width="4" height="16" viewBox="0 0 4 16">
@@ -162,14 +163,14 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
                 </svg>
               </button>
             </button>
-            {menuId === p.id && (
-              <div className="aura-pl-menu" onClick={(e) => e.stopPropagation()}>
+            {menu?.id === p.id && (
+              <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={52}>
                 <button
                   onClick={() => remove(p)}
                   className="aura-pl-menu-item aura-pl-menu-item--danger">
                   Delete
                 </button>
-              </div>
+              </AnchoredMenu>
             )}
           </div>
         ))}
