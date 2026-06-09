@@ -85,9 +85,11 @@ export class HtmlAudioPlayer {
     const url = track?.streamUrl;
     this._silent = !url;
     this._el.pause();
+    // Reset the progress signal up-front so the UI bar/time never carry the
+    // previous track's position into the new one while it loads.
+    this._emit('progress', 0, 0);
     if (!url) {
       this._el.removeAttribute('src');
-      this._emit('progress', 0);
       return;
     }
     this._el.src = url;

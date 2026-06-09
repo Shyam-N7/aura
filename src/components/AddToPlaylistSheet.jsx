@@ -37,17 +37,27 @@ export function AddToPlaylistSheet() {
   // Animate the sheet down off-screen, then unmount. Cancelling the opening
   // `aura-sheet-rise` animation first is required — its `both` fill mode would
   // otherwise pin transform at translateY(0) and override our inline value.
-  const dismiss = () => {
+  const dismiss = (fromDrag = false) => {
     if (closing) return;
     setClosing(true);
     const el = sheetRef.current;
     if (el) {
-      el.style.animation = 'none';
-      el.style.transition = 'transform 240ms cubic-bezier(.4, 0, .2, 1)';
+      if (!fromDrag) {
+        // Rest-state callers (backdrop tap / pick): cancel the rise animation,
+        // commit the current position, then force a reflow so the slide-down
+        // transition has a real start value. The easing spreads the motion (a
+        // front-loaded spring made the exit look instant).
+        el.style.animation = 'none';
+        el.style.transform = 'translateY(0)';
+        void el.offsetHeight;
+      }
+      // From a drag-release the sheet is already at translateY(dy) with no
+      // transition — slide on from there (don't snap back to rest first).
+      el.style.transition = 'transform 340ms cubic-bezier(.4, 0, .2, 1)';
       el.style.transform = 'translateY(100%)';
       el.style.willChange = 'transform';
     }
-    setTimeout(() => { setEvent(null); setClosing(false); }, 240);
+    setTimeout(() => { setEvent(null); setClosing(false); }, 340);
   };
 
   // Drag is gated by a movement threshold: pointerdown only captures the
@@ -95,7 +105,7 @@ export function AddToPlaylistSheet() {
     // being trigger-happy.
     const threshold = Math.min(sheetH * 0.20, 100);
     if (dy > threshold) {
-      dismiss();
+      dismiss(true);   // continue the slide from the dragged position
     } else if (el) {
       // Smooth spring back to rest, then drop the inline transition/will-change.
       el.style.transition = 'transform 240ms cubic-bezier(.22, 1, .36, 1)';

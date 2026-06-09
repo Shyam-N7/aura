@@ -27,5 +27,9 @@ export function loadPosition() {
 }
 
 export function clearPosition() {
+  // Also drop any in-flight debounced save — otherwise a pending value would be
+  // re-written to storage on the next flush right after we cleared it.
+  if (timer) { clearTimeout(timer); timer = null; }
+  pending = null;
   try { localStorage.removeItem(KEY); } catch { /* non-fatal */ }
 }

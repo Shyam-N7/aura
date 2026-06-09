@@ -45,7 +45,9 @@
 .aura-dlib__cols {
   padding: 48px 56px 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, …) lets the tracks shrink below their content so long titles
+     ellipsis-truncate instead of overflowing the row off the right edge. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 40px;
 }
 
@@ -179,7 +181,7 @@
   }
   .aura-dlib__hero { font-size: 44px; margin-top: 12px; }
   .aura-dlib__scroll { padding-bottom: 0; }
-  .aura-dlib__cols { padding: 28px 22px 0; grid-template-columns: 1fr; gap: 32px; }
+  .aura-dlib__cols { padding: 28px 22px 0; grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .aura-dlib__empty { padding: 28px 22px 0; font-size: 14px; }
   .aura-dlib__browse { padding: 32px 22px 0; }
   .aura-dlib__row-title { font-size: 17px; }

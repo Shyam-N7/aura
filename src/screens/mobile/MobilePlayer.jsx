@@ -18,7 +18,7 @@ import './MobilePlayer.css';
 // the transport anchored in the thumb zone. Up-next / more-like-this live in the
 // Queue screen now (the queue icon opens it). Lyrics open full-screen on art tap.
 export function MobilePlayer({
-  track, progress, playing, nextTrack, player, mood, djName = 'AURA',
+  track, progress, playing, nextTrack, nextLoading, player, mood, djName = 'AURA',
   onTogglePlay, onPrev, onNext, onSeek,
   repeatMode = 'off', onCycleRepeat, onShuffle, shuffleActive = false,
   onBack, openWhy, openLyrics, openQueue,
@@ -45,7 +45,7 @@ export function MobilePlayer({
         )}
         <div className="aura-mp__top">
           <button onClick={onBack} aria-label="back" className="aura-mp__chip">
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style={{ transform: 'translateX(-1px)' }}>
               <path d="M8 1 L3 5 L8 9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
           </button>
@@ -103,24 +103,29 @@ export function MobilePlayer({
             className={`aura-mp__play ${playing ? 'aura-mp__play--playing' : ''}`}>
             {playing
               ? <svg width="20" height="22" viewBox="0 0 12 14" aria-hidden="true"><rect x="0" width="4" height="14" fill="currentColor"/><rect x="8" width="4" height="14" fill="currentColor"/></svg>
-              : <svg width="20" height="22" viewBox="0 0 12 14" aria-hidden="true"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>}
+              : <svg width="20" height="22" viewBox="0 0 12 14" aria-hidden="true" style={{ transform: 'translateX(2px)' }}><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>}
           </button>
           <button onClick={onNext} aria-label="next" className="aura-mp__nav">
             <svg width="22" height="16" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 0 L9 5 L0 10 Z M11 0 H13 V10 H11 Z" fill="currentColor"/></svg>
           </button>
         </div>
 
-        {nextTrack && (
-          <button type="button" onClick={openQueue} className="aura-mp__upnext"
-            aria-label={`Up next: ${cleanTitle(nextTrack.title)}. Open queue.`}>
-            <AlbumArt track={nextTrack} size={28} radius={5}/>
+        {(nextTrack || nextLoading) && (
+          <button type="button" onClick={nextTrack ? openQueue : undefined} disabled={!nextTrack}
+            className={`aura-mp__upnext ${nextTrack ? '' : 'aura-mp__upnext--loading'}`}
+            aria-label={nextTrack ? `Up next: ${cleanTitle(nextTrack.title)}. Open queue.` : 'Finding the next song'}>
+            {nextTrack
+              ? <AlbumArt track={nextTrack} size={28} radius={5}/>
+              : <span className="aura-mp__upnext-skel-art" aria-hidden="true"/>}
             <span className="aura-mp__upnext-meta">
               <MonoLabel className="text-ink-faint" size={7.5}>Up next</MonoLabel>
-              <span className="aura-mp__upnext-title">{cleanTitle(nextTrack.title)}</span>
+              <span className="aura-mp__upnext-title">{nextTrack ? cleanTitle(nextTrack.title) : 'finding next song…'}</span>
             </span>
-            <svg className="aura-mp__upnext-chev" width="7" height="11" viewBox="0 0 7 11" aria-hidden="true">
-              <path d="M1 1 L6 5.5 L1 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            {nextTrack && (
+              <svg className="aura-mp__upnext-chev" width="7" height="11" viewBox="0 0 7 11" aria-hidden="true">
+                <path d="M1 1 L6 5.5 L1 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
           </button>
         )}
 

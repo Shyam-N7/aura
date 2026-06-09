@@ -137,7 +137,7 @@
 }
 
 /* ── Art hero — the cover takes only the leftover vertical space, capped at
-   78vw, so it's the biggest thing on screen yet never forces a scroll. ── */
+   70vw so it's the hero yet breathes clear of the top chrome and never scrolls. ── */
 .aura-mp__hero {
   flex: 1 1 auto;
   min-height: 0;
@@ -149,7 +149,7 @@
 .aura-mp__cover {
   height: 100%;
   aspect-ratio: 1;
-  max-height: min(78vw, 100%);
+  max-height: min(70vw, 100%);
   max-width: 100%;
   cursor: pointer;
 }
@@ -275,6 +275,12 @@
           backdrop-filter: blur(16px) saturate(140%);
   border: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
   transition: background 140ms ease, transform 100ms ease;
+  /* Fade + rise in so it never pops in as a block when the next track resolves. */
+  animation: aura-mp-upnext-in 340ms cubic-bezier(.22, .61, .36, 1) both;
+}
+@keyframes aura-mp-upnext-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .aura-mp__upnext:active { transform: scale(0.985); }
 .aura-mp__upnext .aura-album-art { flex-shrink: 0; }
@@ -297,6 +303,22 @@
 .aura-mp__upnext-chev {
   flex-shrink: 0;
   color: var(--color-ink-faint);
+}
+/* "finding next song" placeholder — same box as the real pill so the slot is
+   reserved and the swap to the real up-next causes no layout shift. */
+.aura-mp__upnext--loading { cursor: default; }
+.aura-mp__upnext-skel-art {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--color-ink), transparent 84%);
+  animation: aura-mp-skel 1.4s ease-in-out infinite;
+}
+.aura-mp__upnext--loading .aura-mp__upnext-title { color: var(--color-ink-faint); }
+@keyframes aura-mp-skel {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.95; }
 }
 
 /* ── Secondary actions ── */
