@@ -89,6 +89,7 @@ import { savePosition, flush as flushPosition, loadPosition, clearPosition } fro
 import { getTrack } from './api/catalog';
 import { getRelated } from './api/related';
 import { requestSearchFocus } from './lib/searchFocus';
+import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
 import { toast } from './lib/toast';
 import { confirm } from './lib/confirm';
@@ -192,6 +193,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // instead of always dumping the user on home.
   const [queueReturn,       setQueueReturn]      = useState('home');
   const [playerReturn,      setPlayerReturn]     = useState('home');
+  // Where closing the mobile search returns to (it can be opened from home,
+  // library, etc. — and from the bottom nav).
+  const [searchReturn,      setSearchReturn]     = useState('home');
   const [progress, setProgress]     = useState(0);
   const [audioTime, setAudioTime]   = useState(0);
   const [playing, setPlaying]       = useState(false);
@@ -211,6 +215,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // instead of just popping when the user closes it (Phase 12).
   const [closingLyrics, setClosingLyrics] = useState(false);
   const closingLyricsTimer = useRef(null);
+  // Same pattern for the mobile search screen so it sinks + fades back as the
+  // top bar collapses out of search mode (both run 320 ms, finishing together).
+  const [closingSearch, setClosingSearch] = useState(false);
+  const closingSearchTimer = useRef(null);
 
   const featured = useFeaturedTracks({ limit: 24 });
   const pool     = featured.tracks;
@@ -274,8 +282,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // When the queue runs out on a non-wrapping source, we play a track similar
   // to the one that just ended (matching artist family / language / vibe).
   // Triggered by 'ended' AND by the user pressing next on the last track —
-  // both consume the same prefetched candidate.
-  const autoNextRef          = useRef(null);   // { seedId, candidate } | null
+  // both consume the same prefetched batch.
+  const autoNextRef          = useRef(null);   // { seedId, candidates } | null
   const autoFetchInFlightRef = useRef(false);  // a getRelated() is currently in flight
   // 'ended' | 'next' | null — set when the caller couldn't consume a candidate
   // synchronously (fetch still in flight) so the prefetch resolution knows to
@@ -285,6 +293,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // screen needs to surface the prefetched candidate as a "coming up" tile —
   // mutate both in lockstep at every callsite that touches autoNextRef.
   const [autoNextDisplay, setAutoNextDisplay] = useState(null);
+  // Reactive mirror of autoFetchInFlightRef so the player can show a "finding
+  // next song" placeholder while auto-radio resolves the next track.
+  const [autoNextLoading, setAutoNextLoading] = useState(false);
 
   // Repeat mode: off | all | one. Persisted to localStorage. The 'ended'
   // subscriber reads via ref so we don't re-subscribe on every cycle.
@@ -310,16 +321,24 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
 
   // Builds the auto-radio queue from `cur` if a candidate is ready. Returns
   // null if no usable candidate — caller decides whether to wait or pause.
-  const consumeAutoNext = (cur) => {
+  const consumeAutoNext = (cur, offset = 0) => {
     const seed = cur.tracks[cur.idx];
     const auto = autoNextRef.current;
-    if (!auto?.candidate || !seed?.id || auto.seedId !== seed.id) return null;
+    if (!auto?.candidates?.length || !seed?.id || auto.seedId !== seed.id) return null;
     autoNextRef.current = null;
     setAutoNextDisplay(null);
+    // Dedupe against the live queue so this path matches applyAutoRadioToQueue
+    // (defensive — the prefetch clears on any queue change, so overlap is rare).
+    const have = new Set(cur.tracks.map(t => t.id));
+    const fresh = auto.candidates.filter(t => !have.has(t.id));
+    if (!fresh.length) return null;
     const seedArtist = (seed.artist ?? '').toLowerCase();
+    // Append the whole batch and play from `offset` within it (0 = the first
+    // pick; a queue-page row click can start further down the batch).
+    const jump = Math.min(Math.max(0, offset), fresh.length - 1);
     return {
-      tracks: [...cur.tracks, auto.candidate],
-      idx: cur.idx + 1,
+      tracks: [...cur.tracks, ...fresh],
+      idx: cur.idx + 1 + jump,
       source: seedArtist ? `more like ${seedArtist}` : 'auto radio',
     };
   };
@@ -327,15 +346,17 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // Functional setQueue that appends the candidate AT APPLY TIME — re-validates
   // against the freshest queue state so a user enqueue / track change between
   // fetch start and resolution doesn't trample anything.
-  const applyAutoRadioToQueue = (seedId, candidate) => setQueue(q => {
+  const applyAutoRadioToQueue = (seedId, candidates) => setQueue(q => {
     if (q.idx + 1 < q.tracks.length) return q;       // user enqueued mid-fetch
     if (q.source === "tonight's set") return q;       // wraps now
     const seedNow = q.tracks[q.idx];
     if (seedNow?.id !== seedId) return q;             // seed track changed
-    if (q.tracks.some(t => t.id === candidate.id)) return q;  // dedupe
+    const have = new Set(q.tracks.map(t => t.id));    // dedupe vs current queue
+    const fresh = candidates.filter(t => !have.has(t.id));
+    if (!fresh.length) return q;
     const seedArtist = (seedNow.artist ?? '').toLowerCase();
     return {
-      tracks: [...q.tracks, candidate],
+      tracks: [...q.tracks, ...fresh],
       idx: q.idx + 1,
       source: seedArtist ? `more like ${seedArtist}` : 'auto radio',
     };
@@ -357,16 +378,23 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     autoNextRef.current = null;
     setAutoNextDisplay(null);
     autoFetchInFlightRef.current = true;
+    setAutoNextLoading(true);
     const seedId       = track.id;
     const seedLanguage = track.language;
-    getRelated(seedId, { lang: seedLanguage, signal: ctl.signal })
+    getRelated(seedId, { lang: seedLanguage, limit: 15, signal: ctl.signal })
       .then(list => {
+        if (ctl.signal.aborted) return;   // superseded by a newer prefetch
         autoFetchInFlightRef.current = false;
+        setAutoNextLoading(false);
         const seen = new Set(viewTracks.map(t => t.id));
-        const pick = (list ?? []).find(t => t?.id && !seen.has(t.id));
+        // Keep the whole batch (deduped vs the queue) so the queue page can show
+        // the continuation as a list and one consume fills it in at once. Picks
+        // come ONLY from the similar-tracks source — never random/featured
+        // tracks — so the radio stays strictly on-vibe even at a dead end.
+        const picks = (list ?? []).filter(t => t?.id && !seen.has(t.id));
         const pending = pendingApplyRef.current;
-        if (!pick) {
-          // No usable candidate. Pause only if the user was *waiting* on
+        if (!picks.length) {
+          // No similar candidate left. Pause only if the user was *waiting* on
           // end-of-track resolution. A pending Next click leaves the current
           // track playing (clicks that did nothing have always been silent).
           if (pending === 'ended') { setPlaying(false); setEnded(true); }
@@ -375,18 +403,20 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         }
         if (pending) {
           pendingApplyRef.current = null;
-          applyAutoRadioToQueue(seedId, pick);
+          applyAutoRadioToQueue(seedId, picks);
           // User was waiting on this resolution — flip to playing so the load
           // effect autoplays the new track even if the audio element ended
           // (its paused property is true post-'ended', so we need this signal).
           setPlaying(true);
         } else {
-          autoNextRef.current = { seedId, candidate: pick };
-          setAutoNextDisplay({ seedId, candidate: pick });
+          autoNextRef.current = { seedId, candidates: picks };
+          setAutoNextDisplay({ seedId, candidates: picks });
         }
       })
       .catch(() => {
+        if (ctl.signal.aborted) return;   // stale abort — don't clear the live request's flags
         autoFetchInFlightRef.current = false;
+        setAutoNextLoading(false);
         if (pendingApplyRef.current === 'ended') { setPlaying(false); setEnded(true); }
         pendingApplyRef.current = null;
       });
@@ -811,12 +841,34 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     setScreen(nextScreen);
     closingPlayerTimer.current = setTimeout(() => setClosingPlayer(false), 220);
   };
+  // Open search (mobile: the top bar morphs into the field; desktop: the search
+  // screen rises). Remember where we came from so closing returns there, and
+  // arm the focus bus so the input focuses once the morph settles.
+  const openSearch = () => {
+    if (screen === 'search') return;
+    // Cancel an in-flight close so a quick re-open doesn't run the exit animation.
+    clearTimeout(closingSearchTimer.current);
+    setClosingSearch(false);
+    setSearchReturn(screen);
+    setScreen('search');
+    requestSearchFocus();
+  };
+  // Close mobile search: collapse the bar + sink the screen out together (320 ms),
+  // clear the query, and return to wherever search was opened from.
+  const closeSearch = () => {
+    clearTimeout(closingSearchTimer.current);
+    setClosingSearch(true);
+    setSearchQuery('');
+    setScreen(searchReturn);
+    closingSearchTimer.current = setTimeout(() => setClosingSearch(false), 320);
+  };
   const onNav = (target) => {
     setOverlay(null);
     // Direct nav resets player/queue back-stack — a fresh nav shouldn't
     // carry stale return state from a prior drill-down.
     setPlayerReturn('home');
     setQueueReturn('home');
+    if (target === 'search') { openSearch(); return; }
     if (screen === 'player' && target !== 'player') leavePlayer(target);
     else setScreen(target);
   };
@@ -902,7 +954,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('home'); setScreen('catalog-playlist-detail'); }}
               onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('home'); setScreen('playlist-detail'); }}
               onOpenPlaylists={() => setScreen('playlists')}
-              onOpenSearch={() => setScreen('search')}
+              onOpenSearch={openSearch}
               onOpenArtist={onOpenArtist}
               t={t} setTweak={setTweak}/>
           </div>
@@ -913,7 +965,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             {isMobile ? (
               <MobilePlayer
                 track={track} progress={progress} playing={playing}
-                nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidate : null)}
+                nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidates[0] : null)}
+                nextLoading={autoNextLoading}
                 mood={t.mood} djName={t.djName}
                 repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
                 onShuffle={shuffleQueue} shuffleActive={shuffleActive}
@@ -945,16 +998,16 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onReorder={reorderQueue} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
               onClear={clearQueue} onShuffle={shuffleQueue} shuffleActive={shuffleActive} onSave={saveQueueAsPlaylist}
               repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
-              autoNext={autoNextDisplay?.candidate ?? null}
-              onPlayAutoNext={() => {
-                const auto = consumeAutoNext(viewRef.current);
+              autoNextBatch={autoNextDisplay?.candidates ?? null}
+              onPlayAutoNext={(offset = 0) => {
+                const auto = consumeAutoNext(viewRef.current, offset);
                 if (auto) { setQueue(auto); setPlaying(true); }
               }}/>
           </div>
         )}
-        {screen === 'search' && (
-          <div key="search" className="absolute inset-0 animate-aura-screen-in">
-            <DesktopSearch djName={t.djName} onClose={() => setScreen('home')}
+        {(screen === 'search' || closingSearch) && (
+          <div key="search" className={`absolute inset-0 animate-aura-screen-in ${isMobile ? `aura-search-screen ${closingSearch ? 'aura-search-screen--closing' : ''}` : ''}`}>
+            <DesktopSearch djName={t.djName} onClose={() => setScreen('home')} headerless={isMobile}
               onPickLive={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
               onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('search'); setScreen('playlist-detail'); }}/>
@@ -1071,7 +1124,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the top, MobileBottomBar (now-playing + nav) at the bottom. Both
             hide on the player screen so DesktopPlayer's floating back / ⋯
             buttons aren't covered and the page swiper claims the full surface. */}
-        {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}/>}
+        {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}
+          onOpenSearch={openSearch} searching={screen === 'search'} onCloseSearch={closeSearch}/>}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileBottomBar
           track={track} playing={playing}
           onTogglePlay={() => setPlaying(p => !p)}
