@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { registerSW } from 'virtual:pwa-register';
+import { Analytics } from '@vercel/analytics/react';
 import { Root } from './App';
 import { useAuth } from './lib/auth';
 import { toast } from './lib/toast';
@@ -122,24 +123,32 @@ function AppRoot() {
     if (view !== 'app') document.body.style.background = THEME_BG[theme] || THEME_BG.dusk;
   }, [view, theme]);
 
-  if (view === 'app') return <Root user={user} />;
+  if (view === 'app') return (
+    <>
+      <Root user={user} />
+      <Analytics />
+    </>
+  );
 
   return (
-    <div className={`theme-${theme}`}>
-      <Suspense fallback={null}>
-        {view === 'auth'
-          ? <AuthPage
-              initialMode={authMode}
-              onAuthed={() => navigate(consumePostAuthPath() ?? '/')}
-              onBack={() => navigate('/')}
-            />
-          : <LandingPage
-              onNavigateAuth={(mode) => navigate(mode === 'signup' ? '/auth?mode=signup' : '/auth')}
-              theme={theme}
-              onToggleTheme={toggleTheme}
-            />}
-      </Suspense>
-    </div>
+    <>
+      <div className={`theme-${theme}`}>
+        <Suspense fallback={null}>
+          {view === 'auth'
+            ? <AuthPage
+                initialMode={authMode}
+                onAuthed={() => navigate(consumePostAuthPath() ?? '/')}
+                onBack={() => navigate('/')}
+              />
+            : <LandingPage
+                onNavigateAuth={(mode) => navigate(mode === 'signup' ? '/auth?mode=signup' : '/auth')}
+                theme={theme}
+                onToggleTheme={toggleTheme}
+              />}
+        </Suspense>
+      </div>
+      <Analytics />
+    </>
   );
 }
 
