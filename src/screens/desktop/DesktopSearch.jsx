@@ -20,16 +20,17 @@ import '../PlaylistsScreen.css';
 import './DesktopSearch.css';
 
 const LANGS = ['all', 'tamil', 'english', 'hindi', 'malayalam', 'kannada'];
-const EMPTY = { key: '', top: null, songs: [], albums: [], playlists: [], userPlaylists: [], error: null };
+const EMPTY = { key: '', top: null, songs: [], artists: [], albums: [], playlists: [], userPlaylists: [], error: null };
 
-// A cover-tile (album / movie / playlist).
-function EntityTile({ image, name, sub, badge, onClick }) {
+// A cover-tile (album / movie / playlist / artist — `round` for artist avatars).
+function EntityTile({ image, name, sub, badge, round = false, onClick }) {
+  const shape = round ? ' aura-dse__cover--round' : '';
   return (
     <button onClick={onClick} className="aura-dse__playlist">
       <span className="aura-dse__cover-wrap">
         {image
-          ? <img src={image} alt="" loading="lazy" className="aura-dse__cover"/>
-          : <span className="aura-dse__cover aura-dse__cover--fallback">{name?.[0]?.toUpperCase() ?? '·'}</span>}
+          ? <img src={image} alt="" loading="lazy" className={`aura-dse__cover${shape}`}/>
+          : <span className={`aura-dse__cover aura-dse__cover--fallback${shape}`}>{name?.[0]?.toUpperCase() ?? '·'}</span>}
         {badge && <span className="aura-dse__badge">{badge}</span>}
       </span>
       <span className="block min-w-0">
@@ -135,7 +136,7 @@ export function DesktopSearch({
   const showHero = top && top.type !== 'song';       // songs lead for a song query
   const albumFirst = top?.type === 'album';          // a movie/album query → albums first
 
-  const nothing = !top && !view.songs.length && !view.albums.length && !view.playlists.length && !view.userPlaylists.length;
+  const nothing = !top && !view.songs.length && !view.artists.length && !view.albums.length && !view.playlists.length && !view.userPlaylists.length;
 
   const heroSection = showHero && (
     <section>
@@ -183,6 +184,20 @@ export function DesktopSearch({
               </AnchoredMenu>
             )}
           </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  // Only sent by the server when the top result isn't already this artist and
+  // the names genuinely match the query — so the row stays relevant.
+  const artistsSection = view.artists.length > 0 && (
+    <section>
+      <div className="aura-dse__section-title">Artists</div>
+      <div className="aura-dse__playlists">
+        {view.artists.map(a => (
+          <EntityTile key={a.id} image={a.image} name={a.name} sub="Artist" round
+            onClick={() => onOpenArtist?.({ id: a.id })}/>
         ))}
       </div>
     </section>
@@ -273,7 +288,8 @@ export function DesktopSearch({
               {heroSection}
               {albumFirst
                 ? <>{albumsSection}{songsSection}</>
-                : <>{songsSection}{albumsSection}</>}
+                : <>{songsSection}{artistsSection}{albumsSection}</>}
+              {albumFirst && artistsSection}
               {playlistsSection}
               {yourPlaylistsSection}
             </div>

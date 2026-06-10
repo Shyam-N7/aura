@@ -100,16 +100,16 @@ export function NavRail({ djName = 'aura', mood, active, onNav, collapsed = fals
       {/* primary nav — listen */}
       <NavSection label="listen" collapsed={collapsed}>
         {LISTEN.map(it => (
-          <NavItem key={it.id} {...it} collapsed={collapsed}
+          <NavItem key={it.id} {...it} collapsed={collapsed} tourId={`nav-${it.id}`}
             active={active === it.id || (it.id === 'home' && HOME_STACK.has(active))}
             onClick={() => onNav(it.id)}/>
         ))}
       </NavSection>
 
       {/* study */}
-      <NavSection label="study" collapsed={collapsed}>
+      <NavSection label="study" collapsed={collapsed} tourId="nav-study">
         {STUDY.map(it => (
-          <NavItem key={it.id} {...it} collapsed={collapsed}
+          <NavItem key={it.id} {...it} collapsed={collapsed} tourId={`nav-${it.id}`}
             active={active === it.id}
             onClick={() => onNav(it.id)}/>
         ))}
@@ -167,9 +167,9 @@ function Chevron({ direction }) {
   );
 }
 
-function NavSection({ label, collapsed, children }) {
+function NavSection({ label, collapsed, children, tourId }) {
   return (
-    <div className="aura-nav-rail__section">
+    <div className="aura-nav-rail__section" data-tour={tourId}>
       {!collapsed && (
         <div className="aura-nav-rail__section-label">
           <MonoLabel className="text-ink-faint" size={8.5}>{label}</MonoLabel>
@@ -193,9 +193,10 @@ function DriftGlyph({ drift }) {
   );
 }
 
-function NavItem({ icon, label, active, onClick, collapsed }) {
+function NavItem({ icon, label, active, onClick, collapsed, tourId }) {
   return (
     <button onClick={onClick} title={collapsed ? label : undefined}
+      data-tour={tourId}
       className={`aura-nav-rail__item ${collapsed ? 'aura-nav-rail__item--icon' : ''} ${active ? 'aura-nav-rail__item--active' : ''}`}>
       <span className="aura-nav-rail__item-icon">{icon}</span>
       {!collapsed && label}

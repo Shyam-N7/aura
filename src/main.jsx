@@ -4,6 +4,21 @@ import { registerSW } from 'virtual:pwa-register';
 import { Root } from './App';
 import { useAuth } from './lib/auth';
 import { toast } from './lib/toast';
+import { stashPostAuthPath, consumePostAuthPath } from './lib/routes';
+
+// One-time legacy redirect: the app used hash routes (`#/artist/x`) before the
+// path-routing migration — rewrite them to real paths so old bookmarks, shares,
+// and installed-PWA launches (`start_url '/#/'`) keep working. Matches ONLY
+// '#/'-prefixed hashes: the landing page's section anchors ('#how',
+// '#features') and bare '#' stub links must pass through untouched. Runs before
+// first render so every initial-route read sees the corrected URL.
+{
+  const h = window.location.hash;
+  if (h.startsWith('#/')) {
+    const path = h.slice(1) || '/';
+    try { window.history.replaceState(null, '', path + window.location.search); } catch { /* ignore */ }
+  }
+}
 
 import '@fontsource/hanken-grotesk/400.css';
 import '@fontsource/hanken-grotesk/500.css';
@@ -49,6 +64,15 @@ function AppRoot() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  // A logged-out visitor at an app deep link (e.g. /artist/x) sees the landing
+  // page, and heading into /auth would wipe the path — stash it so sign-in can
+  // land them where the link pointed. Reads the LIVE pathname (not loc.path):
+  // sign-out pushes '/' synchronously before this runs, so nothing stale is
+  // stashed. Consumed in onAuthed below; cleared on explicit sign-out.
+  useEffect(() => {
+    if (!isAuthed) stashPostAuthPath(window.location.pathname);
+  }, [isAuthed]);
+
   // Register the service worker after mount. registerType:'prompt' means a
   // waiting update never force-reloads — it applies on the next natural reopen;
   // we surface a quiet "reopen to update" toast (the toast bus buffers it, so it
@@ -64,6 +88,12 @@ function AppRoot() {
     if (loc.path === '/auth') return 'auth';
     return 'landing';
   }, [loc.path, isAuthed]);
+
+  // Pre-auth tab titles (in-app titles are managed per screen by App).
+  useEffect(() => {
+    if (view === 'auth')         document.title = 'sign in · AURA';
+    else if (view === 'landing') document.title = 'AURA — your contemplative AI DJ';
+  }, [view]);
 
   // Auth-page mode comes from ?mode=signup on entry; AuthPage owns it after.
   const authMode = useMemo(() => {
@@ -100,7 +130,7 @@ function AppRoot() {
         {view === 'auth'
           ? <AuthPage
               initialMode={authMode}
-              onAuthed={() => navigate('/')}
+              onAuthed={() => navigate(consumePostAuthPath() ?? '/')}
               onBack={() => navigate('/')}
             />
           : <LandingPage

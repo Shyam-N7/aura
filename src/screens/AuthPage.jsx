@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { signup, login, googleLogin, verifyOtp, resendOtp, requestReset, verifyResetCode, resetPassword } from '../lib/auth';
+import { signup, login, verifyOtp, resendOtp, requestReset, verifyResetCode, resetPassword } from '../lib/auth';
 import { toast } from '../lib/toast';
 import { AuraMark } from '../components/primitives/AuraMark';
 import './AuthPage.css';
@@ -71,10 +71,6 @@ function GoogleSvg() {
   );
 }
 
-/* ── Google Identity Services — lazy script load on mount ─────────────── */
-const GIS_SRC = 'https://accounts.google.com/gsi/client';
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
 /* ══════════════════════════════════════════════════════════════════════ */
 /*  AuthPage — step machine: form → otp (signup verify) / forgot (reset)  */
 /* ══════════════════════════════════════════════════════════════════════ */
@@ -94,12 +90,11 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
 
-  const googleReady = useRef(false);
-  // Keep the latest onAuthed in a ref so the GIS init effect can stay []-deps:
-  // main.jsx passes a fresh inline arrow each render, which would otherwise
-  // re-inject/clean up the Google script on every keystroke.
-  const onAuthedRef = useRef(onAuthed);
-  useEffect(() => { onAuthedRef.current = onAuthed; }, [onAuthed]);
+  // Social sign-in is not live yet — clicking a provider shows a note above the
+  // buttons instead of starting an auth flow. Auto-clears after a few seconds.
+  const [socialNote, setSocialNote] = useState('');
+  const socialNoteTimer = useRef(null);
+  useEffect(() => () => clearTimeout(socialNoteTimer.current), []);
   const isSignup = mode === 'signup';
   const pwScore = scorePassword(password);
 
@@ -131,64 +126,6 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     setNewPassword('');
     setErrors({});
     setFormError('');
-  }, []);
-
-  /* ── Lazy-load Google Identity Services once on mount ───────────────── */
-  useEffect(() => {
-    const finish = (user) => {
-      if (user) onAuthedRef.current?.(user);
-    };
-    const init = () => {
-      if (!window.google?.accounts?.id || !GOOGLE_CLIENT_ID) return;
-      try {
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: async (response) => {
-            setPending(true);
-            setFormError('');
-            try {
-              const user = await googleLogin(response.credential);
-              finish(user);
-            } catch (err) {
-              const msg = err?.message || 'google sign-in failed.';
-              toast(msg);
-              setFormError(msg);
-            } finally {
-              setPending(false);
-            }
-          },
-        });
-        googleReady.current = true;
-      } catch {
-        /* GIS present but misconfigured — leave googleReady false. */
-      }
-    };
-
-    if (window.google?.accounts?.id) {
-      init();
-      return;
-    }
-
-    let script = document.querySelector(`script[src="${GIS_SRC}"]`);
-    let injected = false;
-    if (!script) {
-      script = document.createElement('script');
-      script.src = GIS_SRC;
-      script.async = true;
-      script.defer = true;
-      injected = true;
-      document.head.appendChild(script);
-    }
-    const onLoad = () => init();
-    const onError = () => { /* never crash if the script fails to load */ };
-    script.addEventListener('load', onLoad);
-    script.addEventListener('error', onError);
-
-    return () => {
-      script.removeEventListener('load', onLoad);
-      script.removeEventListener('error', onError);
-      if (injected && script.parentNode) script.parentNode.removeChild(script);
-    };
   }, []);
 
   /* ── Validation (form step) ─────────────────────────────────────────── */
@@ -367,20 +304,16 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     }
   }, [otpCode, newPassword, pendingEmail, switchMode]);
 
-  /* ── Social handlers ────────────────────────────────────────────────── */
-  const handleApple = useCallback(() => { toast('coming soon.'); }, []);
-  const handleSpotify = useCallback(() => { toast('coming soon.'); }, []);
-  const handleGoogle = useCallback(() => {
-    if (!window.google?.accounts?.id || !googleReady.current) {
-      toast('google sign-in unavailable.');
-      return;
-    }
-    try {
-      window.google.accounts.id.prompt();
-    } catch {
-      toast('google sign-in unavailable.');
-    }
+  /* ── Social handlers — providers aren't live yet; a "coming soon" bubble
+        pops above the tapped button instead of starting an auth flow. ── */
+  const showSocialNote = useCallback((provider) => {
+    setSocialNote(provider);
+    clearTimeout(socialNoteTimer.current);
+    socialNoteTimer.current = setTimeout(() => setSocialNote(''), 3000);
   }, []);
+  const handleApple   = useCallback(() => showSocialNote('apple'),   [showSocialNote]);
+  const handleSpotify = useCallback(() => showSocialNote('spotify'), [showSocialNote]);
+  const handleGoogle  = useCallback(() => showSocialNote('google'),  [showSocialNote]);
 
   // Top-right back: within a sub-step return to the form; otherwise leave.
   const handleBack = useCallback(() => {
@@ -476,32 +409,42 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
                   </p>
                 </header>
 
+                {/* Social providers aren't live yet — tapping one pops a
+                    "coming soon" speech bubble above that button (role=status
+                    announces it without moving focus). The bubble suppresses
+                    that button's hover name-tooltip while visible. */}
                 <div className="social-row">
                   <button
                     type="button"
-                    className="social-btn social-btn--apple"
+                    className={`social-btn social-btn--apple ${socialNote === 'apple' ? 'social-btn--noted' : ''}`}
                     onClick={handleApple}
                     aria-label="Continue with Apple"
-                    data-label="Apple"
+                    aria-describedby={socialNote === 'apple' ? 'social-tip' : undefined}
+                    data-label="coming soon"
                   >
+                    {socialNote === 'apple' && <span id="social-tip" className="social-tip" role="status">coming soon</span>}
                     <AppleSvg />
                   </button>
                   <button
                     type="button"
-                    className="social-btn social-btn--spotify"
+                    className={`social-btn social-btn--spotify ${socialNote === 'spotify' ? 'social-btn--noted' : ''}`}
                     onClick={handleSpotify}
                     aria-label="Continue with Spotify"
-                    data-label="Spotify"
+                    aria-describedby={socialNote === 'spotify' ? 'social-tip' : undefined}
+                    data-label="coming soon"
                   >
+                    {socialNote === 'spotify' && <span id="social-tip" className="social-tip" role="status">coming soon</span>}
                     <SpotifySvg />
                   </button>
                   <button
                     type="button"
-                    className="social-btn social-btn--google"
+                    className={`social-btn social-btn--google ${socialNote === 'google' ? 'social-btn--noted' : ''}`}
                     onClick={handleGoogle}
                     aria-label="Continue with Google"
-                    data-label="Google"
+                    aria-describedby={socialNote === 'google' ? 'social-tip' : undefined}
+                    data-label="coming soon"
                   >
+                    {socialNote === 'google' && <span id="social-tip" className="social-tip" role="status">coming soon</span>}
                     <GoogleSvg />
                   </button>
                 </div>

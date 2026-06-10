@@ -11,6 +11,7 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { setMeta } from '../../lib/meta';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css'; // reuse the .aura-dpd detail layout
 
@@ -35,6 +36,17 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
   const scrollRef = useScrollMemory(`album:${albumId}`, { ready: status === 'ok' });
   const tracks = hit.data?.tracks ?? [];
   const kind = hit.data?.isMovie ? 'movie' : 'album';
+
+  // Name-based tab title + JSON-LD once the album loads. No cleanup — the
+  // App-level screen-title effect re-asserts on every navigation.
+  const albumName = hit.data?.name;
+  useEffect(() => {
+    if (!albumName) return;
+    setMeta({
+      title: `${albumName} · AURA`,
+      jsonLd: { '@type': 'MusicAlbum', name: albumName, url: window.location.href },
+    });
+  }, [albumName]);
   const playAll = () => {
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? `this ${kind}`).toLowerCase());
   };

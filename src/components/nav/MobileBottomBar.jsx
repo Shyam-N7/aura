@@ -43,7 +43,7 @@ export function MobileBottomBar({
     <div className="aura-mobile-bar">
       {track ? (
         <>
-          <button type="button" className="aura-mobile-bar__np" onClick={onOpenPlayer}>
+          <button type="button" className="aura-mobile-bar__np" data-tour="mnav-np" onClick={onOpenPlayer}>
             <span className="aura-mobile-bar__art">
               <AlbumArt track={track} size={36} radius={9999}/>
             </span>
@@ -65,6 +65,7 @@ export function MobileBottomBar({
         <>
           <button type="button"
             className="aura-mobile-bar__np aura-mobile-bar__np--empty"
+            data-tour="mnav-np"
             onClick={() => onNav('search')}>
             <span className="aura-mobile-bar__art aura-mobile-bar__art--empty" aria-hidden="true">
               <svg width="12" height="14" viewBox="0 0 12 14"><path d="M1 1 L11 7 L1 13 Z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
@@ -82,7 +83,7 @@ export function MobileBottomBar({
           if (it.talk) {
             return (
               <button key="talk" type="button" onClick={onTalk}
-                aria-label="talk"
+                aria-label="talk" data-tour="mnav-talk"
                 className="aura-mobile-bar__nav-item aura-mobile-bar__nav-item--talk">
                 {it.icon}
                 <span className="aura-mobile-bar__nav-label">talk</span>
@@ -91,7 +92,7 @@ export function MobileBottomBar({
           }
           const on = active === it.id || (it.id === 'home' && HOME_STACK.has(active));
           return (
-            <button key={it.id} type="button" onClick={() => onNav(it.id)}
+            <button key={it.id} type="button" onClick={() => onNav(it.id)} data-tour={`mnav-${it.id}`}
               className={`aura-mobile-bar__nav-item ${on ? 'aura-mobile-bar__nav-item--on' : ''}`}>
               {it.icon}
               <span className="aura-mobile-bar__nav-label">{it.label}</span>

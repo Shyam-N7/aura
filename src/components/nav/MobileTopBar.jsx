@@ -102,6 +102,7 @@ export function MobileTopBar({
       <div ref={barRef} className="aura-mobile-top__bar-content">
         {onOpenSearch ? (
           <button type="button" onClick={onOpenSearch} aria-label="Search"
+            data-tour="mtop-search"
             className="aura-mobile-top__brand aura-mobile-top__brand--tap">
             {brandInner}
           </button>

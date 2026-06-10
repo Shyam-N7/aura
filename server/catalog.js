@@ -274,10 +274,14 @@ function mapTopHit(e) {
   if (!e?.id || !e?.type) return null;
   return { type: e.type, id: e.id, name: decodeEntities(e.title ?? ''), image: bumpImg(e.image) };
 }
+function mapArtistHit(e) {
+  if (!e?.id) return null;
+  return { id: e.id, name: decodeEntities(e.title ?? ''), image: bumpImg(e.image) };
+}
 
 export async function searchSuggest(query) {
   const q = (query ?? '').trim();
-  if (!q) return { top: null, albums: [], playlists: [] };
+  if (!q) return { top: null, artists: [], albums: [], playlists: [] };
   const key = q.toLowerCase();
   const cached = suggestCache.get(key);
   if (cached) return cached;
@@ -292,7 +296,7 @@ export async function searchSuggest(query) {
 
   // Best-effort: a suggest failure must not sink the whole search (songs still
   // come from searchSongs). Return empty buckets instead of throwing.
-  let out = { top: null, albums: [], playlists: [] };
+  let out = { top: null, artists: [], albums: [], playlists: [] };
   try {
     const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
     if (res.ok) {
@@ -300,6 +304,7 @@ export async function searchSuggest(query) {
       const data = (cat) => (body?.[cat]?.data ?? []);
       out = {
         top:       mapTopHit(data('topquery')[0]),
+        artists:   data('artists').map(mapArtistHit).filter(Boolean),
         albums:    data('albums').map(mapAlbumHit).filter(Boolean).slice(0, 12),
         playlists: data('playlists').map(mapPlaylistHit).filter(Boolean).slice(0, 12),
       };

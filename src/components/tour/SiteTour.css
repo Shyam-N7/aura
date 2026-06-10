@@ -1,0 +1,126 @@
+/* Site tour — spotlight + coach card. The scrim IS the spotlight's box-shadow
+   (a huge spread around the cutout), so the highlighted control stays at full
+   brightness while everything else dims. z-52/53 sits above the shortcuts
+   overlay (50/51). */
+
+/* Invisible click-catcher: a tap anywhere outside the card advances the tour
+   (the gentle coach-mark convention). */
+.aura-tour__blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 52;
+  background: transparent;
+}
+
+.aura-tour__spot {
+  position: fixed;
+  z-index: 52;
+  pointer-events: none;
+  border-radius: 14px;
+  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 0.40);
+  transition:
+    top 420ms cubic-bezier(.2, .7, .2, 1),
+    left 420ms cubic-bezier(.2, .7, .2, 1),
+    width 420ms cubic-bezier(.2, .7, .2, 1),
+    height 420ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-tour__spot.is-on {
+  outline: 1.5px solid color-mix(in srgb, var(--color-accent), transparent 35%);
+  outline-offset: 0;
+}
+.theme-midnight .aura-tour__spot { box-shadow: 0 0 0 200vmax rgb(0 0 0 / 0.55); }
+
+.aura-tour__card {
+  position: fixed;
+  z-index: 53;
+  width: min(320px, calc(100vw - 32px));
+  padding: 18px 18px 14px;
+  border-radius: 18px;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 84%);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.28), 0 2px 8px rgb(0 0 0 / 0.10);
+  color: var(--color-ink);
+  outline: none;
+  transition: top 420ms cubic-bezier(.2, .7, .2, 1), left 420ms cubic-bezier(.2, .7, .2, 1);
+  animation: aura-tour-card-in 300ms cubic-bezier(.2, .7, .2, 1) both;
+}
+.aura-tour__card.is-measuring { visibility: hidden; }
+
+@keyframes aura-tour-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.aura-tour__title {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.aura-tour__body {
+  margin: 8px 0 0;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  text-wrap: pretty;
+}
+
+.aura-tour__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.aura-tour__dots { display: flex; gap: 5px; }
+.aura-tour__dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-ink), transparent 80%);
+  transition: background 200ms ease, transform 200ms ease;
+}
+.aura-tour__dots span.is-on {
+  background: var(--color-accent);
+  transform: scale(1.25);
+}
+
+.aura-tour__btns { display: flex; gap: 8px; }
+.aura-tour__btn {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 82%);
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+.aura-tour__btn:hover { color: var(--color-ink); border-color: color-mix(in srgb, var(--color-ink), transparent 60%); }
+.aura-tour__btn--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+.aura-tour__btn--primary:hover { color: var(--color-bg); filter: brightness(1.06); }
+
+.aura-tour__skip {
+  display: block;
+  margin: 10px auto 0;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-ink-faint);
+  cursor: pointer;
+}
+.aura-tour__skip:hover { color: var(--color-ink-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-tour__spot,
+  .aura-tour__card { transition: none; animation-duration: 1ms; }
+}

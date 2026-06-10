@@ -67,7 +67,7 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: songsRes.reason?.message ?? 'search failed' });
   }
   let songs = songsRes.value;
-  const sug = sugRes.status === 'fulfilled' ? sugRes.value : { top: null, albums: [], playlists: [] };
+  const sug = sugRes.status === 'fulfilled' ? sugRes.value : { top: null, artists: [], albums: [], playlists: [] };
   const userPlaylists = plRes.status === 'fulfilled' ? plRes.value : [];
 
   // Language preference: rank albums; for an album/movie query the hero is the
@@ -82,7 +82,20 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
     albums = albums.slice(1);
     songs = rankByLang(songs, userLangs);
   }
-  res.json({ top, songs, albums, playlists: sug.playlists, userPlaylists });
+
+  // Artists: only when the best match ISN'T already an artist (the hero covers
+  // that case — a separate row would be redundant), and only names that really
+  // contain the query (kills the old fuzzy-junk row: "bali" surfaces Yogeeta
+  // Bali / Bali Brahmbhatt, not loosely-related names). Cap at 5.
+  let artists = [];
+  if (top?.type !== 'artist' && (sug.artists?.length ?? 0) > 0) {
+    const needle = q.toLowerCase();
+    artists = needle.length >= 2
+      ? sug.artists.filter(a => (a.name ?? '').toLowerCase().includes(needle)).slice(0, 5)
+      : [];
+  }
+
+  res.json({ top, songs, artists, albums, playlists: sug.playlists, userPlaylists });
   if (songs.length) cacheTracks(songs);
 });
 

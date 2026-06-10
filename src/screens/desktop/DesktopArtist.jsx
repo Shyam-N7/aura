@@ -12,6 +12,7 @@ import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { setMeta } from '../../lib/meta';
 import '../PlaylistsScreen.css';
 import './DesktopPlaylistDetail.css';
 import './DesktopArtist.css';
@@ -40,6 +41,16 @@ export function DesktopArtist({
   const tracks = artist?.topTracks ?? [];
   const albums = artist?.topAlbums ?? [];
   const similar = artist?.similarArtists ?? [];
+
+  // Name-based tab title + JSON-LD once the artist loads. No cleanup — the
+  // App-level screen-title effect re-asserts on every navigation.
+  useEffect(() => {
+    if (!artist?.name) return;
+    setMeta({
+      title: `${artist.name} · AURA`,
+      jsonLd: { '@type': 'MusicGroup', name: artist.name, url: window.location.href },
+    });
+  }, [artist?.name]);
 
   const playTop = () => {
     if (tracks.length) onPlaySequence?.(tracks, 0, `${artist.name.toLowerCase()} · top tracks`);

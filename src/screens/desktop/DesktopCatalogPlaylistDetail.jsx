@@ -11,6 +11,7 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { setMeta } from '../../lib/meta';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
@@ -34,6 +35,18 @@ export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequen
   }, [playlistId]);
 
   const tracks = hit.data?.tracks ?? [];
+
+  // Name-based tab title + JSON-LD once the playlist loads. No cleanup — the
+  // App-level screen-title effect re-asserts on every navigation.
+  const playlistName = hit.data?.name;
+  useEffect(() => {
+    if (!playlistName) return;
+    setMeta({
+      title: `${playlistName} · AURA`,
+      jsonLd: { '@type': 'MusicPlaylist', name: playlistName, url: window.location.href },
+    });
+  }, [playlistName]);
+
   const playAll = () => {
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? 'this playlist').toLowerCase());
   };

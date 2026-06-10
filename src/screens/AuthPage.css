@@ -323,7 +323,8 @@
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(42,34,28,0.12);
   cursor: pointer;
-  overflow: hidden;
+  /* No overflow:hidden — it clipped the tooltips/bubble that sit above the
+     button. The shimmer ::before clips itself with border-radius instead. */
   isolation: isolate;
   color: var(--color-ink);
   transition: transform 280ms cubic-bezier(.22,1,.36,1),
@@ -336,17 +337,21 @@
 }
 
 /* Shimmer sweep on hover — dark in light theme so it reads against the
-   light glass; flipped to white in midnight via the .theme-midnight rule. */
+   light glass; flipped to white in midnight via the .theme-midnight rule.
+   The gradient slides via background-position inside a self-clipped circle,
+   so the button needs no overflow:hidden. */
 .aura-auth-page .social-btn::before {
   content: '';
   position: absolute; inset: 0;
+  border-radius: 50%;
   background: linear-gradient(120deg, transparent 30%, rgba(42,34,28,0.06) 50%, transparent 70%);
-  transform: translateX(-100%);
-  transition: transform 700ms cubic-bezier(.22,1,.36,1);
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  transition: background-position 700ms cubic-bezier(.22,1,.36,1);
   pointer-events: none;
   z-index: 1;
 }
-.aura-auth-page .social-btn:hover::before { transform: translateX(100%); }
+.aura-auth-page .social-btn:hover::before { background-position: 0% 0; }
 
 /* Hover lift + active press */
 .aura-auth-page .social-btn:hover  { transform: translateY(-2px) scale(1.06); }
@@ -380,6 +385,44 @@
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* While the "coming soon" bubble is up, suppress that button's name tooltip
+   (they'd overlap in the same spot). */
+.aura-auth-page .social-btn--noted::after { opacity: 0 !important; }
+
+/* "Coming soon" speech bubble — pops above the tapped provider button, arrow
+   pointing down at it. Accent-filled so it reads as a notice, not a label. */
+.aura-auth-page .social-tip {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 10px;
+  padding: 7px 12px;
+  z-index: 4;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+  transform-origin: 50% 100%;
+  animation: aura-social-tip-in 260ms cubic-bezier(.2,.7,.2,1) both;
+}
+.aura-auth-page .social-tip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--accent);
+  border-bottom-width: 0;
+}
+@keyframes aura-social-tip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.8); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
 
 /* Brand-tinted borders + hover glows. Apple is "monochrome" — uses ink in
    light theme and white in midnight, theme-aware via the override below.
@@ -409,7 +452,9 @@
   color: #fff;
 }
 .theme-midnight .aura-auth-page .social-btn::before {
-  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10) 50%, transparent 70%);
+  /* background-image (not the shorthand) so the base rule's background-size/
+     -position — which drive the sweep — survive. */
+  background-image: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10) 50%, transparent 70%);
 }
 .theme-midnight .aura-auth-page .social-btn--apple { border-color: rgba(255,255,255,0.24); }
 .theme-midnight .aura-auth-page .social-btn--apple:hover {

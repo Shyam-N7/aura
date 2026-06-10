@@ -2,10 +2,11 @@ import { fetchAuthed } from '../lib/auth';
 // Frontend client for /api/catalog/*. Each call accepts an AbortSignal so
 // stale in-flight requests can be cancelled when the user keeps typing.
 
-// Categorized search: best match (top) + songs / albums(movies) / catalog
-// playlists / the user's own playlists. `langs` (the user's languages, in
-// priority order) drives "my-languages-first" ranking. Each list is empty when
-// nothing matched so callers can hide the section.
+// Categorized search: best match (top) + songs / artists / albums(movies) /
+// catalog playlists / the user's own playlists. `langs` (the user's languages,
+// in priority order) drives "my-languages-first" ranking. Each list is empty
+// when nothing matched so callers can hide the section. Artists arrive only
+// when the top result isn't already an artist (server-gated).
 export async function searchCatalog(query, { lang, langs, limit = 20, signal } = {}) {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (lang) params.set('lang', lang);
@@ -19,6 +20,7 @@ export async function searchCatalog(query, { lang, langs, limit = 20, signal } =
   return {
     top:           d.top ?? null,
     songs:         d.songs ?? [],
+    artists:       d.artists ?? [],
     albums:        d.albums ?? [],
     playlists:     d.playlists ?? [],
     userPlaylists: d.userPlaylists ?? [],

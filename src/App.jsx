@@ -54,6 +54,8 @@ const DesktopAlbumDetail        = lazyNamed(() => import('./screens/desktop/Desk
 const DesktopLanguageHub        = lazyNamed(() => import('./screens/desktop/DesktopLanguageHub'),        'DesktopLanguageHub');
 const DesktopArtist             = lazyNamed(() => import('./screens/desktop/DesktopArtist'),             'DesktopArtist');
 const DesktopLiked              = lazyNamed(() => import('./screens/desktop/DesktopLiked'),              'DesktopLiked');
+// First-run tour — loaded only the one time it actually shows.
+const SiteTour                  = lazyNamed(() => import('./components/tour/SiteTour'),                  'SiteTour');
 
 // Suspense fallback labels — shown while a screen's lazy chunk is fetching.
 // Each entry mirrors the post-hydration loader copy in the destination screen
@@ -83,13 +85,15 @@ import { SleepTimerSheet } from './components/SleepTimerSheet';
 import { SleepTimerOrb } from './components/SleepTimerOrb';
 import { TrackContextMenu } from './components/TrackContextMenu';
 import { hasOnboarded } from './lib/onboarding';
-import { useHashRoute } from './hooks/useHashRoute';
-import { parseHash, hashIsActive } from './lib/routes';
+import { hasSeenTour } from './lib/tour';
+import { usePathRoute } from './hooks/usePathRoute';
+import { parsePath, pathIsActive } from './lib/routes';
 import { loadQueue, saveQueueSoon } from './lib/persistentQueue';
 import { savePosition, flush as flushPosition, loadPosition, clearPosition } from './lib/persistPosition';
 import { getTrack } from './api/catalog';
 import { getRelated } from './api/related';
-import { titleKey } from './utils/title';
+import { titleKey, cleanTitle } from './utils/title';
+import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
@@ -156,41 +160,44 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const shouldSkipSensing = t.skipSensing || isDesktop;
   const isOnboarded = hasOnboarded();
   // If the user lands on a deep link, parse it so route params survive even
-  // when the sensing/onboarding gate redirects them first.
-  const initialFromHash = hashIsActive() ? parseHash(window.location.hash) : null;
-  // Snapshot whether persisted queue exists — `#/player` cold-start without a
+  // when the sensing/onboarding gate redirects them first. (Legacy `#/...`
+  // URLs are rewritten to paths at boot in main.jsx, before this runs.)
+  const initialFromPath = pathIsActive() ? parsePath(window.location.pathname) : null;
+  // Snapshot whether persisted queue exists — `/player` cold-start without a
   // queue renders blank, so fall back to home in that case (mirrors apply()).
   const initialQueue = loadQueue();
   const hasPersistedQueue = !!initialQueue?.tracks?.length;
   const [screen, setScreen]         = useState(() => {
     // Gates take precedence over deep links: a first-run user can't bypass
-    // sensing/onboarding by typing `#/artist/123` into the URL bar.
+    // sensing/onboarding by typing `/artist/123` into the URL bar.
     if (!shouldSkipSensing) return 'sensing';
     if (!isOnboarded)       return 'onboarding';
-    if (!initialFromHash)   return 'home';
-    if (initialFromHash.screen === 'player' && !hasPersistedQueue) return 'home';
-    // Once onboarded, a stale `#/onboarding` deep link should drop into home
+    if (!initialFromPath)   return 'home';
+    if (initialFromPath.screen === 'player' && !hasPersistedQueue) return 'home';
+    // Once onboarded, a stale `/onboarding` deep link should drop into home
     // instead of re-marking the user onboarded (harmless but confusing).
-    if (initialFromHash.screen === 'onboarding') return 'home';
-    return initialFromHash.screen;
+    if (initialFromPath.screen === 'onboarding') return 'home';
+    return initialFromPath.screen;
   });
   const [overlay, setOverlay]       = useState(null);
   const [talkOpen, setTalkOpen]     = useState(false);
+  // First-run site tour — auto-starts once per device (see effect below).
+  const [tourActive, setTourActive] = useState(false);
   // Unified playback queue. Source 'tonight\'s set' wraps on end; everything
   // else stops at end. Insertions/reorders mutate `tracks` and adjust `idx`.
   // Cold-start: hydrate from localStorage if present so a reload picks up
   // where the user left off. Stale stream URLs get refetched below.
   const [queue, setQueue] = useState(() => initialQueue ?? { tracks: [], idx: 0, source: "tonight's set" });
-  const [detailPlaylistId, setDetailPlaylistId] = useState(initialFromHash?.detailPlaylistId ?? null);
-  const [catalogPlaylistId,  setCatalogPlaylistId]  = useState(initialFromHash?.catalogPlaylistId  ?? null);
-  const [albumId,          setAlbumId]          = useState(initialFromHash?.albumId          ?? null);
-  const [hubLang,          setHubLang]          = useState(initialFromHash?.hubLang          ?? null);
+  const [detailPlaylistId, setDetailPlaylistId] = useState(initialFromPath?.detailPlaylistId ?? null);
+  const [catalogPlaylistId,  setCatalogPlaylistId]  = useState(initialFromPath?.catalogPlaylistId  ?? null);
+  const [albumId,          setAlbumId]          = useState(initialFromPath?.albumId          ?? null);
+  const [hubLang,          setHubLang]          = useState(initialFromPath?.hubLang          ?? null);
   // Track which screen the detail/hub views were opened from, so BACK goes
   // back to the right place (home vs playlists vs library vs language-hub).
   const [detailReturn,      setDetailReturn]     = useState('playlists');
   const [catalogReturn,       setCatalogReturn]      = useState('home');
   const [albumReturn,       setAlbumReturn]      = useState('home');
-  const [artistKey,         setArtistKey]        = useState(initialFromHash?.artistKey ?? null);
+  const [artistKey,         setArtistKey]        = useState(initialFromPath?.artistKey ?? null);
   const [artistReturn,      setArtistReturn]     = useState('home');
   // Same back-stack pattern for player + queue so tapping back from the
   // queue (which can be opened from the player) returns to the player
@@ -227,16 +234,16 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const featured = useFeaturedTracks({ limit: 24 });
   const pool     = featured.tracks;
 
-  // Hash routing — sync `location.hash` with screen + per-screen params both
-  // ways. Cold-land on `#/artist/abc` reads from initialFromHash above; later
-  // mutations get mirrored back out via the effect inside useHashRoute.
-  useHashRoute({
+  // Path routing — sync `location.pathname` with screen + per-screen params
+  // both ways. Cold-land on `/artist/abc` reads from initialFromPath above;
+  // later mutations get mirrored back out via the effect inside usePathRoute.
+  usePathRoute({
     enabled: true,
     current: { screen, artistKey, detailPlaylistId, catalogPlaylistId, albumId, hubLang },
     apply: (p) => {
-      // #/player with no track yet → fall back to home so we don't render a
+      // /player with no track yet → fall back to home so we don't render a
       // blank screen. The user can navigate to /player once playback starts.
-      // #/onboarding once onboarded → home (mirrors cold-start gate above).
+      // /onboarding once onboarded → home (mirrors cold-start gate above).
       let target = p.screen;
       if (target === 'player' && !queue.tracks.length) target = 'home';
       if (target === 'onboarding' && hasOnboarded()) target = 'home';
@@ -259,6 +266,55 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const track      = viewTracks[viewIdx] ?? null;
   const next       = viewTracks[viewIdx + 1]
                   ?? (isFeatured && viewTracks.length ? viewTracks[0] : null);
+
+  // Per-screen document titles (tab/history UX; becomes real SEO when guest
+  // mode ships). Entity screens (artist/album/playlist) overwrite with their
+  // fetched name once it lands — this effect re-asserts on every screen change,
+  // so navigating away always restores the right title.
+  useEffect(() => {
+    const DEFAULT = 'AURA — your contemplative AI DJ';
+    const MAP = {
+      home: DEFAULT,
+      search: 'search · AURA',
+      library: 'library · AURA',
+      liked: 'liked · AURA',
+      playlists: 'playlists · AURA',
+      'playlist-detail': 'playlist · AURA',
+      'catalog-playlist-detail': 'playlist · AURA',
+      'album-detail': 'album · AURA',
+      artist: 'artist · AURA',
+      journal: 'journal · AURA',
+      dna: 'sonic dna · AURA',
+      bridges: 'mood bridges · AURA',
+      talk: 'ask aura · AURA',
+      queue: 'queue · AURA',
+      onboarding: 'welcome · AURA',
+    };
+    let title = MAP[screen] ?? DEFAULT;
+    if (screen === 'player') {
+      title = track ? `${cleanTitle(track.title)} — ${track.artist} · AURA` : 'player · AURA';
+    } else if (screen === 'language-hub' && hubLang) {
+      title = `${hubLang} · AURA`;
+    }
+    setMeta({ title });
+  }, [screen, track, hubLang]);
+
+  // Auto-start the site tour: once per device, on a settled home screen, for
+  // anyone onboarded who hasn't seen it (covers brand-new users right after
+  // onboarding AND existing users who predate the tour — each exactly once;
+  // every tour exit sets the flag, which survives logout like aura.theme).
+  // Tablet-portrait is skipped this round — its TopNavStrip chrome has no
+  // tour anchors yet. The 900ms delay lets the home screen-in animation land;
+  // if the user navigates away first, the timer clears and re-arms on the
+  // next home visit.
+  useEffect(() => {
+    if (tourActive) return undefined;
+    if (screen !== 'home' || overlay || talkOpen) return undefined;
+    if (isTabletPortrait) return undefined;
+    if (!hasOnboarded() || hasSeenTour()) return undefined;
+    const id = setTimeout(() => setTourActive(true), 900);
+    return () => clearTimeout(id);
+  }, [screen, overlay, talkOpen, isTabletPortrait, tourActive]);
 
   // Refs let event subscribers (player 'ended') read the latest state without
   // re-subscribing on every queue tick.
@@ -907,7 +963,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     // they've cleared the gate. `#/player` without a queue still falls back to
     // home so they don't see an empty player.
     const postOnboardDest = (() => {
-      const wanted = initialFromHash?.screen;
+      const wanted = initialFromPath?.screen;
       if (!wanted) return 'home';
       // Gate screens are not real destinations — if the URL still reads
       // `#/onboarding` or `#/sensing` (the hash mirror wrote it on first
@@ -1211,6 +1267,12 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         <ConfirmDialog/>
         <PromptDialog/>
         <ShortcutsOverlay/>
+        {tourActive && (
+          <Suspense fallback={null}>
+            <SiteTour surface={isMobile ? 'mobile' : 'desktop'} screen={screen}
+              onNav={onNav} onClose={() => setTourActive(false)}/>
+          </Suspense>
+        )}
         <SleepTimerSheet/>
         <SleepTimerOrb railCollapsed={railCollapsed} isDesktop={isDesktop}/>
         {isDesktop && <TrackContextMenu

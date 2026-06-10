@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useId } from 'react';
 import { useAuth, logout } from '../../lib/auth';
 import { confirm } from '../../lib/confirm';
+import { clearPostAuthPath } from '../../lib/routes';
 import './AccountMenu.css';
 
 // Account control for the nav chrome: an avatar (the user's initial) that opens
@@ -66,8 +67,11 @@ export function AccountMenu({ placement = 'down', collapsed = false }) {
     });
     if (!ok) return;
     logout();
+    // Land the signed-out view on '/' (synchronously, before AppRoot's stash
+    // effect runs — so the deep path the user was on is never re-stashed), and
+    // drop any pending post-auth redirect from an earlier bounce.
     try { window.history.pushState(null, '', '/'); } catch { /* ignore */ }
-    window.location.hash = '';
+    clearPostAuthPath();
   };
 
   return (

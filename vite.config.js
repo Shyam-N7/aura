@@ -21,7 +21,7 @@ export default defineConfig({
         theme_color: '#1a1814',
         background_color: '#1a1814',
         display: 'standalone',
-        start_url: '/#/',
+        start_url: '/',
         scope: '/',
         icons: [
           { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
@@ -32,6 +32,8 @@ export default defineConfig({
         // event POSTs must hit the network. Everything else falls into
         // sensible buckets per the V.7.0 plan.
         navigateFallback: '/index.html',
+        // An offline NAVIGATION to /api/... must fail, not serve the app shell.
+        navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
         runtimeCaching: [
           {
