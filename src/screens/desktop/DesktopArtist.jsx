@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
-import { getArtist, getAlbumTracks } from '../../api/artists';
+import { getArtist } from '../../api/artists';
 import { cleanTitle } from '../../utils/title';
 import { fmtTime } from '../../utils/fmtTime';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
@@ -16,7 +16,7 @@ import './DesktopPlaylistDetail.css';
 import './DesktopArtist.css';
 
 export function DesktopArtist({
-  artistKey, onClose, onPickLive, onPlaySequence, onPlayNext, onAddToQueue, onOpenArtist,
+  artistKey, onClose, onPickLive, onPlaySequence, onPlayNext, onAddToQueue, onOpenArtist, onOpenAlbum,
 }) {
   const [hit, setHit]       = useState({ data: null, error: null });
   const [menu, setMenu]     = useState(null);
@@ -47,16 +47,6 @@ export function DesktopArtist({
   const playNextItem = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
   const addToQueue  = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
   const addToList   = (t) => { setMenu(null); openAddToPlaylist(t); };
-
-  const openAlbum = async (album) => {
-    try {
-      const albumTracks = await getAlbumTracks(album.id);
-      if (!albumTracks.length) { toast('Album tracks unavailable.'); return; }
-      onPlaySequence?.(albumTracks, 0, album.name.toLowerCase());
-    } catch (err) {
-      toast(`Couldn’t load album — ${err.message}`);
-    }
-  };
 
   // Use `aura-dpd` classnames for the body so it inherits the existing
   // playlist-detail styling (hero pill, track rows, ⋯ menus). DesktopArtist.css
@@ -155,7 +145,7 @@ export function DesktopArtist({
             <SectionHeader title="Albums" sub={`${albums.length} ${albums.length === 1 ? 'release' : 'releases'}`} large/>
             <div className="aura-dar__albums">
               {albums.map(album => (
-                <button key={album.id} onClick={() => openAlbum(album)} className="aura-dar__album">
+                <button key={album.id} onClick={() => onOpenAlbum?.(album.id)} className="aura-dar__album">
                   {album.image
                     ? <img src={album.image} alt="" loading="lazy" className="aura-dar__album-cover"/>
                     : <span className="aura-dar__album-cover aura-dar__album-cover--fallback">

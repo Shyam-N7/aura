@@ -50,6 +50,7 @@ const DesktopTalk               = lazyNamed(() => import('./screens/desktop/Desk
 const DesktopQueue              = lazyNamed(() => import('./screens/desktop/DesktopQueue'),              'DesktopQueue');
 const DesktopPlaylistDetail     = lazyNamed(() => import('./screens/desktop/DesktopPlaylistDetail'),     'DesktopPlaylistDetail');
 const DesktopCatalogPlaylistDetail = lazyNamed(() => import('./screens/desktop/DesktopCatalogPlaylistDetail'),'DesktopCatalogPlaylistDetail');
+const DesktopAlbumDetail        = lazyNamed(() => import('./screens/desktop/DesktopAlbumDetail'),        'DesktopAlbumDetail');
 const DesktopLanguageHub        = lazyNamed(() => import('./screens/desktop/DesktopLanguageHub'),        'DesktopLanguageHub');
 const DesktopArtist             = lazyNamed(() => import('./screens/desktop/DesktopArtist'),             'DesktopArtist');
 const DesktopLiked              = lazyNamed(() => import('./screens/desktop/DesktopLiked'),              'DesktopLiked');
@@ -181,11 +182,13 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [queue, setQueue] = useState(() => initialQueue ?? { tracks: [], idx: 0, source: "tonight's set" });
   const [detailPlaylistId, setDetailPlaylistId] = useState(initialFromHash?.detailPlaylistId ?? null);
   const [catalogPlaylistId,  setCatalogPlaylistId]  = useState(initialFromHash?.catalogPlaylistId  ?? null);
+  const [albumId,          setAlbumId]          = useState(initialFromHash?.albumId          ?? null);
   const [hubLang,          setHubLang]          = useState(initialFromHash?.hubLang          ?? null);
   // Track which screen the detail/hub views were opened from, so BACK goes
   // back to the right place (home vs playlists vs library vs language-hub).
   const [detailReturn,      setDetailReturn]     = useState('playlists');
   const [catalogReturn,       setCatalogReturn]      = useState('home');
+  const [albumReturn,       setAlbumReturn]      = useState('home');
   const [artistKey,         setArtistKey]        = useState(initialFromHash?.artistKey ?? null);
   const [artistReturn,      setArtistReturn]     = useState('home');
   // Same back-stack pattern for player + queue so tapping back from the
@@ -228,7 +231,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // mutations get mirrored back out via the effect inside useHashRoute.
   useHashRoute({
     enabled: true,
-    current: { screen, artistKey, detailPlaylistId, catalogPlaylistId, hubLang },
+    current: { screen, artistKey, detailPlaylistId, catalogPlaylistId, albumId, hubLang },
     apply: (p) => {
       // #/player with no track yet → fall back to home so we don't render a
       // blank screen. The user can navigate to /player once playback starts.
@@ -240,6 +243,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       if (target === 'artist')                setArtistKey(p.artistKey ?? null);
       if (target === 'playlist-detail')       setDetailPlaylistId(p.detailPlaylistId ?? null);
       if (target === 'catalog-playlist-detail') setCatalogPlaylistId(p.catalogPlaylistId ?? null);
+      if (target === 'album-detail')          setAlbumId(p.albumId ?? null);
       if (target === 'language-hub')          setHubLang(p.hubLang ?? null);
     },
   });
@@ -925,6 +929,14 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     setScreen('artist');
   };
 
+  // Album / movie navigation — opens the detail screen, remembering where from.
+  const onOpenAlbum = (id) => {
+    if (!id) return;
+    setAlbumId(id);
+    setAlbumReturn(screen === 'album-detail' ? albumReturn : screen);
+    setScreen('album-detail');
+  };
+
   // Suspense fallback label mirrors what each screen's own loader says
   // once its chunk hydrates, so the user sees one continuous label across
   // the chunk-load → data-load handoff instead of two flickering ones.
@@ -1010,6 +1022,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             <DesktopSearch djName={t.djName} onClose={() => setScreen('home')} headerless={isMobile}
               onPickLive={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
+              onOpenArtist={onOpenArtist}
+              onOpenAlbum={onOpenAlbum}
+              onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('search'); setScreen('catalog-playlist-detail'); }}
               onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('search'); setScreen('playlist-detail'); }}/>
           </div>
         )}
@@ -1058,6 +1073,13 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
           </div>
         )}
+        {screen === 'album-detail' && albumId && (
+          <div key={`al-${albumId}`} className="absolute inset-0 animate-aura-screen-in">
+            <DesktopAlbumDetail albumId={albumId}
+              onClose={() => setScreen(albumReturn)} onPlaySequence={pickLiveSequence}
+              onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </div>
+        )}
         {screen === 'language-hub' && hubLang && (
           <div key={`hub-${hubLang}`} className="absolute inset-0 animate-aura-screen-in">
             <DesktopLanguageHub lang={hubLang}
@@ -1073,7 +1095,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onPlaySequence={pickLiveSequence}
               onPlayNext={enqueueNext}
               onAddToQueue={enqueueLast}
-              onOpenArtist={onOpenArtist}/>
+              onOpenArtist={onOpenArtist}
+              onOpenAlbum={onOpenAlbum}/>
           </div>
         )}
 
