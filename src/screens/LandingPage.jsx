@@ -928,7 +928,7 @@ function Footer({ onNavigateAuth }) {
       </div>
       <div className="footer-bottom">
         <span>&copy; 2026 AURA</span>
-        <span>made in lisbon + chennai</span>
+        <span>made with aura</span>
       </div>
     </footer>
   );
