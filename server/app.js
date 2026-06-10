@@ -1,6 +1,6 @@
 import express from 'express';
 import { pool } from './db.js';
-import { searchSongs } from './catalog.js';
+import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
 import { getFeatured } from './featured.js';
 import { getLyricsForTrack } from './lyrics.js';
@@ -16,7 +16,7 @@ import { getDiscoverHome } from './discover.js';
 import { getCatalogPlaylistDetail } from './catalog.js';
 import { getBridgeTracks } from './bridges.js';
 import { getRelatedTracks } from './related.js';
-import { getArtistDetails, getAlbumTracks } from './artists.js';
+import { getArtistDetails, getAlbumDetail } from './artists.js';
 import { generateTalk } from './prompts/talk.js';
 import { getCurrentMood, inferMood, inferIfStale } from './mood.js';
 import authRouter from './auth.js';
@@ -50,18 +50,40 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
   if (!q) return res.status(400).json({ error: 'missing query' });
   const lang = req.query.lang ? String(req.query.lang) : undefined;
   const limit = Number(req.query.limit) || 20;
-  const [tracksRes, plRes] = await Promise.allSettled([
+  // The user's languages, in priority order, for "my-languages-first" ranking.
+  const userLangs = req.query.langs
+    ? String(req.query.langs).split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    : [];
+  // Songs come from the rich song search; albums/movies/playlists + the best
+  // match from the suggest endpoint; user playlists from our DB. All in parallel
+  // — suggest + user playlists are supplementary, so only a failed song search
+  // surfaces as an error.
+  const [songsRes, sugRes, plRes] = await Promise.allSettled([
     searchSongs(q, { lang, limit }),
+    searchSuggest(q),
     req.userId ? searchPlaylists(req.userId, q, { limit: 5 }) : Promise.resolve([]),
   ]);
-  const results   = tracksRes.status === 'fulfilled' ? tracksRes.value : [];
-  const playlists = plRes.status     === 'fulfilled' ? plRes.value     : [];
-  const error     = tracksRes.status === 'rejected' && plRes.status === 'rejected'
-    ? tracksRes.reason?.message ?? 'search failed'
-    : null;
-  if (error) return res.status(500).json({ error });
-  res.json({ results, playlists });
-  if (results.length) cacheTracks(results);
+  if (songsRes.status === 'rejected') {
+    return res.status(500).json({ error: songsRes.reason?.message ?? 'search failed' });
+  }
+  let songs = songsRes.value;
+  const sug = sugRes.status === 'fulfilled' ? sugRes.value : { top: null, albums: [], playlists: [] };
+  const userPlaylists = plRes.status === 'fulfilled' ? plRes.value : [];
+
+  // Language preference: rank albums; for an album/movie query the hero is the
+  // language-preferred album (e.g. Kannada KGF), deduped out of the list, and
+  // its songs are ranked too. Intent-gated — ranking songs for a *song* query
+  // would promote a same-language near-match over the exact hit.
+  let albums = rankByLang(sug.albums, userLangs);
+  let top = sug.top;
+  if (top?.type === 'album' && albums.length) {
+    const a = albums[0];
+    top = { type: 'album', id: a.id, name: a.name, image: a.image, isMovie: a.isMovie };
+    albums = albums.slice(1);
+    songs = rankByLang(songs, userLangs);
+  }
+  res.json({ top, songs, albums, playlists: sug.playlists, userPlaylists });
+  if (songs.length) cacheTracks(songs);
 });
 
 app.get('/api/catalog/track/:id', async (req, res) => {
@@ -97,10 +119,10 @@ app.get('/api/artists/lookup', async (req, res) => {
   }
 });
 
-app.get('/api/albums/:id/tracks', async (req, res) => {
+app.get('/api/albums/:id', async (req, res) => {
   try {
-    const tracks = await getAlbumTracks(req.params.id);
-    res.json({ tracks });
+    const album = await getAlbumDetail(req.params.id);
+    res.json({ album });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

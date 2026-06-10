@@ -271,7 +271,10 @@ export async function getArtistDetails({ name, id, trackId } = {}) {
   return out;
 }
 
-export async function getAlbumTracks(albumId) {
+// Full album / movie detail: metadata + tracklist. Indian-cinema soundtracks are
+// modelled as albums upstream; `header_desc` carries the "Film"/"Album" wording,
+// from which we derive `isMovie` for the screen's eyebrow.
+export async function getAlbumDetail(albumId) {
   if (!albumId) {
     const err = new Error('missing album id');
     err.statusCode = 400;
@@ -307,13 +310,31 @@ export async function getAlbumTracks(albumId) {
     console.warn('[albums] json parse failed:', err.message);
     return null;
   });
-  if (!body || typeof body !== 'object') return [];
+  if (!body || typeof body !== 'object' || !body.id) {
+    const err = new Error('album not found');
+    err.statusCode = 404;
+    throw err;
+  }
 
+  const info = body.more_info ?? {};
   const tracks = (body?.songs ?? body?.list ?? [])
     .map(mapSong)
     .filter(t => t.id && t.streamUrl);
+  const desc = decodeEntities(body.header_desc ?? '');
+  const detail = {
+    id:         body.id,
+    name:       decodeEntities(body.title ?? body.name ?? ''),
+    image:      pickImageUrl(body.image),
+    year:       body.year ?? null,
+    language:   body.language ?? null,
+    artist:     decodeEntities(body.subtitle ?? info.artistMap?.primary_artists?.[0]?.name ?? ''),
+    subtitle:   desc,
+    isMovie:    /\bfilm\b/i.test(desc),
+    trackCount: tracks.length,
+    tracks,
+  };
 
-  albumCache.set(albumId, tracks);
+  albumCache.set(albumId, detail);
   if (tracks.length) cacheTracks(tracks);
-  return tracks;
+  return detail;
 }

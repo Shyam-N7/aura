@@ -45,6 +45,7 @@ export const CATALOG_M_RECO     = required('CATALOG_M_RECO');
 export const CATALOG_M_LYRICS   = required('CATALOG_M_LYRICS');
 export const CATALOG_M_ARTIST   = required('CATALOG_M_ARTIST');
 export const CATALOG_M_ALBUM    = required('CATALOG_M_ALBUM');
+export const CATALOG_M_SUGGEST  = required('CATALOG_M_SUGGEST');   // autocomplete.get — multi-entity search
 
 // ── Synced-lyrics provider ──
 export const LYRICS_API_BASE   = required('LYRICS_API_BASE');

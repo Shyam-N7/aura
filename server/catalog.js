@@ -8,7 +8,7 @@ import {
   CATALOG_API_BASE, CATALOG_MEDIA_KEY, CATALOG_BITRATE, CATALOG_USER_AGENT,
   CATALOG_CTX, CATALOG_CTX_HOME, CATALOG_API_VERSION,
   CATALOG_AUDIO_SRC_QUALITY, CATALOG_IMG_SRC_SIZE, CATALOG_IMG_DEST_SIZE,
-  CATALOG_M_SEARCH, CATALOG_M_SONG, CATALOG_M_HOME, CATALOG_M_PLAYLIST,
+  CATALOG_M_SEARCH, CATALOG_M_SONG, CATALOG_M_HOME, CATALOG_M_PLAYLIST, CATALOG_M_SUGGEST,
 } from './config.js';
 
 const HTML_ENTITIES = { amp: '&', quot: '"', '#039': "'", apos: "'", lt: '<', gt: '>' };
@@ -221,4 +221,106 @@ export async function searchSongs(query, { limit = 20, lang } = {}) {
     results = results.filter(r => (r.language ?? '').toLowerCase() === want);
   }
   return dedupeSongs(results).slice(0, limit);
+}
+
+// ── Multi-entity search (autocomplete) ───────────────────────────────────────
+// `search.getResults` above only returns songs. The provider's autocomplete
+// endpoint additionally returns the best match + artist / album / playlist
+// buckets, which power the categorized search results. Albums carry an
+// `is_movie` flag (Indian-cinema soundtracks), surfaced as `isMovie`.
+
+// Tiny LRU — suggest is hit on every debounced keystroke; cache parsed buckets.
+function makeLru(max = 80) {
+  const c = new Map();
+  return {
+    get(k) { if (!c.has(k)) return null; const v = c.get(k); c.delete(k); c.set(k, v); return v; },
+    set(k, v) { c.set(k, v); if (c.size > max) c.delete(c.keys().next().value); },
+  };
+}
+const suggestCache = makeLru(80);
+
+// Bump any CDN image to the larger size (artist thumbs come back 50x50, albums
+// 150x150) so the tiles stay crisp on retina.
+function bumpImg(url) {
+  return url ? url.replace(/\d+x\d+(?=\.\w+$)/, CATALOG_IMG_DEST_SIZE) : null;
+}
+
+function mapAlbumHit(e) {
+  if (!e?.id) return null;
+  const mi = e.more_info ?? {};
+  return {
+    id:       e.id,
+    name:     decodeEntities(e.title ?? ''),
+    image:    bumpImg(e.image),
+    year:     mi.year ?? null,
+    language: mi.language ?? null,
+    isMovie:  String(mi.is_movie) === '1' || mi.is_movie === true,
+    subtitle: decodeEntities(e.description ?? mi.music ?? ''),
+  };
+}
+function mapPlaylistHit(e) {
+  if (!e?.id) return null;
+  // The provider's playlist `subtitle`/`description` is its own editorial brand
+  // ("<provider>", "<provider> Editor"). AURA is standalone, so we surface our
+  // own brand as the curator instead.
+  return {
+    id:       e.id,
+    name:     decodeEntities(e.title ?? ''),
+    image:    bumpImg(e.image),
+    subtitle: 'AURA',
+  };
+}
+function mapTopHit(e) {
+  if (!e?.id || !e?.type) return null;
+  return { type: e.type, id: e.id, name: decodeEntities(e.title ?? ''), image: bumpImg(e.image) };
+}
+
+export async function searchSuggest(query) {
+  const q = (query ?? '').trim();
+  if (!q) return { top: null, albums: [], playlists: [] };
+  const key = q.toLowerCase();
+  const cached = suggestCache.get(key);
+  if (cached) return cached;
+
+  const url = new URL(CATALOG_API_BASE);
+  url.searchParams.set('__call',      CATALOG_M_SUGGEST);
+  url.searchParams.set('_format',     'json');
+  url.searchParams.set('_marker',     '0');
+  url.searchParams.set('api_version', CATALOG_API_VERSION);
+  url.searchParams.set('ctx',         CATALOG_CTX);
+  url.searchParams.set('query',       q);
+
+  // Best-effort: a suggest failure must not sink the whole search (songs still
+  // come from searchSongs). Return empty buckets instead of throwing.
+  let out = { top: null, albums: [], playlists: [] };
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    if (res.ok) {
+      const body = await res.json();
+      const data = (cat) => (body?.[cat]?.data ?? []);
+      out = {
+        top:       mapTopHit(data('topquery')[0]),
+        albums:    data('albums').map(mapAlbumHit).filter(Boolean).slice(0, 12),
+        playlists: data('playlists').map(mapPlaylistHit).filter(Boolean).slice(0, 12),
+      };
+    }
+  } catch { /* leave empty buckets */ }
+  suggestCache.set(key, out);
+  return out;
+}
+
+// Stable language-preference sort: items whose `language` appears earlier in the
+// user's languages float up; ties keep the catalog's (popularity) order; a
+// language not in the list sinks to the end. Used so a movie/song surfaces in
+// the user's language first (e.g. KGF → Kannada for a Kannada-first user).
+export function rankByLang(items, userLangs) {
+  if (!userLangs?.length || !items?.length) return items ?? [];
+  const score = (x) => {
+    const i = userLangs.indexOf((x?.language ?? '').toLowerCase());
+    return i === -1 ? userLangs.length : i;
+  };
+  return items
+    .map((x, i) => ({ x, i, s: score(x) }))
+    .sort((a, b) => a.s - b.s || a.i - b.i)
+    .map(o => o.x);
 }
