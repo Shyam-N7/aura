@@ -10,6 +10,7 @@ import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
 import '../PlaylistsScreen.css';
 import './DesktopLibrary.css';
 
@@ -33,6 +34,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   }, []);
 
   const hasAnyData = summary && summary.tracksPlayed > 0;
+  const scrollRef = useScrollMemory('library', { ready: !loading });
 
   const playNow    = (t) => { setMenu(null); onPickLive?.(t); };
   const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
@@ -40,7 +42,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
 
   return (
-    <div className="aura-dlib" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dlib" onClick={() => setMenu(null)}>
       <div className="aura-dlib__header">
         <MonoLabel className="text-ink-faint" size={10}>
           library · your year of listening

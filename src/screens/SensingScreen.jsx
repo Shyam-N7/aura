@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { MonoLabel, BreathingDot } from '../components/primitives';
-import { formatLongStamp } from '../hooks/useNow';
+import { formatLongStamp, partOfDay } from '../hooks/useNow';
 import './SensingScreen.css';
 
 export function SensingScreen({ djName, mood, onReady }) {
-  // Snapshot the stamp at mount so the scripted intro doesn't rewind if the
-  // minute rolls over mid-animation.
-  const [stamp] = useState(() => formatLongStamp(new Date()));
+  // Snapshot the stamp + time-of-day at mount so the scripted intro doesn't
+  // rewind if the minute rolls over mid-animation, and the copy matches the
+  // actual hour (morning / afternoon / evening / night), not a fixed word.
+  const [intro] = useState(() => {
+    const d = new Date();
+    return { stamp: formatLongStamp(d), part: partOfDay(d) };
+  });
   const lines = [
-    { t: 200,  text: stamp },
+    { t: 200,  text: intro.stamp },
     { t: 1100, text: 'Reading the moment' },
-    { t: 2000, text: 'Matching tracks to your evening' },
+    { t: 2000, text: `Matching tracks to your ${intro.part}` },
     { t: 2900, text: 'Almost there' },
   ];
   const [shown, setShown] = useState(0);

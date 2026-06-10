@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MonoLabel, AuraMark } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
@@ -46,6 +46,20 @@ export function DesktopQueue({
 
   useEffect(() => { dragRef.current = drag; }, [drag]);
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+  // On open, bring the now-playing track into view near the top so it's visible
+  // and focused immediately instead of buried under the played history. Mount-
+  // only (before paint, no jump) — we don't re-snap on every auto-advance while
+  // the user is browsing the list.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const row = scroller?.querySelector(`[data-idx="${currentIdx}"]`);
+    if (!scroller || !row) return;
+    const sRect = scroller.getBoundingClientRect();
+    const rRect = row.getBoundingClientRect();
+    scroller.scrollTop = Math.max(0, scroller.scrollTop + (rRect.top - sRect.top) - 16);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const computeHover = (clientY, scrollTop, d) => {
     const scrollDelta = scrollTop - d.startScrollTop;

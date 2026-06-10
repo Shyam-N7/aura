@@ -1,6 +1,6 @@
 import { AlbumArt } from '../album/AlbumArt';
 import { cleanTitle } from '../../utils/title';
-import { VolumeSlider } from './VolumeSlider';
+import { EqualizerControl } from './Equalizer';
 import './BottomMiniBar.css';
 
 export function BottomMiniBar({ track, progress = 0, playing, player, onTogglePlay, onPrev, onNext, onOpenPlayer }) {
@@ -16,7 +16,7 @@ export function BottomMiniBar({ track, progress = 0, playing, player, onTogglePl
           <span className="aura-bottom-mini__artist">{(track.artist ?? '').toLowerCase()}</span>
         </span>
       </button>
-      {player && <VolumeSlider player={player}/>}
+      {player && <EqualizerControl player={player} compact/>}
       <div className="aura-bottom-mini__ctrls">
         <button type="button" aria-label="previous"
           onClick={onPrev}

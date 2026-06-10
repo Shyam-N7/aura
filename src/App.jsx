@@ -89,6 +89,7 @@ import { loadQueue, saveQueueSoon } from './lib/persistentQueue';
 import { savePosition, flush as flushPosition, loadPosition, clearPosition } from './lib/persistPosition';
 import { getTrack } from './api/catalog';
 import { getRelated } from './api/related';
+import { titleKey } from './utils/title';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
@@ -333,8 +334,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     setAutoNextDisplay(null);
     // Dedupe against the live queue so this path matches applyAutoRadioToQueue
     // (defensive — the prefetch clears on any queue change, so overlap is rare).
-    const have = new Set(cur.tracks.map(t => t.id));
-    const fresh = auto.candidates.filter(t => !have.has(t.id));
+    // By id AND by normalized title, so a cover / alt-credit of a song already
+    // in the queue (same title, different artist) never gets appended.
+    const haveIds    = new Set(cur.tracks.map(t => t.id));
+    const haveTitles = new Set(cur.tracks.map(t => titleKey(t.title)));
+    const fresh = auto.candidates.filter(t => !haveIds.has(t.id) && !haveTitles.has(titleKey(t.title)));
     if (!fresh.length) return null;
     const seedArtist = (seed.artist ?? '').toLowerCase();
     // Append the whole batch and play from `offset` within it (0 = the first
@@ -355,8 +359,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     if (q.source === "tonight's set") return q;       // wraps now
     const seedNow = q.tracks[q.idx];
     if (seedNow?.id !== seedId) return q;             // seed track changed
-    const have = new Set(q.tracks.map(t => t.id));    // dedupe vs current queue
-    const fresh = candidates.filter(t => !have.has(t.id));
+    // Dedupe vs current queue by id AND normalized title (drops covers of an
+    // already-queued song).
+    const haveIds    = new Set(q.tracks.map(t => t.id));
+    const haveTitles = new Set(q.tracks.map(t => titleKey(t.title)));
+    const fresh = candidates.filter(t => !haveIds.has(t.id) && !haveTitles.has(titleKey(t.title)));
     if (!fresh.length) return q;
     const seedArtist = (seedNow.artist ?? '').toLowerCase();
     return {
@@ -390,12 +397,21 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         if (ctl.signal.aborted) return;   // superseded by a newer prefetch
         autoFetchInFlightRef.current = false;
         setAutoNextLoading(false);
-        const seen = new Set(viewTracks.map(t => t.id));
-        // Keep the whole batch (deduped vs the queue) so the queue page can show
+        // Dedupe vs the queue by id AND normalized title (covers / alt-credits of
+        // an already-queued song share its title), and guard against repeats
+        // within the batch itself. Keep the whole batch so the queue page can show
         // the continuation as a list and one consume fills it in at once. Picks
         // come ONLY from the similar-tracks source — never random/featured
         // tracks — so the radio stays strictly on-vibe even at a dead end.
-        const picks = (list ?? []).filter(t => t?.id && !seen.has(t.id));
+        const seen = new Set(viewTracks.map(t => t.id));
+        const seenTitles = new Set(viewTracks.map(t => titleKey(t.title)));
+        const picks = [];
+        for (const t of (list ?? [])) {
+          const tk = titleKey(t?.title);
+          if (!t?.id || seen.has(t.id) || seenTitles.has(tk)) continue;
+          seen.add(t.id); seenTitles.add(tk);
+          picks.push(t);
+        }
         const pending = pendingApplyRef.current;
         if (!picks.length) {
           // No similar candidate left. Pause only if the user was *waiting* on

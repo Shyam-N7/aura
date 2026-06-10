@@ -11,6 +11,7 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
 import '../PlaylistsScreen.css';
 import './DesktopPlaylistDetail.css';
 import './DesktopArtist.css';
@@ -21,6 +22,7 @@ export function DesktopArtist({
   const [hit, setHit]       = useState({ data: null, error: null });
   const [menu, setMenu]     = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
+  const scrollRef = useScrollMemory(`artist:${artistKey?.id ?? artistKey?.name ?? ''}`, { ready: status === 'ok' });
 
   useEffect(() => {
     if (!artistKey) return;
@@ -52,7 +54,7 @@ export function DesktopArtist({
   // playlist-detail styling (hero pill, track rows, ⋯ menus). DesktopArtist.css
   // only adds the artist-specific bits (avatar, album grid, similar row).
   return (
-    <div className="aura-dpd aura-dar" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd aura-dar" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header aura-dar__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>

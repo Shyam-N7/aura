@@ -5,9 +5,12 @@
 import { pool } from './db.js';
 import { generateMoodInference } from './prompts/moodInfer.js';
 
-const STALE_EVENTS  = 30;            // re-infer once 30 new plays have arrived
-const STALE_AGE_MS  = 30 * 60 * 1000; // or after 30 minutes
-const WINDOW_SIZE   = 30;             // events fed to the LLM
+// Mood inference is an LLM call, so it's the expensive part of this feature.
+// Keep it to roughly a few-hours cadence rather than every handful of tracks:
+// re-infer only after a couple hours OR a large run of new plays.
+const STALE_EVENTS  = 120;                // re-infer once 120 new plays have arrived
+const STALE_AGE_MS  = 2 * 60 * 60 * 1000; // or after 2 hours
+const WINDOW_SIZE   = 30;                 // events fed to the LLM
 
 async function totalPlayCount(userId) {
   const { rows } = await pool.query(

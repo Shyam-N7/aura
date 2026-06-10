@@ -4,6 +4,8 @@
 //
 // Retained as the fallback factory option (createAudioPlayer({ kind: 'sim' }))
 // for tests with no audio fixture. HtmlAudioPlayer is the production default.
+import { EQ_FLAT, sanitizeGains } from './eqConfig.js';
+
 const TICK_MS = 600;
 const TICK_FRACTION = 0.6;
 
@@ -16,6 +18,7 @@ export class SimulatedAudioPlayer {
     this._listeners = new Map();
     this._volume = 1;
     this._muted = false;
+    this._eqGains = EQ_FLAT.slice();
   }
 
   setVolume(v) {
@@ -27,6 +30,17 @@ export class SimulatedAudioPlayer {
   getVolume() { return this._volume; }
   setMuted(b) { this._muted = !!b; this._emit('muted', this._muted); }
   isMuted() { return this._muted; }
+
+  // No real DSP in sim mode — just hold the values so the EQ UI has a consistent
+  // contract across both players.
+  setEqBand(i, db) {
+    const v = Math.max(-12, Math.min(12, Number(db)));
+    if (!Number.isFinite(v) || i < 0 || i >= this._eqGains.length) return;
+    this._eqGains[i] = v;
+    this._emit('eq', this._eqGains.slice());
+  }
+  setEqGains(arr) { this._eqGains = sanitizeGains(arr); this._emit('eq', this._eqGains.slice()); }
+  getEqGains() { return this._eqGains.slice(); }
 
   async load(track) {
     this._track = track;

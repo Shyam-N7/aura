@@ -12,7 +12,7 @@
  * @property {number} durationSec
  * @property {string} [src]                                 — present only when a real file exists
  *
- * @typedef {'progress' | 'ended' | 'play' | 'pause' | 'error' | 'volume' | 'muted'} AudioEvent
+ * @typedef {'progress' | 'ended' | 'play' | 'pause' | 'error' | 'volume' | 'muted' | 'eq'} AudioEvent
  *
  * @typedef {Object} AudioPlayer
  * @property {(track: Track) => Promise<void>} load          — preload + reset progress
@@ -25,6 +25,9 @@
  * @property {() => number} getVolume                        — 0..1
  * @property {(b: boolean) => void} setMuted                 — persisted via localStorage in HtmlAudioPlayer
  * @property {() => boolean} isMuted
+ * @property {(i: number, db: number) => void} setEqBand     — set one EQ band's gain (dB), persisted in HtmlAudioPlayer
+ * @property {(gains: number[]) => void} setEqGains          — set all EQ band gains (presets)
+ * @property {() => number[]} getEqGains                     — current EQ band gains (dB)
  * @property {(evt: AudioEvent, cb: Function) => () => void} on   — returns unsubscribe
  * @property {() => void} destroy
  */

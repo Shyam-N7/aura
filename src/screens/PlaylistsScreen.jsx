@@ -3,6 +3,7 @@ import { listPlaylists, createPlaylist, deletePlaylist } from '../api/playlists'
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
 import { AnchoredMenu } from '../components/AnchoredMenu';
+import { useScrollMemory } from '../hooks/useScrollMemory';
 import './PlaylistsScreen.css';
 
 export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
@@ -12,6 +13,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
   const [menu, setMenu]         = useState(null);
   const inputRef = useRef(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
+  const scrollRef = useScrollMemory('playlists', { ready: status === 'ok' });
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -64,7 +66,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
   const lists = hit.data ?? [];
 
   return (
-    <div className="absolute inset-0 bg-bg text-ink pt-5 overflow-auto pb-24 animate-aura-sheet-in"
+    <div ref={scrollRef} className="absolute inset-0 bg-bg text-ink pt-5 overflow-auto pb-24 animate-aura-sheet-in"
          onClick={() => setMenu(null)}>
       <div className="pt-1 px-7 flex justify-between items-center">
         <span className="aura-pl-eyebrow">Playlists</span>

@@ -10,6 +10,7 @@ import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css'; // reuse the .aura-dpd detail layout
 
@@ -31,6 +32,7 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
     return () => ctl.abort();
   }, [albumId]);
 
+  const scrollRef = useScrollMemory(`album:${albumId}`, { ready: status === 'ok' });
   const tracks = hit.data?.tracks ?? [];
   const kind = hit.data?.isMovie ? 'movie' : 'album';
   const playAll = () => {
@@ -47,7 +49,7 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
     : kind;
 
   return (
-    <div className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>

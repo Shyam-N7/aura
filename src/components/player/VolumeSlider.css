@@ -1,7 +1,5 @@
-/* Inline volume control — icon + horizontal range track. Two variants:
-   default (inline) renders the slider beside the icon; compact renders just
-   the icon and the slider lives in a click-anchored popover.
-   `aura-fadein` keyframe is defined globally in src/styles/animations.css. */
+/* Inline volume control — mute icon + horizontal range track, side by side.
+   Rendered inside the equalizer popup. */
 
 .aura-vol {
   display: inline-flex;
@@ -86,48 +84,3 @@
 }
 .aura-vol__slider--muted::-webkit-slider-thumb { background: var(--color-ink-faint); }
 .aura-vol__slider--muted::-moz-range-thumb     { background: var(--color-ink-faint); }
-
-/* Vertical variant — slider rotated 90° inside a fixed box, speaker toggle
-   below it. Reuses the horizontal track gradient: its left (0%) end maps to the
-   bottom after the rotation, so dragging up raises the volume. */
-.aura-vol--vertical {
-  flex-direction: column;
-  gap: 4px;
-}
-.aura-vol__slider-wrap {
-  position: relative;
-  width: 20px;
-  height: 116px;
-}
-.aura-vol--vertical .aura-vol__slider {
-  position: absolute;    /* out of flow — its 116px width can't push the control off-screen */
-  top: 50%;
-  left: 50%;
-  width: 116px;          /* the vertical length once rotated */
-  transform: translate(-50%, -50%) rotate(-90deg);
-}
-
-/* Popover variant — icon-only by default, slider appears on click as a
-   floating pill above the icon. */
-.aura-vol__popover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  /* Right-align the popover to the icon button so it opens *into* the parent
-     pill (FloatingMini's volume sits at the pill's right edge — centering on
-     the icon pushes half the popover past the pill / off-screen). The popover
-     extends leftward over the transport buttons, which the user isn't touching
-     while dragging volume. */
-  right: 0;
-  left: auto;
-  padding: 8px 12px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-line);
-  border-radius: 9999px;
-  box-shadow:
-    0 14px 28px rgb(0 0 0 / 0.18),
-    0 2px 6px rgb(0 0 0 / 0.06);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  z-index: 40;
-  animation: aura-fadein 160ms ease both;
-}

@@ -9,6 +9,14 @@ export function cleanTitle(title) {
     .trim();
 }
 
+// A dedup key for a track title: the cleaned name, lowercased. Used to collapse
+// a song with its cover / alternate-credit recordings (same title, different
+// artist) so auto-radio never queues "Marandhu Poche" twice or recommends a
+// song already in the queue. Mirrors the server's normalizeTitle in related.js.
+export function titleKey(title) {
+  return (cleanTitle(title) ?? '').toLowerCase();
+}
+
 // LRCLib's romanized lyrics carry stray capitals (kaNNumuchi, iDeeni) and
 // parenthetical backup-vocal annotations that fight AURA's lowercase serif
 // voice. Normalize for display only — the raw lyric stays in data so the

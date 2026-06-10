@@ -11,6 +11,7 @@ import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
@@ -18,6 +19,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   const [hit, setHit]     = useState({ data: null, error: null });
   const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
+  const scrollRef = useScrollMemory(`playlist:${playlistId}`, { ready: status === 'ok' });
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -65,7 +67,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   };
 
   return (
-    <div className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>

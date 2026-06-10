@@ -16,10 +16,15 @@ export function HeartButton({ trackId, size = 22, className = '' }) {
     if (!trackId) return;
     const nextLiked = !liked;
     setBurst(b => ({ id: b.id + 1, willLike: nextLiked }));
+    // Like/unlike are optimistic (the store flips instantly), so toast NOW rather
+    // than after the network round-trip — otherwise the confirmation lags ~1s
+    // behind the heart filling in. Only surface a toast change if it fails.
     if (liked) {
-      unlike(trackId).then(() => toast('removed from likes.')).catch(() => {});
+      toast('removed from likes.');
+      unlike(trackId).catch(() => toast('couldn’t remove — try again.'));
     } else {
-      like(trackId).then(() => toast('liked.')).catch(() => {});
+      toast('liked.');
+      like(trackId).catch(() => toast('couldn’t like — try again.'));
     }
   };
 

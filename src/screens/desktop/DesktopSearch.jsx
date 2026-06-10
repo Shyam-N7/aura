@@ -11,6 +11,7 @@ import { subscribeSearchFocus, requestSearchFocus } from '../../lib/searchFocus'
 import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
 import { getSearchResult, setSearchResult, getSearchLang, setSearchLang } from '../../lib/searchCache';
 import { getSeedSignals } from '../../lib/onboarding';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
@@ -80,6 +81,11 @@ export function DesktopSearch({
     : view.error ? 'error'
     : view.key === wantKey ? 'ok'
     : 'loading';
+
+  // Remember scroll position per query+lang so returning from an album/movie
+  // lands where you left off (results render instantly from searchCache, so the
+  // height is correct the moment status is 'ok').
+  const scrollRef = useScrollMemory(`search:${wantKey}`, { ready: status === 'ok' });
 
   const pickLang = (L) => { setLang(L); setSearchLang(L); };
 
@@ -222,7 +228,7 @@ export function DesktopSearch({
   );
 
   return (
-    <div className={`aura-dse ${headerless ? 'aura-dse--headerless' : ''}`} onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className={`aura-dse ${headerless ? 'aura-dse--headerless' : ''}`} onClick={() => setMenu(null)}>
       {onClose && !headerless && (
         <button type="button" onClick={() => { setSearchQuery(''); onClose(); }} aria-label="close search" className="aura-dse__close">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">

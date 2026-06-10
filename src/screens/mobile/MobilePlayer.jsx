@@ -3,7 +3,7 @@ import { MonoLabel, HeartButton } from '../../components/primitives';
 import { MorphingAlbumArt } from '../../components/album/MorphingAlbumArt';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { ProgressRibbon } from '../../components/player/ProgressRibbon';
-import { VolumeSlider } from '../../components/player/VolumeSlider';
+import { EqualizerControl } from '../../components/player/Equalizer';
 import { RepeatIcon, ShuffleIcon } from '../../components/player/PlayerControlIcons';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { openSleepTimer } from '../../lib/sleepTimerSheet';
@@ -40,7 +40,7 @@ export function MobilePlayer({
       <div className="aura-mp__content">
         {player && (
           <div className="aura-mp__vol" onClick={(e) => e.stopPropagation()}>
-            <VolumeSlider player={player} vertical/>
+            <EqualizerControl player={player}/>
           </div>
         )}
         <div className="aura-mp__top">

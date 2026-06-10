@@ -5,7 +5,7 @@ import { MorphingAlbumArt } from '../album/MorphingAlbumArt';
 import { ProgressRibbon } from './ProgressRibbon';
 import { RailExtras } from './RailExtras';
 import { RailPlaylistSheet } from './RailPlaylistSheet';
-import { VolumeSlider } from './VolumeSlider';
+import { EqualizerControl } from './Equalizer';
 import { RepeatIcon, ShuffleIcon } from './PlayerControlIcons';
 import { openSleepTimer } from '../../lib/sleepTimerSheet';
 import { fmtTime } from '../../utils/fmtTime';
@@ -151,12 +151,8 @@ export function NowPlaying({ track, nextTrack, progress, playing, player, onTogg
       </div>
 
       {player && (
-        // pr-9 (= 36 px = icon-button 28 + gap 8) shrinks the centering area
-        // from the right so the slider *track* — not the (icon + gap + slider)
-        // bundle — aligns with the play disc above. Without this the slider
-        // sits 18 px right of centre and reads as misplaced.
-        <div className="flex justify-center mt-2 pr-9">
-          <VolumeSlider player={player}/>
+        <div className="flex justify-center mt-2">
+          <EqualizerControl player={player}/>
         </div>
       )}
 

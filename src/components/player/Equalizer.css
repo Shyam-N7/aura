@@ -1,0 +1,226 @@
+/* Equalizer — a glassmorphic popup (styled after the full-screen lyrics panel)
+   that morphs out of its trigger button. 8 curve faders with a live response
+   curve, mood presets, and the volume control nested inside. */
+
+/* ── Trigger (replaces the volume slider in the player surfaces) ── */
+.aura-eq__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-eq__trigger:hover { background: rgb(0 0 0 / 0.05); color: var(--color-ink); }
+.theme-midnight .aura-eq__trigger:hover { background: rgb(255 255 255 / 0.06); }
+.aura-eq__trigger.is-open { color: var(--color-accent); background: var(--color-accent-soft); }
+.aura-eq__trigger--compact { width: 30px; height: 30px; }
+
+/* ── Glass panel ── */
+/* A dark "media glass" — same vibe as the full-screen lyrics view: bright text
+   on a deep, frosted, translucent panel. It forces its OWN dark palette (the
+   --color-* tokens below) regardless of the app theme, so every inner control
+   renders bright-on-dark and the panel reads clearly over ANY background — light
+   theme, dark theme, or vivid album art alike. */
+.aura-eq__panel {
+  /* forced dark palette (warm, on-brand) — inner controls read these tokens */
+  --color-ink: #f5ede1;
+  --color-ink-soft: rgb(245 237 225 / 0.68);
+  --color-ink-faint: rgb(245 237 225 / 0.52);
+  --color-surface: #241f19;
+  --color-bg: #1b1712;
+  --color-line: rgb(245 237 225 / 0.14);
+  --color-accent: #eaa079;
+  --color-accent-soft: rgb(234 160 121 / 0.20);
+
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 80;
+  width: max-content;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 13px 15px 15px;
+  border-radius: 20px;
+  color: var(--color-ink);
+  background: color-mix(in srgb, #201b16 66%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 22px 54px rgb(0 0 0 / 0.46),
+    0 2px 8px rgb(0 0 0 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.16);
+  will-change: transform, opacity;
+}
+/* Open grows OUT of the trigger icon, close collapses back INTO it: the panel
+   starts tiny at the icon's offset from centre (--eq-dx/--eq-dy) and expands to
+   full size at centre. */
+.aura-eq__panel.is-open    { animation: aura-eq-in  340ms cubic-bezier(.2, .7, .2, 1) both; }
+.aura-eq__panel.is-closing { animation: aura-eq-out 240ms cubic-bezier(.4, 0, .8, .4) both; }
+
+@keyframes aura-eq-in {
+  from { opacity: 0; transform: translate(-50%, -50%) translate(var(--eq-dx, 0), var(--eq-dy, 0)) scale(.16); }
+  55%  { opacity: 1; }
+  to   { opacity: 1; transform: translate(-50%, -50%) translate(0, 0) scale(1); }
+}
+@keyframes aura-eq-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, -50%) translate(var(--eq-dx, 0), var(--eq-dy, 0)) scale(.16); }
+}
+
+.aura-eq__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.aura-eq__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 84%);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.aura-eq__close:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 64%);
+}
+
+/* ── Preset (mood) chips ── */
+.aura-eq__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  max-width: 232px;
+}
+.aura-eq__chip {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.aura-eq__chip:hover { color: var(--color-ink); border-color: color-mix(in srgb, var(--color-ink), transparent 70%); }
+.aura-eq__chip.is-on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+/* Read-only indicator (auto-shown when the curve matches no named preset). */
+.aura-eq__chip--custom { cursor: default; }
+
+/* ── Bands (faders + curve). Grays + blurs out while volume is being used. ── */
+.aura-eq__bands { transition: filter 220ms ease, opacity 220ms ease; }
+.aura-eq__bands.is-volume-active { filter: grayscale(1) blur(1.5px); opacity: 0.4; }
+/* During the open morph the panel is scaled, so a fader grabbed mid-animation
+   would map the pointer to a transformed rect and jump to a wrong value. Block
+   fader interaction until the morph settles. */
+.aura-eq__bands.is-morphing { pointer-events: none; }
+
+.aura-eq__faders { position: relative; }
+
+.aura-eq__curve {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.aura-eq__zero {
+  stroke: color-mix(in srgb, var(--color-ink), transparent 82%);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.aura-eq__fill { fill: color-mix(in srgb, var(--color-accent), transparent 88%); stroke: none; }
+.aura-eq__line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.aura-eq__dot {
+  fill: var(--color-accent);
+  stroke: var(--color-bg);
+  stroke-width: 2;
+  transition: r 120ms ease;
+}
+.aura-eq__dot.is-active { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent), transparent 30%)); }
+
+/* Interactive column overlay (one transparent draggable cell per band). */
+.aura-eq__cols { position: absolute; inset: 0; display: flex; }
+.aura-eq__col {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+  transition: background 150ms ease;
+}
+.aura-eq__col.is-active { background: color-mix(in srgb, var(--color-accent), transparent 90%); }
+.aura-eq__col:focus-visible { background: color-mix(in srgb, var(--color-accent), transparent 86%); }
+.aura-eq__col-hit {
+  width: 2px;
+  height: 100%;
+  background: color-mix(in srgb, var(--color-ink), transparent 90%);
+  border-radius: 2px;
+}
+.aura-eq__col.is-active .aura-eq__col-hit { background: transparent; }
+
+/* ── Frequency labels ── */
+.aura-eq__labels {
+  display: flex;
+  margin-top: 6px;
+}
+.aura-eq__label {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.02em;
+  color: var(--color-ink-faint);
+}
+
+/* ── Nested volume ── */
+.aura-eq__volume {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+  margin-right: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
+}
+/* The volume mute button's default hover overlay is black-on-light and only
+   flips to a light overlay under .theme-midnight — which the panel is NOT (it
+   forces its own dark palette). Give it a light hover so it reads on the dark
+   glass under every app theme. */
+.aura-eq__panel .aura-vol__btn:hover { background: rgb(255 255 255 / 0.10); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-eq__panel.is-open,
+  .aura-eq__panel.is-closing { animation-duration: 1ms; }
+}

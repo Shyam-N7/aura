@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlbumArt } from '../album/AlbumArt';
 import { cleanTitle } from '../../utils/title';
-import { VolumeSlider } from './VolumeSlider';
+import { EqualizerControl } from './Equalizer';
 import { subscribe as subscribeSleep } from '../../lib/sleepTimer';
 import './FloatingMini.css';
 
@@ -147,7 +147,7 @@ export function FloatingMini({ track, playing, player, onTogglePlay, onPrev, onN
         {player && (
           <span onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}>
-            <VolumeSlider player={player} compact/>
+            <EqualizerControl player={player} compact/>
           </span>
         )}
       </div>

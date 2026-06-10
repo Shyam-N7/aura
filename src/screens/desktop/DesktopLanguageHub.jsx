@@ -6,11 +6,13 @@ import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
 import './DesktopLanguageHub.css';
 
 export function DesktopLanguageHub({ lang, onClose, onPickLive, onOpenCatalogPlaylist }) {
   const [hit, setHit] = useState({ data: null, error: null });
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
+  const scrollRef = useScrollMemory(`lang:${lang}`, { ready: status === 'ok' });
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -33,7 +35,7 @@ export function DesktopLanguageHub({ lang, onClose, onPickLive, onOpenCatalogPla
   const langTitle = lang ? lang.charAt(0).toUpperCase() + lang.slice(1) : '';
 
   return (
-    <div className="aura-dlh">
+    <div ref={scrollRef} className="aura-dlh">
       <div className="aura-dlh__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>

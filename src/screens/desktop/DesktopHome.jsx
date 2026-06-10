@@ -8,6 +8,8 @@ import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { useSeedShelf } from '../../hooks/useSeedShelf';
+import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { partOfDay } from '../../hooks/useNow';
 import { TopStrip } from './TopStrip';
 import { SectionHeader } from './SectionHeader';
 import { HeroBand } from './HeroBand';
@@ -18,6 +20,14 @@ import './DesktopHome.css';
 // (e.g., navigating to player and back) so we don't re-fetch + cascade-
 // reveal sections on every return. Fresh on hard reload.
 const _cache = {};
+
+// Greeting eyebrow keyed to the actual hour (not a fixed "Tonight is").
+const TIME_PHRASE = {
+  morning:   'This morning is',
+  afternoon: 'This afternoon is',
+  evening:   'This evening is',
+  night:     'Tonight is',
+};
 
 export function DesktopHome({
   tracks, djName, mood,
@@ -48,13 +58,15 @@ export function DesktopHome({
     return () => ctl.abort();
   }, []);
 
+  const scrollRef = useScrollMemory('home');   // cache renders synchronously on remount
+
   return (
-    <div className="aura-dh">
+    <div ref={scrollRef} className="aura-dh">
       <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}/>
 
       <section className="aura-dh__greeting">
         <div className="flex items-baseline gap-[18px] mb-3">
-          <MonoLabel className="text-ink-faint" size={10}>Tonight is</MonoLabel>
+          <MonoLabel className="text-ink-faint" size={10}>{TIME_PHRASE[partOfDay()]}</MonoLabel>
           <span className="w-8 h-px bg-line"/>
           <MonoLabel className="text-ink-faint" size={10}>Matched to your vibe</MonoLabel>
         </div>

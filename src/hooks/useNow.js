@@ -59,3 +59,13 @@ export function formatShortStamp(d) {
 export function formatLongStamp(d) {
   return `${LONG_DAYS[d.getDay()]} · ${formatTime12(d).toUpperCase()}`;
 }
+
+// Coarse time-of-day bucket for copy like "matching tracks to your <part>".
+export function partOfDay(d = new Date()) {
+  const h = d.getHours();
+  if (h < 5)  return 'night';       // past midnight
+  if (h < 12) return 'morning';
+  if (h < 17) return 'afternoon';
+  if (h < 21) return 'evening';
+  return 'night';
+}

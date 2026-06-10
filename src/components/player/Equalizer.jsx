@@ -1,0 +1,240 @@
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { MonoLabel } from '../primitives';
+import { VolumeSlider } from './VolumeSlider';
+import { EQ_FREQS, EQ_LABELS, EQ_RANGE_DB, EQ_PRESETS, gainsMatch } from '../../audio/eqConfig';
+import './Equalizer.css';
+
+// Geometry for the curve-fader area (a fixed-size canvas inside the popup, so
+// the SVG response curve and the fader columns share one coordinate system).
+const COLS = EQ_FREQS.length;
+const CELL_W = 29;
+const TRACK_H = 112;
+const FADERS_W = COLS * CELL_W;
+const R = EQ_RANGE_DB;
+
+const gainToY = (g) => (1 - (g + R) / (2 * R)) * TRACK_H;
+const yToGain = (y) => {
+  const g = R - (y / TRACK_H) * 2 * R;
+  const clamped = Math.max(-R, Math.min(R, g));
+  return Math.round(clamped * 2) / 2;            // 0.5 dB steps — smooth but tidy
+};
+const bandX = (i) => (i + 0.5) * CELL_W;
+
+// Catmull-Rom → cubic bezier: a smooth path threading the fader thumbs.
+function smoothPath(pts) {
+  if (pts.length < 2) return '';
+  const d = [`M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d.push(`C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`);
+  }
+  return d.join(' ');
+}
+
+const fmtDb = (g) => `${g > 0 ? '+' : ''}${g.toFixed(g % 1 === 0 ? 0 : 1)} dB`;
+
+// Trigger icon's offset from screen centre — the morph origin for the popup.
+function offsetFromCentre(anchorEl) {
+  const r = anchorEl?.getBoundingClientRect?.();
+  if (!r || typeof window === 'undefined') return { dx: 0, dy: 0 };
+  return {
+    dx: Math.round(r.left + r.width / 2 - window.innerWidth / 2),
+    dy: Math.round(r.top + r.height / 2 - window.innerHeight / 2),
+  };
+}
+
+// EQ trigger + popup. Replaces the volume slider in the player surfaces; volume
+// now lives inside the popup. `compact` shrinks the trigger for tight bars.
+// The popup stays mounted through its collapse animation so closing — whether by
+// re-tapping the trigger, clicking outside, or Esc — always plays back into the
+// button.
+export function EqualizerControl({ player, compact = false }) {
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const anchorRef = useRef(null);
+
+  if (!player) return null;
+
+  const open = (el) => { anchorRef.current = el; setClosing(false); setMounted(true); };
+  const requestClose = () => setClosing(true);
+  const finalize = () => { setMounted(false); setClosing(false); };
+  const toggle = (el) => { (mounted && !closing) ? requestClose() : open(el); };
+
+  return (
+    <>
+      <button type="button"
+        onClick={(e) => toggle(e.currentTarget)}
+        aria-label={mounted && !closing ? 'close equalizer' : 'open equalizer'}
+        aria-haspopup="dialog" aria-expanded={mounted && !closing}
+        className={`aura-eq__trigger ${compact ? 'aura-eq__trigger--compact' : ''} ${mounted && !closing ? 'is-open' : ''}`}>
+        <svg width="19" height="19" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M4 2 V14 M8 2 V14 M12 2 V14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          <circle cx="4"  cy="10.5" r="2" fill="var(--color-bg)" stroke="currentColor" strokeWidth="1.4"/>
+          <circle cx="8"  cy="5.5"  r="2" fill="var(--color-bg)" stroke="currentColor" strokeWidth="1.4"/>
+          <circle cx="12" cy="9"    r="2" fill="var(--color-bg)" stroke="currentColor" strokeWidth="1.4"/>
+        </svg>
+      </button>
+      {mounted && (
+        <EqPopup player={player} anchorEl={anchorRef.current}
+          closing={closing} onRequestClose={requestClose} onFinalized={finalize}/>
+      )}
+    </>
+  );
+}
+
+function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
+  const panelRef = useRef(null);
+  const dragRef = useRef(null);            // band index currently dragged (or null)
+  const [gains, setGains] = useState(() => player.getEqGains());
+  const [activeBand, setActiveBand] = useState(null);
+  const [volumeActive, setVolumeActive] = useState(false);
+  const [opening, setOpening] = useState(true);   // true only while the open morph runs
+  // Morph origin (icon offset from centre). Computed synchronously for the first
+  // paint (the open morph needs it) and refreshed on resize so the close morph
+  // still collapses into the moved icon.
+  const [{ dx, dy }, setOffset] = useState(() => offsetFromCentre(anchorEl));
+
+  const closeRef = useRef(onRequestClose); closeRef.current = onRequestClose;
+
+  useEffect(() => {
+    const onResize = () => setOffset(offsetFromCentre(anchorEl));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [anchorEl]);
+
+  // Keep gains in sync with the engine (band drags + presets both emit 'eq').
+  // Initial value comes from the useState initializer above; this only listens
+  // for later changes (incl. another EQ instance).
+  useEffect(() => player.on('eq', (g) => setGains(g.slice())), [player]);
+
+  // Centered modal — close on outside pointer / Esc. (The trigger is excluded so
+  // a re-tap toggles via EqualizerControl instead of double-firing a close.)
+  useEffect(() => {
+    const onDown = (e) => {
+      if (panelRef.current?.contains(e.target) || anchorEl?.contains(e.target)) return;
+      closeRef.current();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') closeRef.current(); };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [anchorEl]);
+
+  const setBand = (i, g) => { dragRef.current = i; player.setEqBand(i, g); };
+  const onTrackPointerDown = (i) => (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setActiveBand(i);
+    setBand(i, yToGain(e.clientY - e.currentTarget.getBoundingClientRect().top));
+  };
+  const onTrackPointerMove = (i) => (e) => {
+    if (dragRef.current !== i) return;
+    setBand(i, yToGain(e.clientY - e.currentTarget.getBoundingClientRect().top));
+  };
+  const endDrag = () => { dragRef.current = null; setActiveBand(null); };
+  const onBandKey = (i) => (e) => {
+    let next = null;
+    if (e.key === 'ArrowUp')        next = Math.min(R, gains[i] + 1);
+    else if (e.key === 'ArrowDown') next = Math.max(-R, gains[i] - 1);
+    else if (e.key === 'Home')      next = -R;
+    else if (e.key === 'End')       next = R;
+    if (next === null) return;
+    e.preventDefault();
+    setActiveBand(i);                 // keep readout + highlight on the band being keyed
+    player.setEqBand(i, next);
+  };
+
+  const points = gains.map((g, i) => ({ x: bandX(i), y: gainToY(g) }));
+  const activePreset = EQ_PRESETS.find(p => gainsMatch(p.gains, gains));
+  const readout = activeBand != null ? `${EQ_LABELS[activeBand]} · ${fmtDb(gains[activeBand])}` : 'Equalizer';
+
+  const target = document.querySelector('.aura-responsive-shell') ?? document.body;
+
+  return createPortal(
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Equalizer"
+      className={`aura-eq__panel ${closing ? 'is-closing' : 'is-open'}`}
+      style={{ '--eq-dx': `${dx}px`, '--eq-dy': `${dy}px` }}
+      onClick={(e) => e.stopPropagation()}
+      onAnimationEnd={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (closing) onFinalized(); else setOpening(false);   // open morph done → enable faders
+      }}>
+
+      <div className="aura-eq__head">
+        <MonoLabel className="text-ink-faint" size={10}>{readout}</MonoLabel>
+        <button type="button" onClick={onRequestClose} aria-label="close equalizer" className="aura-eq__close">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div className="aura-eq__presets">
+        {EQ_PRESETS.map(p => (
+          <button key={p.id} type="button"
+            onClick={() => player.setEqGains(p.gains)}
+            className={`aura-eq__chip ${activePreset?.id === p.id ? 'is-on' : ''}`}>
+            {p.name}
+          </button>
+        ))}
+        {/* Appears + activates automatically once the curve no longer matches a
+            named preset (i.e. the user dialled their own). */}
+        {!activePreset && <span className="aura-eq__chip aura-eq__chip--custom is-on">Custom</span>}
+      </div>
+
+      {/* Bands gray + blur out while the volume control is being used, so the two
+          controls read as distinct. */}
+      <div className={`aura-eq__bands ${opening ? 'is-morphing' : ''} ${volumeActive ? 'is-volume-active' : ''}`}>
+        <div className="aura-eq__faders" style={{ width: FADERS_W, height: TRACK_H }}>
+          <svg className="aura-eq__curve" viewBox={`0 0 ${FADERS_W} ${TRACK_H}`} width={FADERS_W} height={TRACK_H} aria-hidden="true">
+            <line x1="0" y1={gainToY(0)} x2={FADERS_W} y2={gainToY(0)} className="aura-eq__zero"/>
+            <path d={`${smoothPath(points)} L ${FADERS_W} ${TRACK_H} L 0 ${TRACK_H} Z`} className="aura-eq__fill"/>
+            <path d={smoothPath(points)} className="aura-eq__line"/>
+            {points.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r={activeBand === i ? 5 : 3.5}
+                className={`aura-eq__dot ${activeBand === i ? 'is-active' : ''}`}/>
+            ))}
+          </svg>
+          <div className="aura-eq__cols">
+            {EQ_FREQS.map((_, i) => (
+              <div key={i}
+                className={`aura-eq__col ${activeBand === i ? 'is-active' : ''}`}
+                role="slider" tabIndex={0} aria-orientation="vertical"
+                aria-label={`${EQ_LABELS[i]} hertz`}
+                aria-valuemin={-R} aria-valuemax={R} aria-valuenow={gains[i]}
+                onPointerDown={onTrackPointerDown(i)}
+                onPointerMove={onTrackPointerMove(i)}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onFocus={() => setActiveBand(i)}
+                onBlur={() => { if (dragRef.current === null) setActiveBand(null); }}
+                onKeyDown={onBandKey(i)}>
+                <span className="aura-eq__col-hit"/>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="aura-eq__labels" style={{ width: FADERS_W }}>
+          {EQ_LABELS.map((l, i) => <span key={i} className="aura-eq__label">{l}</span>)}
+        </div>
+      </div>
+
+      <div className="aura-eq__volume"
+        onPointerEnter={() => setVolumeActive(true)}
+        onPointerLeave={() => setVolumeActive(false)}
+        onFocusCapture={() => setVolumeActive(true)}
+        onBlurCapture={() => setVolumeActive(false)}>
+        <VolumeSlider player={player}/>
+      </div>
+    </div>,
+    target,
+  );
+}
