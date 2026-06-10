@@ -695,7 +695,7 @@ function VisionSection() {
           <div className="vision-attr">
             <div className="avatar" />
             <div>
-              <div className="who">eruna kavi</div>
+              <div className="who">aura</div>
               <div className="role">founder &middot; aura</div>
             </div>
           </div>
