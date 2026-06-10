@@ -30,11 +30,11 @@ export function useHashRoute({ apply, current, enabled = true }) {
   // state → hash. Explicit deps (rather than running every render) avoid
   // burning a buildHash + equality check on every parent re-render —
   // chat input keystrokes etc. used to fire this effect through App.jsx.
-  const { screen, artistKey, detailPlaylistId, catalogPlaylistId, hubLang } = current ?? {};
+  const { screen, artistKey, detailPlaylistId, catalogPlaylistId, albumId, hubLang } = current ?? {};
   useEffect(() => {
     if (!enabled) return;
     if (fromHashRef.current) return;
-    const next = buildHash({ screen, artistKey, detailPlaylistId, catalogPlaylistId, hubLang });
+    const next = buildHash({ screen, artistKey, detailPlaylistId, catalogPlaylistId, albumId, hubLang });
     const have = window.location.hash || '#/';
     if (next !== have) {
       // replaceState avoids polluting browser history for transient state
@@ -47,5 +47,5 @@ export function useHashRoute({ apply, current, enabled = true }) {
     // artistKey itself isn't a stable dep — we track its fields explicitly so
     // a new object reference with identical id+name doesn't re-fire.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, screen, artistKey?.id, artistKey?.name, detailPlaylistId, catalogPlaylistId, hubLang]);
+  }, [enabled, screen, artistKey?.id, artistKey?.name, detailPlaylistId, catalogPlaylistId, albumId, hubLang]);
 }

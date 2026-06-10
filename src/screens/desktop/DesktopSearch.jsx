@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
@@ -9,6 +9,8 @@ import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { subscribeSearchFocus, requestSearchFocus } from '../../lib/searchFocus';
 import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
+import { getSearchResult, setSearchResult, getSearchLang, setSearchLang } from '../../lib/searchCache';
+import { getSeedSignals } from '../../lib/onboarding';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
@@ -17,17 +19,46 @@ import '../PlaylistsScreen.css';
 import './DesktopSearch.css';
 
 const LANGS = ['all', 'tamil', 'english', 'hindi', 'malayalam', 'kannada'];
+const EMPTY = { key: '', top: null, songs: [], albums: [], playlists: [], userPlaylists: [], error: null };
+
+// A cover-tile (album / movie / playlist).
+function EntityTile({ image, name, sub, badge, onClick }) {
+  return (
+    <button onClick={onClick} className="aura-dse__playlist">
+      <span className="aura-dse__cover-wrap">
+        {image
+          ? <img src={image} alt="" loading="lazy" className="aura-dse__cover"/>
+          : <span className="aura-dse__cover aura-dse__cover--fallback">{name?.[0]?.toUpperCase() ?? '·'}</span>}
+        {badge && <span className="aura-dse__badge">{badge}</span>}
+      </span>
+      <span className="block min-w-0">
+        <span className="aura-dse__title-text block">{name}</span>
+        {sub && <MonoLabel className="text-ink-soft mt-1 block truncate" size={9.5}>{sub}</MonoLabel>}
+      </span>
+    </button>
+  );
+}
 
 // `headerless` (mobile): the top bar IS the search input, so hide this screen's
 // own input + intro labels and keep only the language filters + results below.
-export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddToQueue, onOpenPlaylist, headerless = false }) {
+export function DesktopSearch({
+  djName, onClose, onPickLive, onPlayNext, onAddToQueue,
+  onOpenPlaylist, onOpenArtist, onOpenAlbum, onOpenCatalogPlaylist, headerless = false,
+}) {
   const { query: q, setQuery: setQ } = useSearchQuery();
-  const [lang, setLang] = useState('all');
-  const [hit, setHit] = useState({ key: '', results: [], playlists: [], error: null });
+  const [lang, setLang] = useState(getSearchLang());
+  const [hit, setHit] = useState(EMPTY);   // last fetched result; set only in the async callback
   const [menu, setMenu] = useState(null);
   const debouncedQ = useDebounced(q, 300);
   const wantKey = `${debouncedQ}|${lang}`;
   const inputRef = useRef(null);
+  // The user's languages, priority-ordered — drives my-languages-first ranking.
+  const prefLangs = useMemo(() => getSeedSignals().languages ?? [], []);
+  // Display = the just-fetched hit if current, else the cached result for this
+  // key (so returning from an album/movie shows instantly — no flash, no
+  // re-fetch). Derived at render time to avoid setState-in-effect.
+  const cached = getSearchResult(wantKey);
+  const view = hit.key === wantKey ? hit : (cached ?? EMPTY);
 
   useEffect(() => {
     if (headerless) return undefined;   // no own input to focus — top bar owns it
@@ -46,36 +77,149 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
   }, [headerless]);
   const trimmed = debouncedQ.trim();
   const status = !trimmed ? 'idle'
-    : hit.key === wantKey ? (hit.error ? 'error' : 'ok')
+    : view.error ? 'error'
+    : view.key === wantKey ? 'ok'
     : 'loading';
+
+  const pickLang = (L) => { setLang(L); setSearchLang(L); };
 
   useEffect(() => {
     if (!trimmed) return;
+    if (getSearchResult(wantKey)) return;   // already cached — `view` shows it, skip the fetch
     const ctl = new AbortController();
     searchCatalog(debouncedQ, {
       lang: lang === 'all' ? undefined : lang,
+      langs: prefLangs,
       limit: 12,
       signal: ctl.signal,
     })
-      .then(({ results, playlists }) => {
-        setHit({ key: wantKey, results, playlists, error: null });
-        // Remember the query once we actually got results back — avoids
-        // noisy recents from mid-typing partial queries that erred out.
-        if ((results?.length ?? 0) > 0 || (playlists?.length ?? 0) > 0) {
+      .then(d => {
+        const next = { key: wantKey, ...d, error: null };
+        setHit(next);
+        setSearchResult(wantKey, next);
+        // Remember the query once something actually matched.
+        if (d.songs.length || d.albums.length || d.playlists.length || d.userPlaylists.length) {
           pushRecentSearch(trimmed);
         }
       })
       .catch(err => {
         if (err.name === 'AbortError') return;
-        setHit({ key: wantKey, results: [], playlists: [], error: err.message });
+        setHit({ ...EMPTY, key: wantKey, error: err.message });
       });
     return () => ctl.abort();
-  }, [debouncedQ, lang, wantKey, trimmed]);
+  }, [debouncedQ, lang, wantKey, trimmed, prefLangs]);
 
   const playNow      = (t) => { setMenu(null); onPickLive?.(t); };
   const playNextItem = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
   const addToQueue   = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
   const addToList    = (t) => { setMenu(null); openAddToPlaylist(t); };
+
+  // The best match routes to the right page by entity type.
+  const openTop = () => {
+    const t = view.top;
+    if (!t) return;
+    if (t.type === 'artist')        onOpenArtist?.({ id: t.id });
+    else if (t.type === 'album')    onOpenAlbum?.(t.id);
+    else if (t.type === 'playlist') onOpenCatalogPlaylist?.(t.id);
+  };
+  const top = view.top;
+  const topLabel = !top ? '' : top.type === 'album'
+    ? (top.isMovie ? 'Movie' : 'Album')
+    : top.type.charAt(0).toUpperCase() + top.type.slice(1);
+  const showHero = top && top.type !== 'song';       // songs lead for a song query
+  const albumFirst = top?.type === 'album';          // a movie/album query → albums first
+
+  const nothing = !top && !view.songs.length && !view.albums.length && !view.playlists.length && !view.userPlaylists.length;
+
+  const heroSection = showHero && (
+    <section>
+      <div className="aura-dse__section-title">Top result</div>
+      <button onClick={openTop} className="aura-dse__top">
+        {top.image
+          ? <img src={top.image} alt="" loading="lazy" className={`aura-dse__top-cover ${top.type === 'artist' ? 'aura-dse__cover--round' : ''}`}/>
+          : <span className={`aura-dse__top-cover aura-dse__cover--fallback ${top.type === 'artist' ? 'aura-dse__cover--round' : ''}`}>{top.name?.[0]?.toUpperCase() ?? '·'}</span>}
+        <span className="aura-dse__top-meta">
+          <span className="aura-dse__top-name">{top.name}</span>
+          <MonoLabel className="text-ink-faint block" size={10}>{topLabel}</MonoLabel>
+        </span>
+      </button>
+    </section>
+  );
+
+  const songsSection = view.songs.length > 0 && (
+    <section>
+      <div className="aura-dse__section-title">Songs</div>
+      <div className="aura-dse__results">
+        {view.songs.map(t => (
+          <div key={t.id} className="aura-dse__result-wrap" onContextMenu={ctxOpen(t)}>
+            <button onClick={(e) => onPickLive?.(t, e.currentTarget)} className="aura-dse__result">
+              <AlbumArt track={t} radius={6} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
+              <div>
+                <div className="aura-dse__title-text">{cleanTitle(t.title)}</div>
+                <MonoLabel className="text-ink-soft mt-1 block truncate" size={9.5}>{t.artist ?? ''}</MonoLabel>
+              </div>
+            </button>
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
+              aria-label="more" className="aura-dse__more">
+              <svg width="4" height="16" viewBox="0 0 4 16">
+                <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+                <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+                <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+              </svg>
+            </button>
+            {menu?.id === t.id && (
+              <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
+                <button onClick={() => playNow(t)}      className="aura-pl-menu-item">Play song</button>
+                <button onClick={() => playNextItem(t)} className="aura-pl-menu-item">Play next</button>
+                <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">Add to queue</button>
+                <button onClick={() => addToList(t)}    className="aura-pl-menu-item">Add to playlist</button>
+              </AnchoredMenu>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  const albumsSection = view.albums.length > 0 && (
+    <section>
+      <div className="aura-dse__section-title">Albums &amp; movies</div>
+      <div className="aura-dse__playlists">
+        {view.albums.map(a => (
+          <EntityTile key={a.id} image={a.image} name={a.name}
+            sub={[a.isMovie ? 'Movie' : 'Album', a.year].filter(Boolean).join(' · ')}
+            badge={a.isMovie ? 'Movie' : null}
+            onClick={() => onOpenAlbum?.(a.id)}/>
+        ))}
+      </div>
+    </section>
+  );
+
+  const playlistsSection = view.playlists.length > 0 && (
+    <section>
+      <div className="aura-dse__section-title">Playlists</div>
+      <div className="aura-dse__playlists">
+        {view.playlists.map(p => (
+          <EntityTile key={p.id} image={p.image} name={p.name} sub={p.subtitle || 'Playlist'}
+            onClick={() => onOpenCatalogPlaylist?.(p.id)}/>
+        ))}
+      </div>
+    </section>
+  );
+
+  const yourPlaylistsSection = view.userPlaylists.length > 0 && (
+    <section>
+      <div className="aura-dse__section-title">Your playlists</div>
+      <div className="aura-dse__playlists">
+        {view.userPlaylists.map(p => (
+          <EntityTile key={p.id} image={p.coverImageUrl} name={p.name}
+            sub={`${p.trackCount ?? 0} ${p.trackCount === 1 ? 'track' : 'tracks'}`}
+            onClick={() => onOpenPlaylist?.(p.id)}/>
+        ))}
+      </div>
+    </section>
+  );
 
   return (
     <div className={`aura-dse ${headerless ? 'aura-dse--headerless' : ''}`} onClick={() => setMenu(null)}>
@@ -89,10 +233,10 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
       <div className="aura-dse__header">
         {!headerless && (
           <>
-            <MonoLabel className="text-ink-faint" size={10}>Search · Catalog + Your playlists</MonoLabel>
+            <MonoLabel className="text-ink-faint" size={10}>Search · Artists · Songs · Albums · Playlists</MonoLabel>
             <div className="aura-dse__input-wrap" onClick={() => inputRef.current?.focus()}>
               <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
-                placeholder="Search songs, artists, or moods"
+                placeholder="Search songs, artists, albums, movies"
                 className="aura-dse__input" autoFocus type="search"
                 autoComplete="off" spellCheck={false}/>
             </div>
@@ -103,7 +247,7 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
         )}
         <div className="aura-dse__langs">
           {LANGS.map(L => (
-            <button key={L} onClick={() => setLang(L)}
+            <button key={L} onClick={() => pickLang(L)}
               className={`aura-dse__lang ${lang === L ? 'aura-dse__lang--on' : ''}`}>
               {L.charAt(0).toUpperCase() + L.slice(1)}
             </button>
@@ -113,91 +257,19 @@ export function DesktopSearch({ djName, onClose, onPickLive, onPlayNext, onAddTo
 
       <div className="aura-dse__layout">
         <div className="aura-dse__main">
-          {status === 'idle' && (
-            <div className="aura-dse__hint">
-              Type a title, artist, mood, or fragment.
-            </div>
-          )}
-          {status === 'loading' && (
-            <AuraLoader label="Searching"/>
-          )}
-          {status === 'error' && (
-            <div className="aura-dse__hint">
-              Search failed — {hit.error}
-            </div>
-          )}
+          {status === 'idle'    && <div className="aura-dse__hint">Type a title, artist, album, or movie.</div>}
+          {status === 'loading' && <AuraLoader label="Searching"/>}
+          {status === 'error'   && <div className="aura-dse__hint">Search failed — {view.error}</div>}
 
           {status === 'ok' && (
             <div className="aura-dse__sections">
-          {hit.playlists.length > 0 && (
-            <section>
-              <div className="aura-dse__section-title">Your playlists</div>
-              <div className="aura-dse__playlists">
-                {hit.playlists.map(p => (
-                  <button key={p.id} onClick={() => onOpenPlaylist?.(p.id)} className="aura-dse__playlist">
-                    {p.coverImageUrl
-                      ? <img src={p.coverImageUrl} alt="" className="aura-dse__cover" loading="lazy"/>
-                      : <span className="aura-dse__cover aura-dse__cover--fallback">
-                          {p.name?.[0]?.toUpperCase() ?? '·'}
-                        </span>}
-                    <div>
-                      <div className="aura-dse__title-text">{p.name}</div>
-                      <MonoLabel className="text-ink-soft mt-1 block" size={9.5}>
-                        {p.trackCount} {p.trackCount === 1 ? 'track' : 'tracks'} · Playlist
-                      </MonoLabel>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {hit.results.length > 0 && (
-            <section>
-              <div className="aura-dse__section-title">Tracks</div>
-              <div className="aura-dse__results">
-                {hit.results.map(t => (
-                  <div key={t.id} className="aura-dse__result-wrap" onContextMenu={ctxOpen(t)}>
-                    <button onClick={(e) => onPickLive?.(t, e.currentTarget)}
-                      className="aura-dse__result">
-                      <AlbumArt track={t} radius={6}
-                        style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
-                      <div>
-                        <div className="aura-dse__title-text">{cleanTitle(t.title)}</div>
-                        <MonoLabel className="text-ink-soft mt-1 block truncate" size={9.5}>
-                          {t.artist ?? ''}
-                        </MonoLabel>
-                      </div>
-                    </button>
-                    <button type="button"
-                      onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
-                      aria-label="more"
-                      className="aura-dse__more">
-                      <svg width="4" height="16" viewBox="0 0 4 16">
-                        <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                        <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                        <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                      </svg>
-                    </button>
-                    {menu?.id === t.id && (
-                      <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                        <button onClick={() => playNow(t)}      className="aura-pl-menu-item">Play song</button>
-                        <button onClick={() => playNextItem(t)} className="aura-pl-menu-item">Play next</button>
-                        <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">Add to queue</button>
-                        <button onClick={() => addToList(t)}    className="aura-pl-menu-item">Add to playlist</button>
-                      </AnchoredMenu>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-              {hit.results.length === 0 && hit.playlists.length === 0 && (
-                <div className="aura-dse__hint">
-                  Nothing matched &ldquo;{debouncedQ}&rdquo;.
-                </div>
-              )}
+              {nothing && <div className="aura-dse__hint">Nothing matched &ldquo;{debouncedQ}&rdquo;.</div>}
+              {heroSection}
+              {albumFirst
+                ? <>{albumsSection}{songsSection}</>
+                : <>{songsSection}{albumsSection}</>}
+              {playlistsSection}
+              {yourPlaylistsSection}
             </div>
           )}
         </div>

@@ -55,6 +55,9 @@ export function parseHash(hash) {
   if ((m = path.match(/^\/catalog\/(.+)$/))) {
     return { screen: 'catalog-playlist-detail', catalogPlaylistId: decodeURIComponent(m[1]) };
   }
+  if ((m = path.match(/^\/album\/(.+)$/))) {
+    return { screen: 'album-detail', albumId: decodeURIComponent(m[1]) };
+  }
   if ((m = path.match(/^\/lang\/(.+)$/))) {
     return { screen: 'language-hub', hubLang: decodeURIComponent(m[1]) };
   }
@@ -71,7 +74,7 @@ export function parseHash(hash) {
 
 export function buildHash(state) {
   if (!state?.screen) return '#/';
-  const { screen, artistKey, detailPlaylistId, catalogPlaylistId, hubLang } = state;
+  const { screen, artistKey, detailPlaylistId, catalogPlaylistId, albumId, hubLang } = state;
   if (screen === 'artist') {
     if (artistKey?.id)   return `#/artist/${encodeURIComponent(artistKey.id)}`;
     if (artistKey?.name) return `#/artist/by-name/${encodeURIComponent(artistKey.name)}`;
@@ -79,6 +82,7 @@ export function buildHash(state) {
   }
   if (screen === 'playlist-detail'      && detailPlaylistId != null)  return `#/playlist/${encodeURIComponent(detailPlaylistId)}`;
   if (screen === 'catalog-playlist-detail' && catalogPlaylistId  != null) return `#/catalog/${encodeURIComponent(catalogPlaylistId)}`;
+  if (screen === 'album-detail'         && albumId != null)           return `#/album/${encodeURIComponent(albumId)}`;
   if (screen === 'language-hub'         && hubLang)                   return `#/lang/${encodeURIComponent(hubLang)}`;
   const simple = SIMPLE_REVERSE[screen];
   if (simple) return `#${simple}`;

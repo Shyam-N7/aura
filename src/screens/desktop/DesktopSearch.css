@@ -318,6 +318,73 @@
   text-overflow: ellipsis;
 }
 
+/* Cover wrapper so an album/movie badge can pin to the artwork. */
+.aura-dse__cover-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.aura-dse__cover--round { border-radius: 9999px; }
+.aura-dse__badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-bg), transparent 8%);
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 82%);
+  -webkit-backdrop-filter: blur(8px);
+          backdrop-filter: blur(8px);
+}
+
+/* Top result — a single hero card that routes to the best match's page. */
+.aura-dse__top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 520px;
+  padding: 18px;
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink), transparent 96%);
+  transition: background 160ms ease, transform 160ms ease;
+}
+.aura-dse__top:hover {
+  background: color-mix(in srgb, var(--color-ink), transparent 92%);
+  transform: translateY(-1px);
+}
+.aura-dse__top-cover {
+  width: 92px;
+  height: 92px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--color-line);
+}
+.aura-dse__top-cover.aura-dse__cover--fallback { font-size: 40px; }
+.aura-dse__top-meta { min-width: 0; }
+.aura-dse__top-name {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Mobile (<600 px container) — tighten the editorial spacing to AURA's 22 px
    gutter convention, drop a couple of font sizes that don't fit at narrow
    widths, and pack the result tiles into a 2-column grid. The close button
@@ -335,6 +402,9 @@
   }
   .aura-dse__title-text { font-size: 15px; }
   .aura-dse__cover--fallback { font-size: 40px; }
+  .aura-dse__top { gap: 14px; padding: 14px; border-radius: 12px; }
+  .aura-dse__top-cover { width: 68px; height: 68px; }
+  .aura-dse__top-name { font-size: 22px; }
   /* Sidebar stacks below results on mobile — sticky doesn't make sense in a
      single-column flow, so park it static. */
   .aura-dse__sidebar { position: static; top: auto; gap: 22px; }
