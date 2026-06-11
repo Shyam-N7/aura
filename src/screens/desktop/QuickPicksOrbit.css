@@ -1,7 +1,7 @@
 .aura-qpo {
   display: flex;
   justify-content: center;
-  padding: 10px 48px 4px;
+  padding: 10px 48px 28px;
 }
 .aura-qpo__ring {
   position: relative;
@@ -20,17 +20,26 @@
   transform: translate(-50%, -50%);
   padding: 0;
   border: 0;
-  border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  overflow: hidden;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 0.22);
   z-index: 1;
   animation: aura-qpo-pop 460ms cubic-bezier(.2, .8, .2, 1) backwards;
   animation-delay: calc(var(--i, 0) * 55ms);
-  transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease;
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
 }
-.aura-qpo__disc::after {
+/* The art wrapper owns the circular crop + shadow, so the name caption (a sibling
+   below it) isn't clipped. */
+.aura-qpo__disc-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.22);
+  transition: box-shadow 220ms ease;
+}
+.aura-qpo__disc-art::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -42,12 +51,39 @@
 .aura-qpo__disc:focus-visible,
 .aura-qpo__disc.is-active {
   transform: translate(-50%, -50%) scale(1.16);
-  box-shadow:
-    0 16px 30px rgb(0 0 0 / 0.30),
-    0 0 0 3px color-mix(in srgb, var(--color-accent), transparent 45%);
   z-index: 3;
   outline: none;
 }
+.aura-qpo__disc:hover .aura-qpo__disc-art,
+.aura-qpo__disc:focus-visible .aura-qpo__disc-art,
+.aura-qpo__disc.is-active .aura-qpo__disc-art {
+  box-shadow:
+    0 16px 30px rgb(0 0 0 / 0.30),
+    0 0 0 3px color-mix(in srgb, var(--color-accent), transparent 45%);
+}
+/* Always-visible song name under each disc. */
+.aura-qpo__name {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160%;
+  max-width: 124px;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transition: color 160ms ease;
+}
+.aura-qpo__disc:hover .aura-qpo__name,
+.aura-qpo__disc.is-active .aura-qpo__name { color: var(--color-ink); }
 @keyframes aura-qpo-pop {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
 }
@@ -139,7 +175,7 @@
 }
 
 @media (max-width: 600px) {
-  .aura-qpo { padding: 8px 16px 0; }
+  .aura-qpo { padding: 8px 16px 22px; }
   .aura-qpo__ring { width: min(360px, 86vw); }
 }
 @media (prefers-reduced-motion: reduce) {

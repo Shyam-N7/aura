@@ -34,7 +34,10 @@ export function QuickPicksOrbit({ tracks, onPlay, onShuffle }) {
               onClick={() => onPlay?.(t)}
               aria-label={`play ${cleanTitle(t.title)}${t.artist ? ` by ${t.artist}` : ''}`}
             >
-              <AlbumArt track={t} radius={999} style={{ width: '100%', height: '100%' }}/>
+              <span className="aura-qpo__disc-art">
+                <AlbumArt track={t} radius={999} style={{ width: '100%', height: '100%' }}/>
+              </span>
+              <span className="aura-qpo__name">{cleanTitle(t.title)}</span>
             </button>
           );
         })}
