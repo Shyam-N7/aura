@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Root } from './App';
 import { useAuth } from './lib/auth';
 import { toast } from './lib/toast';
@@ -127,6 +128,7 @@ function AppRoot() {
     <>
       <Root user={user} />
       <Analytics />
+      <SpeedInsights />
     </>
   );
 
@@ -148,6 +150,7 @@ function AppRoot() {
         </Suspense>
       </div>
       <Analytics />
+      <SpeedInsights />
     </>
   );
 }
