@@ -35,11 +35,11 @@
   color: var(--color-ink);
 }
 .aura-top-nav__brand-name {
-  font-family: var(--font-serif);
-  font-size: 25px;
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: -0.02em;
-  font-style: italic;
 }
 
 .aura-top-nav__items {

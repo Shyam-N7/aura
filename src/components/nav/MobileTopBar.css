@@ -78,25 +78,29 @@
   gap: 10px;
   min-width: 0;
 }
-/* Brand wordmark — "aura" set in the landing-page serif so the identity reads
-   big and warm in the bar (it was a small mono label before), with the live
-   day/time stamp kept quiet beside it. */
+/* Brand lockup — bigger mark + a plain lowercase sans wordmark, with a short
+   tagline beside it (no day/time stamp). */
 .aura-mobile-top__brandtext {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
 }
 .aura-mobile-top__wordmark {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 21px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 20px;
   line-height: 1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--color-ink);
   flex-shrink: 0;
 }
-.aura-mobile-top__stamp {
+.aura-mobile-top__tagline {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: var(--color-ink-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

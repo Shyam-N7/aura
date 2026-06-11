@@ -1,16 +1,13 @@
-import { MonoLabel, AuraMark, ICON } from '../../components/primitives';
-import { useNow, formatShortStamp } from '../../hooks/useNow';
+import { AuraMark, ICON } from '../../components/primitives';
 import { ThemeToggle } from '../../components/ThemeToggle';
 
 export function TopStrip({ djName, onOpenSearch, t, setTweak }) {
-  const now = useNow();
   return (
     <div className="aura-dh-topstrip">
-      <div className="inline-flex items-center gap-2.5 text-ink-soft">
-        <AuraMark size={16}/>
-        <MonoLabel className="text-ink-soft">
-          {djName} · {formatShortStamp(now).toLowerCase()}
-        </MonoLabel>
+      <div className="aura-dh-topstrip__brand">
+        <AuraMark size={26}/>
+        <span className="aura-dh-topstrip__wordmark">{djName}</span>
+        <span className="aura-dh-topstrip__tagline">captures your mood</span>
       </div>
       <div className="flex items-center gap-3">
         <button type="button" onClick={onOpenSearch} className="aura-dh-topstrip__search">

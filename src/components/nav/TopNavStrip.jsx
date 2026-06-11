@@ -39,7 +39,7 @@ export function TopNavStrip({ djName = 'aura', active, onNav, onTalk, t, setTwea
   return (
     <nav className="aura-top-nav">
       <div className="aura-top-nav__brand">
-        <AuraMark/>
+        <AuraMark size={26}/>
         <span className="aura-top-nav__brand-name">{djName.toLowerCase()}</span>
       </div>
       <div className="aura-top-nav__items">

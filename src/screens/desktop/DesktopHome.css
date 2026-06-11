@@ -176,6 +176,28 @@
   justify-content: space-between;
   padding: 18px 48px 0;
 }
+/* Brand lockup — bigger mark, lowercase sans wordmark (no caps, no time stamp),
+   short tagline. */
+.aura-dh-topstrip__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+}
+.aura-dh-topstrip__wordmark {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-ink);
+}
+.aura-dh-topstrip__tagline {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--color-ink-faint);
+}
 .aura-dh-topstrip__search {
   display: flex;
   align-items: center;

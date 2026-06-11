@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { AuraMark, MonoLabel } from '../primitives';
+import { AuraMark } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
 import { AccountMenu } from './AccountMenu';
-import { useNow, formatShortStamp } from '../../hooks/useNow';
 import { useSearchQuery, getSearchQuery } from '../../lib/searchQuery';
 import { subscribeSearchFocus } from '../../lib/searchFocus';
 import './MobileTopBar.css';
@@ -23,7 +22,6 @@ export function MobileTopBar({
   djName = 'aura', t, setTweak, showAccount = true,
   onOpenSearch, searching = false, onCloseSearch,
 }) {
-  const now = useNow();
   const { query, setQuery } = useSearchQuery();
   const inputRef = useRef(null);
   const barRef = useRef(null);
@@ -88,12 +86,10 @@ export function MobileTopBar({
 
   const brandInner = (
     <>
-      <AuraMark size={18}/>
+      <AuraMark size={24}/>
       <span className="aura-mobile-top__brandtext">
         <span className="aura-mobile-top__wordmark">{djName}</span>
-        <MonoLabel className="text-ink-faint aura-mobile-top__stamp" size={9}>
-          {formatShortStamp(now).toLowerCase()}
-        </MonoLabel>
+        <span className="aura-mobile-top__tagline">captures your mood</span>
       </span>
     </>
   );
