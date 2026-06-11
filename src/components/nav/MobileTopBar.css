@@ -78,6 +78,29 @@
   gap: 10px;
   min-width: 0;
 }
+/* Brand wordmark — "aura" set in the landing-page serif so the identity reads
+   big and warm in the bar (it was a small mono label before), with the live
+   day/time stamp kept quiet beside it. */
+.aura-mobile-top__brandtext {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.aura-mobile-top__wordmark {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 21px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+.aura-mobile-top__stamp {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Brand-as-search: flex-fills the bar up to the action trio so a tap anywhere
    left of the controls opens search. Chrome-less (no border/bg) so it still
    reads as plain identity; the negative left margin + matching padding extend

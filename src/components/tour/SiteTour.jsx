@@ -35,7 +35,7 @@ const MOBILE_STEPS = [
   { id: 'welcome', screen: 'home', selector: null,
     title: 'hey, welcome to aura', body: 'a quick look around — takes half a minute.' },
   { id: 'm-search', screen: 'home', selector: "[data-tour='mtop-search']",
-    title: 'search', body: 'tap the top bar to find songs, artists, albums — or a feeling.' },
+    title: 'search', body: 'tap search to find any song, artist, or album — or just type a feeling.' },
   { id: 'm-talk', screen: 'home', selector: "[data-tour='mnav-talk']",
     title: 'talk', body: 'ask aura for a vibe in plain words — it queues the right set.' },
   { id: 'm-library', screen: 'home', selector: "[data-tour='mnav-library']",

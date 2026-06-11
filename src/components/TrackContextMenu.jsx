@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { subscribeTrackMenu, closeTrackMenu } from '../lib/trackContextMenu';
 import { openAddToPlaylist } from '../lib/addToPlaylistSheet';
+import { useLikes } from '../hooks/useLikes';
 import { toast } from '../lib/toast';
 // `aura-fadein` keyframe is defined in src/styles/animations.css.
 import './TrackContextMenu.css';
@@ -14,6 +15,8 @@ export function TrackContextMenu({ onPickLive, onPlayNext, onAddToQueue, onOpenA
   const [event, setEvent] = useState(null);
   const [pos, setPos]     = useState({ left: 0, top: 0 });
   const ref = useRef(null);
+  // Subscribed so the "unlike" row appears/disappears live as like-state changes.
+  const { isLiked, unlike } = useLikes();
 
   useEffect(() => subscribeTrackMenu(setEvent), []);
 
@@ -108,6 +111,15 @@ export function TrackContextMenu({ onPickLive, onPlayNext, onAddToQueue, onOpenA
         </span>
         add to playlist
       </button>
+      {isLiked(track.id) && (
+        <button role="menuitem" className="aura-ctx-menu__item"
+          onClick={() => { unlike(track.id); toast('removed from likes.'); closeTrackMenu(); }}>
+          <span className="aura-ctx-menu__item-icon">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 11.2 C2 8.4 1 6 2.1 4.2 2.9 3 4.6 3 6.1 4.4 M6.9 4.4 C8.4 3 10.1 3 10.9 4.2 12 6 11 8.4 6.5 11.2 Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.5 2 L10.5 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          </span>
+          unlike
+        </button>
+      )}
       {onOpenArtist && track.artist && (
         <>
           <div className="aura-ctx-menu__sep" role="separator"/>

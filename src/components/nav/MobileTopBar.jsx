@@ -88,10 +88,13 @@ export function MobileTopBar({
 
   const brandInner = (
     <>
-      <AuraMark size={16}/>
-      <MonoLabel className="text-ink-soft">
-        {djName} · {formatShortStamp(now).toLowerCase()}
-      </MonoLabel>
+      <AuraMark size={18}/>
+      <span className="aura-mobile-top__brandtext">
+        <span className="aura-mobile-top__wordmark">{djName}</span>
+        <MonoLabel className="text-ink-faint aura-mobile-top__stamp" size={9}>
+          {formatShortStamp(now).toLowerCase()}
+        </MonoLabel>
+      </span>
     </>
   );
 
@@ -102,7 +105,6 @@ export function MobileTopBar({
       <div ref={barRef} className="aura-mobile-top__bar-content">
         {onOpenSearch ? (
           <button type="button" onClick={onOpenSearch} aria-label="Search"
-            data-tour="mtop-search"
             className="aura-mobile-top__brand aura-mobile-top__brand--tap">
             {brandInner}
           </button>
@@ -112,6 +114,7 @@ export function MobileTopBar({
         <div className="aura-mobile-top__right">
           {onOpenSearch && (
             <button type="button" onClick={onOpenSearch} aria-label="Search"
+              data-tour="mtop-search"
               className="aura-mobile-top__action">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.5"/>

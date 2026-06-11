@@ -863,14 +863,30 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     }
     setQueue(q => {
       const cur = q.tracks.length ? q : { tracks: pool, idx: 0, source: "tonight's set" };
-      if (cur.idx >= cur.tracks.length - 1) return cur;  // nothing to shuffle
-      const head = cur.tracks.slice(0, cur.idx + 1);
+      if (cur.tracks.length < 2) return cur;  // nothing to shuffle
+      const shuffle = (arr) => {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      };
       const tail = cur.tracks.slice(cur.idx + 1);
-      for (let i = tail.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [tail[i], tail[j]] = [tail[j], tail[i]];
+      if (tail.length >= 2) {
+        // Normal case: keep history + the playing track pinned, shuffle up-next.
+        return { ...cur, tracks: [...cur.tracks.slice(0, cur.idx + 1), ...shuffle(tail)] };
       }
-      return { ...cur, tracks: [...head, ...tail] };
+      // Tiny / end-of-queue set (e.g. just 2 tracks): nothing is strictly
+      // "up next", so reorder the whole set while keeping the current track
+      // playing — re-point idx at it so audio never restarts. Nudge until the
+      // order actually changes so the shuffle is visible, not a silent no-op.
+      const playing = cur.tracks[cur.idx];
+      const original = cur.tracks;
+      let tracks = shuffle([...original]);
+      for (let n = 0; n < 6 && tracks.every((trk, i) => trk === original[i]); n++) {
+        tracks = shuffle([...original]);
+      }
+      return { ...cur, tracks, idx: tracks.indexOf(playing) };
     });
     setShuffleActive(true);
     toast('shuffled.');

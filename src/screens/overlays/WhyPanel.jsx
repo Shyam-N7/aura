@@ -22,7 +22,7 @@ export function WhyPanel({ track, mood, djName, onClose }) {
   }, [track.id, mood, key]);
 
   return (
-    <div className="absolute inset-0 bg-bg text-ink flex flex-col px-7 pt-5 pb-[30px] overflow-auto animate-aura-sheet-in">
+    <div className="absolute inset-0 z-[50] bg-bg text-ink flex flex-col px-7 pt-5 pb-[30px] overflow-auto animate-aura-sheet-in">
       <div className="flex justify-between items-center">
         <MonoLabel className="text-ink-soft">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent mr-2 animate-aura-pulse"/>

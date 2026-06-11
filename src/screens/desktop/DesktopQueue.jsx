@@ -278,7 +278,7 @@ export function DesktopQueue({
               <button type="button"
                 title={shuffleActive ? 'Stop shuffling — restore queue order' : 'Shuffle the upcoming tracks'}
                 onClick={onShuffle}
-                disabled={!shuffleActive && tracks.length - currentIdx <= 2}
+                disabled={!shuffleActive && tracks.length < 2}
                 className={`aura-dq__action-btn ${shuffleActive ? 'aura-dq__action-btn--on' : ''}`}
                 aria-label={shuffleActive ? 'Shuffle on — tap to deactivate' : 'Shuffle up-next'}>
                 Shuffle
