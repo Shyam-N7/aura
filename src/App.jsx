@@ -593,11 +593,18 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     return () => { offProgress(); offEnded(); offPlay(); offError(); };
   }, [player, safePlay]);
 
-  // Flush playback position to localStorage on tab close.
+  // Flush playback position to localStorage on tab close AND when the page is
+  // backgrounded (e.g. iOS screen-lock). If iOS then stalls/reloads the stream,
+  // the load effect's position-restore resumes mid-track instead of from 0.
   useEffect(() => {
-    const handler = () => flushPosition();
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    const flush = () => flushPosition();
+    const onVis = () => { if (document.hidden) flushPosition(); };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, []);
 
   // Sleep timer expiry → pause playback. Toast for visibility.

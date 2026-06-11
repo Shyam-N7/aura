@@ -15,12 +15,19 @@ export class HtmlAudioPlayer {
     this._listeners = new Map();
     this._raf = 0;
     this._lastEmit = 0;
-    // Web Audio EQ graph — built lazily on first play (an AudioContext can only
-    // start after a user gesture, and createMediaElementSource can run once).
+    // Web Audio EQ graph — built lazily, and only when the EQ is actually in use
+    // (first slider/preset touch, or first play with a saved non-flat preset).
+    // Until then the bare <audio> element plays untapped, which is what iOS keeps
+    // alive on the lock screen — tapping via createMediaElementSource forfeits
+    // native background playback. createMediaElementSource can run only once.
     this._ctx = null;
     this._src = null;
     this._bands = null;
     this._eqGains = EQ_FLAT.slice();
+    // Tracks user/app intent to be playing, independent of the element's actual
+    // paused state — iOS can pause the element on screen-lock without us asking,
+    // so on return to foreground we re-arm playback if we still mean to play.
+    this._intendedPlaying = false;
     // HTMLAudio's native `timeupdate` fires only every ~250 ms — too coarse
     // for syncing lyrics. We drive a rAF loop while playing and throttle the
     // emit to ~30 Hz so the progress signal is smooth without rerendering the
@@ -39,6 +46,14 @@ export class HtmlAudioPlayer {
     // window may still suppress the first emit. Reset it and snap progress.
     this._onVisible   = () => {
       if (document.hidden) return;
+      // Back to foreground. Resume a context iOS auto-suspended on lock so a
+      // tapped (EQ) graph isn't left silent.
+      if (this._ctx?.state === 'suspended') { this._ctx.resume().catch(() => {}); }
+      // iOS may have paused the element on lock even though we still mean to be
+      // playing — re-arm so playback continues instead of just stopping.
+      if (this._intendedPlaying && this._el.paused && !this._silent) {
+        this._el.play().catch(() => {});
+      }
       this._lastEmit = 0;
       this._emitProgress();
       if (!this._el.paused) this._startTick();
@@ -67,8 +82,9 @@ export class HtmlAudioPlayer {
   // tapped source MUST reach destination or playback goes silent. We therefore
   // commit _ctx the instant the tap succeeds (so we never re-tap, which would throw
   // InvalidStateError) and, if building the band chain then fails, wire the source
-  // straight to destination so audio survives — just without EQ. Called from play()
-  // so the user gesture lets the context start.
+  // straight to destination so audio survives — just without EQ. Called lazily on
+  // first EQ use (or first play with a saved preset), never on every play — see
+  // the lazy-tap note in the constructor.
   _ensureGraph() {
     if (this._ctx || this._silent) return;
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -112,17 +128,28 @@ export class HtmlAudioPlayer {
     const v = Math.max(-12, Math.min(12, Number(db)));
     if (!Number.isFinite(v) || i < 0 || i >= this._eqGains.length) return;
     this._eqGains[i] = v;
+    this._enableEq();
     if (this._bands?.[i]) this._bands[i].gain.value = v;
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
   }
   setEqGains(arr) {
     this._eqGains = sanitizeGains(arr);
+    this._enableEq();
     if (this._bands) this._bands.forEach((b, i) => { b.gain.value = this._eqGains[i] ?? 0; });
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
   }
   getEqGains() { return this._eqGains.slice(); }
+  // First EQ touch builds the Web Audio tap. A slider/preset interaction is a
+  // user gesture, so creating + resuming the context here is allowed; resuming
+  // matters because once tapped the element's audio ONLY flows through the
+  // (possibly suspended) graph.
+  _enableEq() {
+    this._ensureGraph();
+    if (this._ctx?.state === 'suspended') { this._ctx.resume().catch(() => {}); }
+  }
+  _eqActive() { return this._eqGains.some(g => g !== 0); }
   _persistEq() {
     try { localStorage.setItem('aura.eq.gains', JSON.stringify(this._eqGains)); } catch { /* ignore */ }
   }
@@ -188,12 +215,18 @@ export class HtmlAudioPlayer {
 
   async play() {
     if (this._silent) return;
-    // play() is a user gesture → safe to build + resume the EQ graph here.
-    this._ensureGraph();
-    if (this._ctx?.state === 'suspended') { try { await this._ctx.resume(); } catch { /* ignore */ } }
+    this._intendedPlaying = true;
+    // Tap through Web Audio ONLY when the EQ is in use (already tapped this
+    // session, or a saved non-flat preset). Otherwise play the bare element so
+    // iOS keeps it alive on the lock screen. The tap is also built lazily on the
+    // first EQ adjustment (_enableEq). Once tapped, it stays tapped — keep using it.
+    if (this._ctx || this._eqActive()) {
+      this._ensureGraph();
+      if (this._ctx?.state === 'suspended') { try { await this._ctx.resume(); } catch { /* ignore */ } }
+    }
     return this._el.play();
   }
-  pause() { if (!this._silent) this._el.pause(); }
+  pause() { if (!this._silent) { this._intendedPlaying = false; this._el.pause(); } }
 
   seek(p) {
     if (!this._el.duration) return;
