@@ -125,57 +125,81 @@
   width: 80%;
 }
 
-.aura-onb__check {
+/* Horizontal stepper — Language → Mood → Artists. Each node carries a numbered
+   dot (a check once done) and a label, joined by a connector that lights to the
+   accent as steps are reached. Drives off the same lang/mood/artist step states.
+   Sits in the rail: persistent beside the content on desktop, top-of-page on
+   mobile (where the rail stacks above the sections). */
+.aura-onb__stepper {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
+  align-items: flex-start;
+}
+.aura-onb__step-node {
+  position: relative;
+  flex: 1;
+  display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.aura-onb__check-row {
-  display: grid;
-  grid-template-columns: 32px 1fr auto;
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px 10px 10px;
-  border-left: 2px solid transparent;
-  color: var(--color-ink-faint);
-  transition: color 200ms ease, border-color 200ms ease;
+  gap: 9px;
+  text-align: center;
+  min-width: 0;
 }
-.aura-onb__check-row--active {
-  border-left-color: var(--color-accent);
-  color: var(--color-ink);
+/* Connector to the previous node, pinned at the dot's vertical centre. It lights
+   for reached steps (active/done both imply the prior step is complete). */
+.aura-onb__step-node + .aura-onb__step-node::before {
+  content: '';
+  position: absolute;
+  top: 13px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--color-line);
+  transition: background 240ms ease;
 }
-.aura-onb__check-row--done {
-  color: var(--color-ink-soft);
+.aura-onb__step-node--active::before,
+.aura-onb__step-node--done::before {
+  background: var(--color-accent);
 }
-.aura-onb__check-num {
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.aura-onb__step-dot {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  border: 1.5px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-ink-faint);
+  transition: border-color 200ms ease, background 200ms ease, color 200ms ease, box-shadow 200ms ease;
 }
-.aura-onb__check-row--done .aura-onb__check-num {
+.aura-onb__step-node--active .aura-onb__step-dot {
+  border-color: var(--color-accent);
   color: var(--color-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent), transparent 86%);
 }
-.aura-onb__check-label {
+.aura-onb__step-node--done .aura-onb__step-dot {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+.aura-onb__step-label {
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: -0.005em;
+  color: var(--color-ink-soft);
+  transition: color 200ms ease;
 }
-.aura-onb__check-meta {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: inherit;
-}
+.aura-onb__step-node--active .aura-onb__step-label { color: var(--color-ink); }
+.aura-onb__step-node--pending .aura-onb__step-label { color: var(--color-ink-faint); }
 
 /* ─── Right column ─────────────────────────────────────────────────── */
 .aura-onb__main {
@@ -476,6 +500,30 @@
 }
 @media (min-width: 780px)  { .aura-onb__grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1280px) { .aura-onb__grid { grid-template-columns: repeat(4, 1fr); } }
+
+/* "Load more" — quiet accent-outlined pill under the grid; only renders while
+   more of the pool is hidden. */
+.aura-onb__loadmore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px auto 0;
+  padding: 10px 20px;
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 55%);
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--color-accent);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.aura-onb__loadmore:hover {
+  background: color-mix(in srgb, var(--color-accent), transparent 90%);
+  border-color: var(--color-accent);
+}
 
 .aura-onb__tile {
   display: flex;

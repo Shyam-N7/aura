@@ -95,6 +95,9 @@ export function OnboardingScreen({ pool = [], onDone, onSkip }) {
   // `picks` is an ORDERED array, not a Set — we need FIFO replacement when
   // the user taps a 4th tile (oldest pick drops out, new one takes its slot).
   const [picks,         setPicks]         = useState(() => []);
+  // How many artist tiles are revealed. Starts at one page; "load more" grows it
+  // so a user who doesn't like the first dozen can pull in the rest of the pool.
+  const [visibleCount,  setVisibleCount]  = useState(MAX_TILES);
   // Trending tracks pulled on mount. Used as the primary artist source — the
   // `pool` prop is a fallback while trending loads (and if it fails).
   const [trending, setTrending] = useState([]);
@@ -115,6 +118,8 @@ export function OnboardingScreen({ pool = [], onDone, onSkip }) {
     if (selectedLangs.size === 0) return allTiles;
     return allTiles.filter(t => !t.language || selectedLangs.has(String(t.language).toLowerCase()));
   }, [allTiles, selectedLangs]);
+  const visibleTiles = tiles.slice(0, visibleCount);
+  const canLoadMore  = tiles.length > visibleCount;
 
   const toggleLang = (L) => setSelectedLangs(prev => {
     const next = new Set(prev);
@@ -182,10 +187,10 @@ export function OnboardingScreen({ pool = [], onDone, onSkip }) {
             Three quick questions. You can change any answer later.
           </p>
           <div className="aura-onb__rail-divider"/>
-          <ol className="aura-onb__check">
-            <ChecklistRow num="01" label="Language" status={langStep}   meta="Choose 1 or more"/>
-            <ChecklistRow num="02" label="Mood"     status={moodStep}   meta="Choose 1"/>
-            <ChecklistRow num="03" label="Artists"  status={artistStep} meta={`${picks.length} of 3`}/>
+          <ol className="aura-onb__stepper" aria-label="Setup progress">
+            <StepperNode n={1} label="Language" status={langStep}/>
+            <StepperNode n={2} label="Mood"     status={moodStep}/>
+            <StepperNode n={3} label="Artists"  status={artistStep}/>
           </ol>
         </aside>
 
@@ -260,7 +265,7 @@ export function OnboardingScreen({ pool = [], onDone, onSkip }) {
               <span className="aura-onb__step-meta">{picks.length} of 3</span>
             </header>
             <div className="aura-onb__grid">
-              {tiles.map((t, i) => {
+              {visibleTiles.map((t, i) => {
                 const on = picks.includes(t.name);
                 return (
                   <button key={t.name} type="button" onClick={() => togglePick(t.name)}
@@ -296,6 +301,15 @@ export function OnboardingScreen({ pool = [], onDone, onSkip }) {
                 </div>
               )}
             </div>
+            {canLoadMore && (
+              <button type="button" className="aura-onb__loadmore"
+                onClick={() => setVisibleCount(c => c + 8)}>
+                Load more artists
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                  <path d="M6.5 2.5 V10.5 M2.5 6.5 H10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
           </section>
         </main>
       </div>
@@ -323,18 +337,17 @@ export function OnboardingScreen({ pool = [], onDone, onSkip }) {
   );
 }
 
-function ChecklistRow({ num, label, status, meta }) {
+function StepperNode({ n, label, status }) {
   return (
-    <li className={`aura-onb__check-row aura-onb__check-row--${status}`}>
-      <span className="aura-onb__check-num">
+    <li className={`aura-onb__step-node aura-onb__step-node--${status}`}>
+      <span className="aura-onb__step-dot">
         {status === 'done' ? (
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
             <path d="M2 5.6 L4.4 8 L9 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-        ) : num}
+        ) : n}
       </span>
-      <span className="aura-onb__check-label">{label}</span>
-      <span className="aura-onb__check-meta">{meta}</span>
+      <span className="aura-onb__step-label">{label}</span>
     </li>
   );
 }
@@ -356,10 +369,11 @@ function buildTiles(pool) {
       seen.get(name).imageUrl = t.imageUrl;
     }
   }
-  const fromPool = Array.from(seen.values()).slice(0, MAX_TILES);
-  if (fromPool.length >= MAX_TILES) return fromPool;
-
+  // Return the FULL deduped pool (not capped at MAX_TILES) — the screen reveals
+  // a page at a time via `visibleCount`, so "load more" can pull in everything
+  // trending surfaced plus the seed fallbacks the user hasn't seen yet.
+  const fromPool = Array.from(seen.values());
   const have = new Set(fromPool.map(t => t.name));
-  const fill = SEED_ARTIST_FALLBACK.filter(t => !have.has(t.name)).slice(0, MAX_TILES - fromPool.length);
+  const fill = SEED_ARTIST_FALLBACK.filter(t => !have.has(t.name));
   return [...fromPool, ...fill];
 }
