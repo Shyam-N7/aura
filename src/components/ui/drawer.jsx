@@ -25,10 +25,10 @@ export function DrawerSrTitle({ children }) {
   return <Vaul.Title className="aura-drawer__sr-title">{children}</Vaul.Title>;
 }
 
-export function DrawerContent({ className, children, showHandle = true, overlayClassName, ...props }) {
+export function DrawerContent({ className, children, showHandle = true, ...props }) {
   return (
     <Vaul.Portal container={shellContainer()}>
-      <Vaul.Overlay className={cn('aura-drawer__overlay', overlayClassName)}/>
+      <Vaul.Overlay className="aura-drawer__overlay"/>
       <Vaul.Content className={cn('aura-drawer__content', className)} {...props}>
         {showHandle && <div className="aura-drawer__handle" aria-hidden="true"/>}
         {children}

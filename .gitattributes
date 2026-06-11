@@ -1,0 +1,3 @@
+# patch-package diffs are byte-exact against node_modules files (LF) — keep
+# git from rewriting line endings on checkout, which would corrupt them.
+patches/*.patch -text

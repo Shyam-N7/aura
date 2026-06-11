@@ -22,7 +22,7 @@ import { PlayerDrawer } from './components/player/PlayerDrawer';
 import { SpeedDial } from './components/SpeedDial';
 import { AddToPlaylistSheet } from './components/AddToPlaylistSheet';
 import { openAddToPlaylist } from './lib/addToPlaylistSheet';
-import { openSleepTimer } from './lib/sleepTimerSheet';
+import { openSleepTimer, closeSleepTimer, subscribeSleepSheet } from './lib/sleepTimerSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { PromptDialog } from './components/PromptDialog';
 
@@ -929,6 +929,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     }
   };
 
+  // The sleep sheet lives on its own bus, so it could stack with the why /
+  // lyrics / crowd panels. Opening either side closes the other.
+  const openOverlay = (name) => { closeSleepTimer(); setOverlay(name); };
+  useEffect(() => subscribeSleepSheet((o) => { if (o) setOverlay(null); }), []);
+
   // Leave the player to another screen. Play the screen-out animation on
   // the player wrapper for a Telegram-style dismiss (scale + fade + slight
   // slide down). The previous diagonal art-to-orb morph was removed — it
@@ -1086,7 +1091,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
               onSeek={(p) => player.seek(p)} player={player}
               onBack={() => leavePlayer(playerReturn)}
-              openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
+              openWhy={() => openOverlay('why')} openLyrics={() => openOverlay('lyrics')}
               openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}/>
           </PlayerDrawer>
         )}
@@ -1102,7 +1107,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
               onSeek={(p) => player.seek(p)}
               onBack={() => leavePlayer(playerReturn)}
-              openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
+              openWhy={() => openOverlay('why')} openLyrics={() => openOverlay('lyrics')}
               openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}
               showRelated={!isDesktop || isTabletLandscape}
               onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
@@ -1276,7 +1281,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             slim={isTabletLandscape}
             onTogglePlay={() => setPlaying(p => !p)} onPrev={goPrev} onNext={goNext}
             onSeek={(p) => player.seek(p)}
-            onOpenLyrics={() => setOverlay('lyrics')} onOpenWhy={() => setOverlay('why')}
+            onOpenLyrics={() => openOverlay('lyrics')} onOpenWhy={() => openOverlay('why')}
             onOpenQueue={() => { setOverlay(null); setQueueReturn(screen); setScreen('queue'); }}
             onPickLive={pickLiveTrack}
             onPlayNext={enqueueNext}
@@ -1312,7 +1317,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {isCompact && !overlay && !talkOpen && screen !== 'player' && (
           <SpeedDial actions={[
             { id: 'why', label: 'why this song', show: !!track,
-              onClick: () => setOverlay('why'),
+              onClick: () => openOverlay('why'),
               icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 7.5 a3 3 0 1 1 4 2.8 c-.8 .4 -1 .9 -1 1.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="10" cy="15" r="0.9" fill="currentColor"/></svg>) },
             { id: 'playlist', label: 'save to playlist', show: !!track,
               onClick: () => openAddToPlaylist(track),

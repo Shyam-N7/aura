@@ -11,9 +11,6 @@
   background: var(--color-bg);
 }
 
-/* The screen behind shows through as you drag the player down. */
-.aura-player-drawer__overlay { background: rgb(0 0 0 / 0.42); }
-
 /* Pull-down affordance, pinned at the very top centre over the player. Purely
    visual (pointer-events:none) — vaul handles the drag from the content itself. */
 .aura-player-drawer__grip {
