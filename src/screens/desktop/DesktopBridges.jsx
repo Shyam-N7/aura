@@ -23,28 +23,26 @@ const TO_MOODS = [
   { key: 'energized', hint: 'fired up',    color: '#c47554' },
   { key: 'social',    hint: 'out, lively', color: '#a8556a' },
 ];
-// AURA's inferred mood → the closest "where you are" word, so the dial starts
-// where the user actually is.
-const INFERRED_FROM = {
-  restless: 'restless', calm: 'sad', focused: 'restless',
-  upbeat: 'tired', warm: 'lonely', social: 'tired',
-};
 const MIN_STEPS = 4;
 const MAX_STEPS = 8;
+const FROM_KEYS = FROM_MOODS.map(m => m.key);
+const TO_KEYS = TO_MOODS.map(m => m.key);
 
-// Last configured bridge persists per-device like the other aura.* prefs; with
-// no saved choice, start from the user's current mood.
-function loadCfg(mood) {
+// Last configured bridge persists per-device like the other aura.* prefs. The
+// saved keys are validated against the CURRENT vocabulary — a cfg saved before
+// the mood words changed (e.g. {from:'calm',to:'upbeat'}) would otherwise send
+// an invalid mood to the server and 400 with "unknown mood".
+function loadCfg() {
   try {
     const c = JSON.parse(localStorage.getItem('aura.moodBridge'));
-    if (c && c.from && c.to && c.steps) return c;
+    if (c && c.steps && FROM_KEYS.includes(c.from) && TO_KEYS.includes(c.to)) return c;
   } catch { /* ignore */ }
-  return { from: INFERRED_FROM[mood] ?? 'sad', to: 'happy', steps: 5 };
+  return { from: 'sad', to: 'happy', steps: 5 };
 }
 
-export function DesktopBridges({ onPickSequence, mood }) {
+export function DesktopBridges({ onPickSequence }) {
   const [loadingId, setLoadingId] = useState(null);
-  const [cfg, setCfg] = useState(() => loadCfg(mood));
+  const [cfg, setCfg] = useState(loadCfg);
 
   useEffect(() => {
     try { localStorage.setItem('aura.moodBridge', JSON.stringify(cfg)); }

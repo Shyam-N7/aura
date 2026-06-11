@@ -1220,7 +1220,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         )}
         {screen === 'bridges' && (
           <div key="bridges" className="absolute inset-0 animate-aura-screen-in">
-            <DesktopBridges onPickSequence={pickLiveSequence} mood={t.mood}/>
+            <DesktopBridges onPickSequence={pickLiveSequence}/>
           </div>
         )}
         </Suspense>
