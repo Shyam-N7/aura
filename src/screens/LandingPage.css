@@ -254,6 +254,19 @@
   text-wrap: pretty;
 }
 .aura-landing .hero h1 em { font-style: italic; }
+/* Brand line leading the H1 — puts "AURA FM" (the keyword) first in the page's
+   primary heading, styled as a small accent eyebrow so the serif tagline still
+   dominates visually. */
+.aura-landing .hero h1 .brand-line {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: clamp(13px, 1.5vw, 17px);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
 .aura-landing .hero .lead {
   font-family: var(--font-serif);
   font-size: clamp(18px, 1.8vw, 22px);

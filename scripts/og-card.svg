@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- AURA FM social card (1200x630). Source for public/og.png — edit here then
+       run `node scripts/gen-og.mjs`. Mirrors public/icon.svg's palette. -->
+  <rect width="1200" height="630" fill="#1a1814"/>
+
+  <!-- concentric ring motif, right side -->
+  <g transform="translate(980 315)" fill="none" stroke="#d8d0c2">
+    <circle r="300" stroke-width="6" opacity="0.13"/>
+    <circle r="198" stroke-width="6" opacity="0.20"/>
+    <circle r="104" stroke-width="6" opacity="0.30"/>
+  </g>
+  <circle cx="980" cy="315" r="44" fill="#d97757"/>
+
+  <!-- text block -->
+  <text x="92" y="142" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="7" fill="#d8d0c2" opacity="0.62">AURAFM.LIVE</text>
+  <text x="86" y="312" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="142" letter-spacing="-2" fill="#f5ede1">AURA FM</text>
+  <text x="92" y="398" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="50" fill="#d8d0c2">AI radio that reads your mood.</text>
+  <text x="92" y="548" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#d8d0c2" opacity="0.58">an AI music player that learns how you feel — and plays the songs that fit.</text>
+</svg>

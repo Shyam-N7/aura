@@ -163,12 +163,13 @@ function Hero({ onNavigateAuth }) {
           </span>
         </div>
         <h1>
+          <span className="brand-line">AURA FM</span>
           music that<br />
           <em>gets your mood.</em>
         </h1>
         <p className="lead">
-          AURA is an AI music player that learns how you feel and plays songs that
-          fit — without you picking a mood.
+          AURA FM is an AI music player and personal radio that learns how you feel
+          and plays songs that fit — without you picking a mood.
         </p>
         <div className="ctas">
           <button className="btn btn-primary" type="button" onClick={() => onNavigateAuth('signup')}>
@@ -203,6 +204,7 @@ function Hero({ onNavigateAuth }) {
 function Marquee() {
   const items = [
     ['gets your mood', 'no questions asked'],
+    ['your own radio', 'tuned to your mood'],
     ['builds the flow', 'not just playlists'],
     ['talk to it', 'in plain words'],
     ['brings back songs', 'at the right moment'],
@@ -584,7 +586,7 @@ function FeatureGrid() {
    ══════════════════════════════════════════════════════════════════════ */
 function DnaShowcase() {
   return (
-    <section className="lp-body dna-section">
+    <section className="lp-body dna-section" id="dna">
       <div className="dna-inner">
         <div className="dna-radar reveal" aria-hidden="true">
           <svg viewBox="0 0 400 400" style={{ width: '100%', height: '100%' }}>
@@ -894,8 +896,8 @@ function Footer({ onNavigateAuth }) {
             <span>aura</span>
           </button>
           <p>
-            Music that gets how you feel. A calm AI music app built around your real
-            mood — not what the algorithm assumes.
+            AURA FM — music that gets how you feel. A calm AI radio built around your
+            real mood, not what the algorithm assumes.
           </p>
         </div>
         <div className="footer-col">
@@ -927,7 +929,7 @@ function Footer({ onNavigateAuth }) {
         </div>
       </div>
       <div className="footer-bottom">
-        <span>&copy; 2026 AURA</span>
+        <span>&copy; 2026 AURA FM</span>
         <span>made with aura</span>
       </div>
     </footer>

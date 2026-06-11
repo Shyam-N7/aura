@@ -93,8 +93,8 @@ function AppRoot() {
 
   // Pre-auth tab titles (in-app titles are managed per screen by App).
   useEffect(() => {
-    if (view === 'auth')         document.title = 'sign in · AURA';
-    else if (view === 'landing') document.title = 'AURA — your contemplative AI DJ';
+    if (view === 'auth')         document.title = 'sign in · AURA FM';
+    else if (view === 'landing') document.title = 'AURA FM — AI radio that reads your mood';
   }, [view]);
 
   // Auth-page mode comes from ?mode=signup on entry; AuthPage owns it after.

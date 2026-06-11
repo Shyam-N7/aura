@@ -6,24 +6,54 @@
   <meta name="theme-color" content="#1a1814"/>
   <link rel="icon" type="image/svg+xml" href="/icon.svg"/>
   <link rel="apple-touch-icon" href="/icon.svg"/>
-  <title>AURA — your contemplative AI DJ</title>
-  <meta name="description" content="A contemplative AI DJ that reads the room — search any song or feeling, talk to your DJ, and watch your listening become journals, sonic DNA, and mood bridges."/>
+  <title>AURA FM — AI radio that reads your mood</title>
+  <meta name="description" content="AURA FM is an AI music player and personal radio that learns how you feel and plays the songs that fit — talk to your DJ, no mood-picking. Free in early access."/>
   <link rel="canonical" href="https://aurafm.live/"/>
-  <meta property="og:site_name" content="AURA"/>
-  <meta property="og:title" content="AURA — your contemplative AI DJ"/>
-  <meta property="og:description" content="A contemplative AI DJ that reads the room."/>
+  <meta property="og:site_name" content="AURA FM"/>
+  <meta property="og:title" content="AURA FM — AI radio that reads your mood"/>
+  <meta property="og:description" content="An AI music player and personal radio that learns how you feel and plays the songs that fit."/>
   <meta property="og:type" content="website"/>
   <meta property="og:url" content="https://aurafm.live/"/>
-  <meta name="twitter:card" content="summary"/>
+  <meta property="og:image" content="https://aurafm.live/og.png"/>
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+  <meta property="og:image:alt" content="AURA FM — AI radio that reads your mood"/>
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="AURA FM — AI radio that reads your mood"/>
+  <meta name="twitter:description" content="An AI music player and personal radio that learns how you feel and plays the songs that fit."/>
+  <meta name="twitter:image" content="https://aurafm.live/og.png"/>
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "AURA",
-    "url": "https://aurafm.live/",
-    "applicationCategory": "MultimediaApplication",
-    "operatingSystem": "Web",
-    "description": "A contemplative AI DJ that reads the room."
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://aurafm.live/#org",
+        "name": "AURA FM",
+        "alternateName": "AURA",
+        "url": "https://aurafm.live/",
+        "logo": "https://aurafm.live/icon.svg",
+        "description": "AURA FM is an AI music player and personal radio that reads your mood."
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://aurafm.live/#site",
+        "name": "AURA FM",
+        "alternateName": "AURA",
+        "url": "https://aurafm.live/",
+        "publisher": { "@id": "https://aurafm.live/#org" }
+      },
+      {
+        "@type": "WebApplication",
+        "name": "AURA FM",
+        "url": "https://aurafm.live/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Web",
+        "description": "An AI music player and personal radio that learns how you feel and plays the songs that fit.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "publisher": { "@id": "https://aurafm.live/#org" }
+      }
+    ]
   }
   </script>
 </head>

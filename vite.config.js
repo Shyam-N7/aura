@@ -15,9 +15,9 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'AURA — your contemplative AI DJ',
-        short_name: 'AURA',
-        description: 'A contemplative AI DJ that reads the room.',
+        name: 'AURA FM — AI radio that reads your mood',
+        short_name: 'AURA FM',
+        description: 'An AI music player and personal radio that learns how you feel and plays the songs that fit.',
         theme_color: '#1a1814',
         background_color: '#1a1814',
         display: 'standalone',
