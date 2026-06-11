@@ -75,7 +75,23 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
   // language-preferred album (e.g. Kannada KGF), deduped out of the list, and
   // its songs are ranked too. Intent-gated — ranking songs for a *song* query
   // would promote a same-language near-match over the exact hit.
-  let albums = rankByLang(sug.albums, userLangs);
+  // Albums whose NAME matches the query rank FIRST — an exact/substring title
+  // like "With Love" must surface (and become the hero) regardless of language —
+  // THEN the user's language preference, then catalog order. Previously a
+  // non-preferred-language exact match was demoted by language and buried/lost.
+  const albumNeedle = q.toLowerCase();
+  const nameHit = (a) => (a?.name ?? '').toLowerCase().includes(albumNeedle);
+  const langScore = (a) => {
+    const i = userLangs.indexOf((a?.language ?? '').toLowerCase());
+    return i === -1 ? userLangs.length : i;
+  };
+  let albums = (sug.albums ?? [])
+    .map((a, i) => ({ a, i }))
+    .sort((p, n) =>
+      ((nameHit(p.a) ? 0 : 1) - (nameHit(n.a) ? 0 : 1))
+      || (langScore(p.a) - langScore(n.a))
+      || (p.i - n.i))
+    .map(o => o.a);
   let top = sug.top;
   if (top?.type === 'album' && albums.length) {
     const a = albums[0];
