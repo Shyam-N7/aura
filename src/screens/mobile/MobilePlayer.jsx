@@ -18,7 +18,7 @@ import './MobilePlayer.css';
 // the transport anchored in the thumb zone. Up-next / more-like-this live in the
 // Queue screen now (the queue icon opens it). Lyrics open full-screen on art tap.
 export function MobilePlayer({
-  track, progress, playing, nextTrack, nextLoading, player, mood, djName = 'AURA',
+  track, progress, playing, nextTrack, nextLoading, player, djName = 'AURA',
   onTogglePlay, onPrev, onNext, onSeek,
   repeatMode = 'off', onCycleRepeat, onShuffle, shuffleActive = false,
   onBack, openWhy, openLyrics, openQueue,
@@ -51,8 +51,7 @@ export function MobilePlayer({
           </button>
 
           <div className="aura-mp__eyebrow">
-            <MonoLabel className="text-ink-faint" size={8.5}>{djName}</MonoLabel>
-            {mood && <span className="aura-mp__mood">{mood}</span>}
+            <span className="aura-mp__brand">{djName.toLowerCase()}</span>
           </div>
 
           <div className="aura-mp__menu-wrap" data-vaul-no-drag>
@@ -76,7 +75,7 @@ export function MobilePlayer({
         </div>
 
         <div className="aura-mp__hero">
-          <div id="player-art" onClick={openLyrics} className="aura-mp__cover">
+          <div id="player-art" className="aura-mp__cover">
             <MorphingAlbumArt track={track} size={360} radius={10}/>
           </div>
         </div>
