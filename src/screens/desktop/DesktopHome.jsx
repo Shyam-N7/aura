@@ -9,6 +9,7 @@ import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { TopStrip } from './TopStrip';
+import { QuickPicksOrbit } from './QuickPicksOrbit';
 import { SectionHeader } from './SectionHeader';
 import { HeroBand } from './HeroBand';
 import { BridgeCard } from './BridgeCard';
@@ -21,7 +22,7 @@ const _cache = {};
 
 export function DesktopHome({
   tracks, djName,
-  onPick, onPickLive, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
+  onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenPlaylists, onOpenSearch,
   onOpenArtist,
   t, setTweak,
@@ -60,26 +61,23 @@ export function DesktopHome({
     <div ref={scrollRef} className="aura-dh">
       <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}/>
 
-      {/* Quick picks — a grid drawn from your LISTENING (most-played, then
-          recently-played, then featured for brand-new users), above the hero so
-          it's the first thing to act on. */}
+      {/* Quick picks — an orbital ring drawn from your LISTENING (most-played,
+          then recently-played, then featured for brand-new users), above the
+          hero so it's the first thing to act on. */}
       {quickPicks.length > 0 && (
         <section className="aura-dh__qp">
           <SectionHeader title="Quick picks" sub="jump back into what you love" large/>
-          <div className="aura-dh__qp-grid">
-            {quickPicks.map(t => (
-              <button key={t.id} onClick={() => onPickLive?.(t)} onContextMenu={ctxOpen(t)} className="aura-dh__qp-tile">
-                <span className="aura-dh__qp-art">
-                  <AlbumArt track={t} radius={10} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
-                  <span className="aura-dh__qp-play">
-                    <svg width="11" height="13" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
-                  </span>
-                </span>
-                <div className="aura-dh__qp-title">{cleanTitle(t.title)}</div>
-                <MonoLabel className="text-ink-soft block truncate" size={9}>{(t.artist ?? '').toLowerCase()}</MonoLabel>
-              </button>
-            ))}
-          </div>
+          <QuickPicksOrbit
+            tracks={quickPicks}
+            onPlay={(t) => onPickLive?.(t)}
+            onShuffle={() => {
+              const s = [...quickPicks];
+              for (let i = s.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [s[i], s[j]] = [s[j], s[i]];
+              }
+              onPlaySequence?.(s, 0, 'quick picks');
+            }}/>
         </section>
       )}
 

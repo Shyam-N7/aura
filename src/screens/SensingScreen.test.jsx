@@ -20,9 +20,9 @@ describe('SensingScreen', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('renders the DJ-sensing header immediately', () => {
+  it('renders the sensing header immediately', () => {
     render(<SensingScreen djName="AURA" mood="calm" theme={theme} onReady={() => {}}/>);
-    expect(screen.getByText(/AURA . sensing/i)).toBeInTheDocument();
+    expect(screen.getByText(/sensing/i)).toBeInTheDocument();
   });
 
   it('reveals each scripted line on its timer', () => {

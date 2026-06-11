@@ -229,69 +229,10 @@
   letter-spacing: 0.08em;
 }
 
-/* ── Quick picks — listening-derived grid, sits above the hero ──────────── */
+/* ── Quick picks — section wrapper; the orbital ring (QuickPicksOrbit) owns its
+   own layout. Horizontal padding lives on the header + the orbit, not here. ── */
 .aura-dh__qp {
-  padding: 26px 48px 0;
-}
-.aura-dh__qp-grid {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-.aura-dh__qp-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--color-surface), transparent 34%);
-  border: 1px solid var(--color-line);
-  cursor: pointer;
-  text-align: left;
-  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
-}
-.aura-dh__qp-tile:hover {
-  transform: translateY(-2px);
-  background: var(--color-surface);
-  box-shadow: 0 10px 26px rgb(0 0 0 / 0.12);
-}
-.aura-dh__qp-art {
-  position: relative;
-  display: block;
-  border-radius: 10px;
-  overflow: hidden;
-}
-.aura-dh__qp-play {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: var(--color-accent);
-  color: var(--color-bg);
-  box-shadow: 0 6px 16px rgb(0 0 0 / 0.24);
-  opacity: 0;
-  transform: translateY(6px) scale(0.9);
-  transition: opacity 160ms ease, transform 160ms ease;
-}
-.aura-dh__qp-tile:hover .aura-dh__qp-play {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-.aura-dh__qp-title {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--color-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 26px 0 0;
 }
 
 /* ── Hero banner — now a simple tagline (the brand lives in the top bar) ─── */
@@ -867,8 +808,7 @@
   .aura-dh-topstrip { display: none; }
   .aura-dh__greeting { padding: 26px 22px 0; }
   .aura-dh__mood-hero { font-size: 34px; }
-  .aura-dh__qp { padding: 22px 22px 0; }
-  .aura-dh__qp-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .aura-dh__qp { padding: 22px 0 0; }
   .aura-dh__most-played-wrap { padding: 0 22px; }
   .aura-dh__most-played { --edge-fade: 16px; }
   .aura-dh-section-header { padding: 0 22px 12px; margin-top: 32px; }

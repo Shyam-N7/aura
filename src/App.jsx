@@ -1057,7 +1057,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               error={featured.error}
               onRetry={featured.refetch}
               djName={t.djName} mood={t.mood}
-              onPick={pickById} onPickLive={pickLiveTrack}
+              onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
               onOpenJournal={() => setScreen('journal')}
               onOpenDna={() => setScreen('dna')}
               onOpenBridges={() => setScreen('bridges')}
@@ -1313,18 +1313,17 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             rails). Hidden over the player drawer / overlays / talk. */}
         {isCompact && !overlay && !talkOpen && screen !== 'player' && (
           <SpeedDial actions={[
-            { id: 'talk', label: 'ask aura', onClick: () => setTalkOpen(true),
-              icon: (<svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.2 3.5 a1.5 1.5 0 0 1 1.5 -1.5 h8.6 a1.5 1.5 0 0 1 1.5 1.5 v6 a1.5 1.5 0 0 1 -1.5 1.5 h-5.4 l-3.2 2.6 v-2.6 a1.5 1.5 0 0 1 -1.5 -1.5 z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>) },
-            { id: 'search', label: 'search', onClick: openSearch,
-              icon: (<svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.5"/><path d="M10.6 10.6 L14.5 14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>) },
-            { id: 'queue', label: 'queue', show: !!track,
-              onClick: () => { setQueueReturn(screen); setScreen('queue'); },
-              icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5 H17 M3 10 H17 M3 15 H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M14 12.5 L18 15.25 L14 18 Z" fill="currentColor"/></svg>) },
-            { id: 'playlist', label: 'add to playlist', show: !!track,
+            { id: 'why', label: 'why this song', show: !!track,
+              onClick: () => setOverlay('why'),
+              icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 7.5 a3 3 0 1 1 4 2.8 c-.8 .4 -1 .9 -1 1.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="10" cy="15" r="0.9" fill="currentColor"/></svg>) },
+            { id: 'playlist', label: 'save to playlist', show: !!track,
               onClick: () => openAddToPlaylist(track),
               icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 6 H13 M3 10 H10 M3 14 H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><circle cx="15" cy="14" r="3.6" stroke="currentColor" strokeWidth="1.4"/><path d="M15 12.4 V15.6 M13.4 14 H16.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>) },
+            { id: 'surprise', label: 'surprise me', show: pool.length > 0,
+              onClick: () => { const r = pool[Math.floor(Math.random() * pool.length)]; if (r) pickLiveTrack(r); },
+              icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2.5 L11.4 7.6 L16.5 9 L11.4 10.4 L10 15.5 L8.6 10.4 L3.5 9 L8.6 7.6 Z" fill="currentColor"/></svg>) },
             { id: 'sleep', label: 'sleep timer', onClick: openSleepTimer,
-              icon: (<svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 12.5 A6.5 6.5 0 1 1 7.5 4 A5.5 5.5 0 0 0 16 12.5 Z" fill="currentColor"/></svg>) },
+              icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 12.5 A6.5 6.5 0 1 1 7.5 4 A5.5 5.5 0 0 0 16 12.5 Z" fill="currentColor"/></svg>) },
           ]}/>
         )}
         {isDesktop && <TrackContextMenu

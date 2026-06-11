@@ -1,0 +1,148 @@
+.aura-qpo {
+  display: flex;
+  justify-content: center;
+  padding: 10px 48px 4px;
+}
+.aura-qpo__ring {
+  position: relative;
+  width: min(440px, 80vw);
+  aspect-ratio: 1;
+}
+
+/* ── Orbiting album discs ─────────────────────────────────────────────────
+   Positioned by inline left/top (%) and centred via translate. The entrance
+   uses `backwards` fill (only a `from` keyframe) so the disc reverts to its
+   base transform afterwards — letting the hover/active lift actually apply. */
+.aura-qpo__disc {
+  position: absolute;
+  width: 19%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.22);
+  z-index: 1;
+  animation: aura-qpo-pop 460ms cubic-bezier(.2, .8, .2, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 55ms);
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease;
+}
+.aura-qpo__disc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+  pointer-events: none;
+}
+.aura-qpo__disc:hover,
+.aura-qpo__disc:focus-visible,
+.aura-qpo__disc.is-active {
+  transform: translate(-50%, -50%) scale(1.16);
+  box-shadow:
+    0 16px 30px rgb(0 0 0 / 0.30),
+    0 0 0 3px color-mix(in srgb, var(--color-accent), transparent 45%);
+  z-index: 3;
+  outline: none;
+}
+@keyframes aura-qpo-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+}
+
+/* ── Centre hub: shuffle-all + live name read-out ─────────────────────────
+   Two faint concentric rings breathe around it, echoing the AURA mark without
+   repeating the literal logo. */
+.aura-qpo__hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 34%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface), transparent 10%);
+  color: var(--color-ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 7%;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.14);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 2;
+  transition: background 180ms ease, transform 160ms ease;
+}
+.aura-qpo__hub:hover { background: var(--color-surface); }
+.aura-qpo__hub:active { transform: translate(-50%, -50%) scale(0.96); }
+
+.aura-qpo__hub-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 60%);
+  pointer-events: none;
+  animation: aura-qpo-breathe 3.4s ease-in-out infinite;
+}
+.aura-qpo__hub-ring--a { inset: -10px; opacity: 0.55; }
+.aura-qpo__hub-ring--b { inset: -22px; opacity: 0.3; animation-delay: .45s; }
+@keyframes aura-qpo-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
+}
+
+.aura-qpo__hub-cta {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-accent);
+}
+.aura-qpo__hub-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.aura-qpo__hub-now {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.aura-qpo__hub-title {
+  font-family: var(--font-sans);
+  font-size: clamp(12px, 3.2vw, 14px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.aura-qpo__hub-artist {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .aura-qpo { padding: 8px 16px 0; }
+  .aura-qpo__ring { width: min(360px, 86vw); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-qpo__disc { animation: none; }
+  .aura-qpo__hub-ring { animation: none; }
+}
