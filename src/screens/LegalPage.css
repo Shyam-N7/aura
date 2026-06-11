@@ -1,5 +1,8 @@
 .aura-legal {
-  min-height: 100dvh;
+  /* Own scroll container — the app shell (#root / body) is overflow:hidden, so
+     without this the page clips instead of scrolling. */
+  height: 100dvh;
+  overflow-y: auto;
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);

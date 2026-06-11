@@ -13,6 +13,10 @@ body {
   font-family: "Hanken Grotesk", system-ui, sans-serif;
   background: var(--page-bg, #d9cdb9);
   overflow: hidden;
+  /* No italics anywhere. With the serif gone there is no italic face loaded, and
+     this disables oblique synthesis universally (incl. older Safari) so every
+     former `font-style: italic` / <em> renders clean upright text. */
+  font-synthesis: none;
 }
 
 *::-webkit-scrollbar {
@@ -49,10 +53,13 @@ body {
   --page-bg:          #d9cdb9;
   --stage-bg:         linear-gradient(140deg, #d9cdb9 0%, #bca790 100%);
 
-  --font-serif:  "Fraunces", serif;
+  /* Two fonts only. --font-serif is retained as a token name (used in ~125 sites)
+     but now points at the SAME Hanken sans — so the whole product is one clean
+     primary; the uppercase "secondary" is just Hanken caps (see MonoLabel).
+     --font-mono stays for tabular digits only. The cursive/script font is gone. */
+  --font-serif:  "Hanken Grotesk", system-ui, sans-serif;
   --font-mono:   ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-sans:   "Hanken Grotesk", system-ui, sans-serif;
-  --font-script: "Dancing Script", cursive;
 
   --animate-aura-pulse:     aura-pulse 1.8s ease-in-out infinite;
   --animate-aura-rise:      aura-rise 360ms cubic-bezier(.2, .7, .2, 1);

@@ -27,10 +27,6 @@ import { getConsent, subscribeConsent } from './lib/consent';
 import '@fontsource/hanken-grotesk/400.css';
 import '@fontsource/hanken-grotesk/500.css';
 import '@fontsource/hanken-grotesk/600.css';
-import '@fontsource/fraunces/400.css';
-import '@fontsource/fraunces/400-italic.css';
-import '@fontsource/fraunces/500.css';
-import '@fontsource/fraunces/600.css';
 
 import './styles/global.css';
 import './styles/animations.css';

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, Fragment } from 'react';
 import { AuraMark } from '../components/primitives/AuraMark';
 import { BreathingDot } from '../components/primitives/BreathingDot';
 import { toast } from '../lib/toast';
@@ -216,9 +216,15 @@ function Marquee() {
     <div className="marquee" aria-hidden="true">
       <div className="marquee-track">
         {doubled.map(([main, sub], i) => (
-          <span key={i}>
-            {main} <em className="mono">{sub}</em>
-          </span>
+          <Fragment key={i}>
+            <span>{main} <em className="mono">{sub}</em></span>
+            {/* separators alternate: aura mark ⇄ pulsing dot, equal gap either side */}
+            <span className="marquee-sep">
+              {i % 2 === 0
+                ? <span className="marquee-sep__mark animate-aura-soft"><AuraMark size={18}/></span>
+                : <BreathingDot color="var(--accent)" size={7}/>}
+            </span>
+          </Fragment>
         ))}
       </div>
     </div>
@@ -336,8 +342,8 @@ function HowItWorksSection() {
                 <circle cx="100" cy="60" r="6" fill="#b06a3f" />
                 <circle cx="140" cy="68" r="4" fill="#b06a3f" opacity="0.7" />
                 <circle cx="190" cy="30" r="5" fill="#b06a3f" />
-                <text x="10" y="115" fontFamily="Fraunces, serif" fontStyle="italic" fontSize="9" fill="currentColor" fillOpacity="0.7">energetic</text>
-                <text x="190" y="20" textAnchor="end" fontFamily="Fraunces, serif" fontStyle="italic" fontSize="9" fill="currentColor" fillOpacity="0.7">focused</text>
+                <text x="10" y="115" fontFamily="Hanken Grotesk, system-ui, sans-serif" fontWeight="600" fontSize="9" fill="currentColor" fillOpacity="0.7">energetic</text>
+                <text x="190" y="20" textAnchor="end" fontFamily="Hanken Grotesk, system-ui, sans-serif" fontWeight="600" fontSize="9" fill="currentColor" fillOpacity="0.7">focused</text>
               </svg>
             </div>
             <p className="step-body">
@@ -356,7 +362,7 @@ function HowItWorksSection() {
                 {/* you bubble — soft accent, top-left */}
                 <g>
                   <rect x="14" y="18" width="68" height="38" rx="10" fill="rgba(176,106,63,0.18)" stroke="currentColor" strokeOpacity="0.12" strokeWidth="0.8" />
-                  <text x="48" y="37" textAnchor="middle" fontFamily="Fraunces, serif" fontStyle="italic" fontSize="12" fill="currentColor">you</text>
+                  <text x="48" y="37" textAnchor="middle" fontFamily="Hanken Grotesk, system-ui, sans-serif" fontWeight="600" fontSize="12" fill="currentColor">you</text>
                   <text x="48" y="49" textAnchor="middle" fontFamily="Hanken Grotesk, system-ui, sans-serif" fontWeight="500" fontSize="6.5" fill="currentColor" fillOpacity="0.55" letterSpacing="0.6" style={{ textTransform: 'uppercase' }}>quieter</text>
                 </g>
                 {/* connector — dashed accent arrow from you → aura */}
@@ -365,7 +371,7 @@ function HowItWorksSection() {
                 {/* aura bubble — ink-filled, bottom-right */}
                 <g>
                   <rect x="118" y="64" width="68" height="38" rx="10" fill="var(--color-ink)" />
-                  <text x="152" y="83" textAnchor="middle" fontFamily="Fraunces, serif" fontStyle="italic" fontSize="12" fill="var(--color-bg)">aura</text>
+                  <text x="152" y="83" textAnchor="middle" fontFamily="Hanken Grotesk, system-ui, sans-serif" fontWeight="600" fontSize="12" fill="var(--color-bg)">aura</text>
                   <text x="152" y="95" textAnchor="middle" fontFamily="Hanken Grotesk, system-ui, sans-serif" fontWeight="500" fontSize="6.5" fill="var(--color-bg)" fillOpacity="0.65" letterSpacing="0.6" style={{ textTransform: 'uppercase' }}>rebuilding</text>
                 </g>
               </svg>
@@ -400,7 +406,7 @@ function TalkSpotlight({ onNavigateAuth }) {
           </h2>
           <p
             style={{
-              fontFamily: "'Fraunces',serif",
+              fontFamily: "'Hanken Grotesk', system-ui, sans-serif",
               fontSize: 18,
               lineHeight: 1.5,
               color: 'var(--ink-soft)',

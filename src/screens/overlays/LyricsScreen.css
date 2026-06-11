@@ -386,10 +386,8 @@
   }
 }
 
-/* Cinematic epigraph (Phase 26) — song title rendered in a
-   handwritten cursive script, full-width across the top of the
-   panel. Replaces the chrome header (faded) as a more artful
-   surrogate. Like a movie's opening title card. */
+/* Cinematic epigraph — song title across the top of the panel, like an opening
+   title card. The cursive font is gone; this is now the clean primary sans. */
 .aura-lyrics-epigraph {
   position: absolute;
   top: 28px;
@@ -399,11 +397,11 @@
   pointer-events: none;
   padding: 0 22px;
   text-align: center;
-  font-family: var(--font-script);
-  font-weight: 400;
-  font-size: 44px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 40px;
   line-height: 1.05;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.02em;
   color: rgb(255 255 255 / 0.96);
   text-shadow:
     0 3px 24px rgb(0 0 0 / 0.7),

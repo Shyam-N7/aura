@@ -563,24 +563,28 @@
 }
 .aura-landing .marquee-track {
   display: inline-flex;
+  align-items: center;
   white-space: nowrap;
   animation: lp-marquee 60s linear infinite;
-  gap: 56px;
+  gap: 34px;   /* equal space on both sides of every separator */
   font-family: var(--font-serif);
-  font-style: italic;
   font-size: 28px;
   color: var(--ink);
 }
-.aura-landing .marquee-track span {
+.aura-landing .marquee-track > span:not(.marquee-sep) {
   display: inline-flex;
   align-items: baseline;
   gap: 14px;
 }
-.aura-landing .marquee-track span::after {
-  content: '\00B7';
+/* Separator between phrases: alternates aura mark ⇄ pulsing dot (replaces the
+   old middot). The track gap gives equal space on each side. */
+.aura-landing .marquee-sep {
+  display: inline-flex;
+  align-items: center;
+}
+.aura-landing .marquee-sep__mark {
+  display: inline-flex;
   color: var(--accent);
-  font-size: 32px;
-  align-self: center;
 }
 .aura-landing .marquee-track .mono {
   font-family: var(--font-sans);

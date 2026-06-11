@@ -337,7 +337,7 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
         <span className="auth-top__mark">
           <AuraMark size={20} />
         </span>
-        <span>aura</span>
+        <span style={"margin-bottom: 2px;"}>aura</span>
       </button>
 
       {/* Back link (top-right) */}
