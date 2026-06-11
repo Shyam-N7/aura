@@ -867,7 +867,7 @@ function FinalCTA({ onNavigateAuth }) {
 /* ══════════════════════════════════════════════════════════════════════
    FOOTER
    ══════════════════════════════════════════════════════════════════════ */
-function Footer({ onNavigateAuth }) {
+function Footer({ onNavigateAuth, onNavigate }) {
   const scrollTo = useCallback(
     (id) => (e) => {
       e.preventDefault();
@@ -881,6 +881,13 @@ function Footer({ onNavigateAuth }) {
       onNavigateAuth(mode);
     },
     [onNavigateAuth],
+  );
+  const goTo = useCallback(
+    (path) => (e) => {
+      e.preventDefault();
+      onNavigate?.(path);
+    },
+    [onNavigate],
   );
   const stub = useCallback((e) => {
     e.preventDefault();
@@ -915,7 +922,6 @@ function Footer({ onNavigateAuth }) {
             <li><a href="#vision" onClick={scrollTo('vision')}>Vision</a></li>
             <li><a href="#" onClick={stub}>Manifesto</a></li>
             <li><a href="#" onClick={stub}>Press</a></li>
-            <li><a href="#" onClick={stub}>Careers</a></li>
           </ul>
         </div>
         <div className="footer-col">
@@ -923,8 +929,8 @@ function Footer({ onNavigateAuth }) {
           <ul>
             <li><a href="#" onClick={goAuth('signin')}>Sign in</a></li>
             <li><a href="#" onClick={goAuth('signup')}>Create account</a></li>
-            <li><a href="#" onClick={stub}>Privacy</a></li>
-            <li><a href="#" onClick={stub}>Terms</a></li>
+            <li><a href="/privacy" onClick={goTo('/privacy')}>Privacy</a></li>
+            <li><a href="/terms" onClick={goTo('/terms')}>Terms</a></li>
           </ul>
         </div>
       </div>
@@ -944,7 +950,7 @@ function Footer({ onNavigateAuth }) {
    in `theme-${theme}`), so this root carries no theme class of its own — but
    the nav's light/dark toggle calls back up via onToggleTheme.
    ══════════════════════════════════════════════════════════════════════ */
-export function LandingPage({ onNavigateAuth, theme, onToggleTheme }) {
+export function LandingPage({ onNavigateAuth, onNavigate, theme, onToggleTheme }) {
   const rootRef = useRef(null);
   useReveal(rootRef);
 
@@ -961,7 +967,7 @@ export function LandingPage({ onNavigateAuth, theme, onToggleTheme }) {
       <VisionSection />
       <TestimonialsSection />
       <FinalCTA onNavigateAuth={onNavigateAuth} />
-      <Footer onNavigateAuth={onNavigateAuth} />
+      <Footer onNavigateAuth={onNavigateAuth} onNavigate={onNavigate} />
     </div>
   );
 }

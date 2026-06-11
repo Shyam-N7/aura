@@ -329,4 +329,52 @@ router.patch('/me/preferences', requireAuth, async (req, res) => {
   res.json({ user: sanitizeUser(rows[0]) });
 });
 
+// ── GDPR: export all of my data ──────────────────────────────────────
+// Returns one JSON bundle of everything we hold for this user. Account row is
+// run through sanitizeUser so the password hash never leaves the server.
+router.get('/me/export', requireAuth, async (req, res) => {
+  const uid = req.userId;
+  try {
+    const [user, events, likes, playlists, playlistTracks, moods, journal] = await Promise.all([
+      pool.query('SELECT * FROM users WHERE id = $1', [uid]),
+      pool.query('SELECT track_id, ts, kind, position_sec, mood, language FROM listening_events WHERE user_id = $1 ORDER BY ts', [uid]),
+      pool.query('SELECT track_id, liked_at FROM liked_tracks WHERE user_id = $1 ORDER BY liked_at', [uid]),
+      pool.query('SELECT id, name, description, cover_track_id, created_at, updated_at FROM playlists WHERE user_id = $1', [uid]),
+      pool.query('SELECT pt.playlist_id, pt.track_id, pt.position, pt.added_at FROM playlist_tracks pt JOIN playlists p ON p.id = pt.playlist_id WHERE p.user_id = $1 ORDER BY pt.playlist_id, pt.position', [uid]),
+      pool.query('SELECT ts, mood, confidence, drift, reason, events_seen FROM mood_snapshots WHERE user_id = $1 ORDER BY ts', [uid]),
+      pool.query('SELECT date, payload, events_seen, fetched_at FROM journal_cache WHERE user_id = $1 ORDER BY date', [uid]),
+    ]);
+    if (!user.rows.length) return res.status(404).json({ error: 'user not found' });
+    res.setHeader('Content-Disposition', 'attachment; filename="aura-data-export.json"');
+    res.json({
+      exportedAt: new Date().toISOString(),
+      account: sanitizeUser(user.rows[0]),
+      listeningEvents: events.rows,
+      likes: likes.rows,
+      playlists: playlists.rows.map(p => ({
+        ...p,
+        tracks: playlistTracks.rows.filter(t => t.playlist_id === p.id),
+      })),
+      moodSnapshots: moods.rows,
+      journal: journal.rows,
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── GDPR: delete my account ──────────────────────────────────────────
+// Removes the user row; every per-user table (listening_events, liked_tracks,
+// playlists → playlist_tracks, mood_snapshots, journal_cache) is ON DELETE
+// CASCADE, so all listening history goes with it. Not reversible.
+router.delete('/me', requireAuth, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM users WHERE id = $1', [req.userId]);
+    if (!rowCount) return res.status(404).json({ error: 'user not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 export default router;

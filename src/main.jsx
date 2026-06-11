@@ -7,6 +7,8 @@ import { Root } from './App';
 import { useAuth } from './lib/auth';
 import { toast } from './lib/toast';
 import { stashPostAuthPath, consumePostAuthPath } from './lib/routes';
+import { ConsentBanner } from './components/ConsentBanner';
+import { getConsent, subscribeConsent } from './lib/consent';
 
 // One-time legacy redirect: the app used hash routes (`#/artist/x`) before the
 // path-routing migration — rewrite them to real paths so old bookmarks, shares,
@@ -37,6 +39,10 @@ import './styles/animations.css';
 // visitors who aren't signed in yet.
 const LandingPage = lazy(() => import('./screens/LandingPage').then(m => ({ default: m.LandingPage })));
 const AuthPage    = lazy(() => import('./screens/AuthPage').then(m => ({ default: m.AuthPage })));
+// Public legal pages — reachable signed-out or in, so they sit at the top of the
+// view machine below.
+const PrivacyPage = lazy(() => import('./screens/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const TermsPage   = lazy(() => import('./screens/TermsPage').then(m => ({ default: m.TermsPage })));
 
 // Body background while a pre-auth page is on screen, so the viewport edges
 // match the theme during the page's own scroll/reflow.
@@ -85,16 +91,27 @@ function AppRoot() {
     });
   }, []);
 
+  // Legal pages take precedence over the auth gate so they're public AND
+  // reachable while signed in.
   const view = useMemo(() => {
+    if (loc.path === '/privacy') return 'privacy';
+    if (loc.path === '/terms')   return 'terms';
     if (isAuthed) return 'app';
     if (loc.path === '/auth') return 'auth';
     return 'landing';
   }, [loc.path, isAuthed]);
 
+  // Analytics consent — Vercel Analytics / Speed Insights load only once granted.
+  const [consent, setConsentState] = useState(getConsent());
+  useEffect(() => subscribeConsent(setConsentState), []);
+  const analyticsOn = consent === 'granted';
+
   // Pre-auth tab titles (in-app titles are managed per screen by App).
   useEffect(() => {
     if (view === 'auth')         document.title = 'sign in · AURA FM';
     else if (view === 'landing') document.title = 'AURA FM — AI radio that reads your mood';
+    else if (view === 'privacy') document.title = 'Privacy · AURA FM';
+    else if (view === 'terms')   document.title = 'Terms · AURA FM';
   }, [view]);
 
   // Auth-page mode comes from ?mode=signup on entry; AuthPage owns it after.
@@ -127,8 +144,8 @@ function AppRoot() {
   if (view === 'app') return (
     <>
       <Root user={user} />
-      <Analytics />
-      <SpeedInsights />
+      {analyticsOn && <><Analytics /><SpeedInsights /></>}
+      <ConsentBanner onPrivacy={() => navigate('/privacy')} />
     </>
   );
 
@@ -136,21 +153,26 @@ function AppRoot() {
     <>
       <div className={`theme-${theme}`}>
         <Suspense fallback={null}>
-          {view === 'auth'
+          {view === 'privacy'
+            ? <PrivacyPage onBack={() => navigate('/')} />
+            : view === 'terms'
+            ? <TermsPage onBack={() => navigate('/')} />
+            : view === 'auth'
             ? <AuthPage
                 initialMode={authMode}
                 onAuthed={() => navigate(consumePostAuthPath() ?? '/')}
                 onBack={() => navigate('/')}
               />
             : <LandingPage
+                onNavigate={navigate}
                 onNavigateAuth={(mode) => navigate(mode === 'signup' ? '/auth?mode=signup' : '/auth')}
                 theme={theme}
                 onToggleTheme={toggleTheme}
               />}
         </Suspense>
       </div>
-      <Analytics />
-      <SpeedInsights />
+      {analyticsOn && <><Analytics /><SpeedInsights /></>}
+      <ConsentBanner onPrivacy={() => navigate('/privacy')} />
     </>
   );
 }

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useId } from 'react';
 import { useAuth, logout } from '../../lib/auth';
 import { confirm } from '../../lib/confirm';
 import { clearPostAuthPath } from '../../lib/routes';
+import { exportMyData, deleteMyAccount } from '../../api/account';
+import { toast } from '../../lib/toast';
 import './AccountMenu.css';
 
 // Account control for the nav chrome: an avatar (the user's initial) that opens
@@ -74,6 +76,57 @@ export function AccountMenu({ placement = 'down', collapsed = false }) {
     clearPostAuthPath();
   };
 
+  // SPA-navigate to a public route by pushing + nudging AppRoot's popstate listener.
+  const goPath = (path) => () => {
+    setOpen(false);
+    try {
+      window.history.pushState(null, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } catch { /* ignore */ }
+  };
+
+  // GDPR: download everything we hold as a JSON file.
+  const handleExport = async () => {
+    setOpen(false);
+    try {
+      const data = await exportMyData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'aura-data-export.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('your data is downloading.');
+    } catch (err) {
+      toast(`couldn't export — ${err.message}`);
+    }
+  };
+
+  // GDPR: permanently delete the account (cascades all history) and sign out.
+  const handleDelete = async () => {
+    setOpen(false);
+    const ok = await confirm({
+      title: 'delete your account?',
+      body: 'this permanently erases your account and all your listening history. it cannot be undone.',
+      confirmLabel: 'delete forever',
+      cancelLabel: 'keep my account',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteMyAccount();
+      logout();
+      try { window.history.pushState(null, '', '/'); } catch { /* ignore */ }
+      clearPostAuthPath();
+      toast('your account has been deleted.');
+    } catch (err) {
+      toast(`couldn't delete — ${err.message}`);
+    }
+  };
+
   return (
     <div ref={rootRef} className={`aura-account aura-account--${placement} ${collapsed ? 'aura-account--collapsed' : ''}`}>
       <button
@@ -97,8 +150,15 @@ export function AccountMenu({ placement = 'down', collapsed = false }) {
             </span>
           </div>
           <div className="aura-account__divider" />
+          <button type="button" className="aura-account__item" onClick={goPath('/privacy')}>privacy</button>
+          <button type="button" className="aura-account__item" onClick={goPath('/terms')}>terms</button>
+          <button type="button" className="aura-account__item" onClick={handleExport}>export my data</button>
+          <div className="aura-account__divider" />
           <button ref={signoutRef} type="button" className="aura-account__signout" onClick={handleSignOut}>
             sign out
+          </button>
+          <button type="button" className="aura-account__item aura-account__item--danger" onClick={handleDelete}>
+            delete my account
           </button>
         </div>
       )}
