@@ -56,25 +56,25 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
   const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
   const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
 
-  const eyebrow = hit.data
-    ? [kind, hit.data.artist, `${tracks.length} ${tracks.length === 1 ? 'track' : 'tracks'}`].filter(Boolean).join(' · ')
-    : kind;
+  // Multiple artists arrive as a comma-joined string — show only the main one.
+  const mainArtist = (hit.data?.artist ?? '').split(',')[0].trim();
 
   return (
     <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
-          <MonoLabel className="text-ink-faint" size={10}>{eyebrow}</MonoLabel>
         </div>
 
         {status === 'loading' && <AuraLoader label={`Loading ${kind}`}/>}
         {status === 'error' && <div className="aura-dpd__error">Couldn’t load — {hit.error}</div>}
         {status === 'ok' && (
           <>
-            <h1 className="aura-dpd__hero"><em>{hit.data.name}</em>.</h1>
+            <div className="aura-dpd__kind">{kind}</div>
+            <h1 className="aura-dpd__hero">{hit.data.name}</h1>
+            {mainArtist && <div className="aura-dpd__by">by {mainArtist}</div>}
             {tracks.length > 0 && (
-              <div className="mt-7">
+              <div className="mt-6">
                 <button onClick={playAll} className="aura-dpd__play-all">
                   <span className="aura-dpd__play-disc">
                     <svg width="10" height="12" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
@@ -90,6 +90,7 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
       <div className="aura-dpd__scroll">
         {status === 'ok' && tracks.length > 0 && (
           <div className="aura-dpd__list">
+            <div className="aura-dpd__count">{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</div>
             {tracks.map((t, i) => (
               <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
