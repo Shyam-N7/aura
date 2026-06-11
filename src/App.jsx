@@ -18,6 +18,7 @@ import { MobileBottomBar } from './components/nav/MobileBottomBar';
 import { MobileTopBar } from './components/nav/MobileTopBar';
 import { TalkAura } from './components/chat/TalkAura';
 import { Toast } from './components/Toast';
+import { PlayerDrawer } from './components/player/PlayerDrawer';
 import { AddToPlaylistSheet } from './components/AddToPlaylistSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { PromptDialog } from './components/PromptDialog';
@@ -1066,36 +1067,42 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               t={t} setTweak={setTweak}/>
           </div>
         )}
-        {(screen === 'player' || closingPlayer) && track && (
+        {/* Phone now-playing: a full-height vaul drawer you pull DOWN to minimise
+            back to the mini bar. `screen === 'player'` stays the source of truth;
+            the drawer is rendered whenever a track exists so vaul can animate the
+            slide-out on dismiss. */}
+        {isMobile && track && (
+          <PlayerDrawer open={screen === 'player'} onClose={() => leavePlayer(playerReturn)}>
+            <MobilePlayer
+              track={track} progress={progress} playing={playing}
+              nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidates[0] : null)}
+              nextLoading={autoNextLoading}
+              mood={t.mood} djName={t.djName}
+              repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+              onShuffle={shuffleQueue} shuffleActive={shuffleActive}
+              onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
+              onSeek={(p) => player.seek(p)} player={player}
+              onBack={() => leavePlayer(playerReturn)}
+              openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
+              openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}/>
+          </PlayerDrawer>
+        )}
+        {/* Desktop / tablet now-playing: full-screen route with screen-out anim. */}
+        {!isMobile && (screen === 'player' || closingPlayer) && track && (
           <div key="player"
             className={`absolute inset-0 ${closingPlayer ? 'animate-aura-screen-out' : 'animate-aura-screen-in'}`}>
-            {isMobile ? (
-              <MobilePlayer
-                track={track} progress={progress} playing={playing}
-                nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidates[0] : null)}
-                nextLoading={autoNextLoading}
-                mood={t.mood} djName={t.djName}
-                repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
-                onShuffle={shuffleQueue} shuffleActive={shuffleActive}
-                onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
-                onSeek={(p) => player.seek(p)} player={player}
-                onBack={() => leavePlayer(playerReturn)}
-                openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
-                openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}/>
-            ) : (
-              <DesktopPlayer
-                track={track} nextTrack={next} progress={progress} audioTime={audioTime} playing={playing}
-                mood={t.mood} djName={t.djName} player={player}
-                repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
-                onShuffle={shuffleQueue} shuffleActive={shuffleActive}
-                onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
-                onSeek={(p) => player.seek(p)}
-                onBack={() => leavePlayer(playerReturn)}
-                openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
-                openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}
-                showRelated={!isDesktop || isTabletLandscape}
-                onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-            )}
+            <DesktopPlayer
+              track={track} nextTrack={next} progress={progress} audioTime={audioTime} playing={playing}
+              mood={t.mood} djName={t.djName} player={player}
+              repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+              onShuffle={shuffleQueue} shuffleActive={shuffleActive}
+              onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
+              onSeek={(p) => player.seek(p)}
+              onBack={() => leavePlayer(playerReturn)}
+              openWhy={() => setOverlay('why')} openLyrics={() => setOverlay('lyrics')}
+              openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}
+              showRelated={!isDesktop || isTabletLandscape}
+              onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
           </div>
         )}
         {screen === 'queue' && (

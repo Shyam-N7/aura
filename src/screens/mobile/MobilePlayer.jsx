@@ -39,7 +39,7 @@ export function MobilePlayer({
 
       <div className="aura-mp__content">
         {player && (
-          <div className="aura-mp__vol" onClick={(e) => e.stopPropagation()}>
+          <div className="aura-mp__vol" data-vaul-no-drag onClick={(e) => e.stopPropagation()}>
             <EqualizerControl player={player}/>
           </div>
         )}
@@ -55,7 +55,7 @@ export function MobilePlayer({
             {mood && <span className="aura-mp__mood">{mood}</span>}
           </div>
 
-          <div className="aura-mp__menu-wrap">
+          <div className="aura-mp__menu-wrap" data-vaul-no-drag>
             <button type="button" aria-label="more" aria-expanded={menuOpen}
               onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
               className="aura-mp__chip">
@@ -86,7 +86,7 @@ export function MobilePlayer({
           <div className="aura-mp__artist">{track.artist}</div>
         </div>
 
-        <div className="aura-mp__scrub">
+        <div className="aura-mp__scrub" data-vaul-no-drag>
           <ProgressRibbon progress={progress} accent="var(--color-accent)" dim="var(--color-line)"
             playing={playing} seed={track.id} onSeek={onSeek} height={40}/>
           <div className="aura-mp__time">
@@ -95,7 +95,7 @@ export function MobilePlayer({
           </div>
         </div>
 
-        <div className="aura-mp__transport">
+        <div className="aura-mp__transport" data-vaul-no-drag>
           <button onClick={onPrev} aria-label="previous" className="aura-mp__nav">
             <svg width="22" height="16" viewBox="0 0 14 10" aria-hidden="true"><path d="M14 0 L5 5 L14 10 Z M3 0 H1 V10 H3 Z" fill="currentColor"/></svg>
           </button>
@@ -112,6 +112,7 @@ export function MobilePlayer({
 
         {(nextTrack || nextLoading) && (
           <button type="button" onClick={nextTrack ? openQueue : undefined} disabled={!nextTrack}
+            data-vaul-no-drag
             className={`aura-mp__upnext ${nextTrack ? '' : 'aura-mp__upnext--loading'}`}
             aria-label={nextTrack ? `Up next: ${cleanTitle(nextTrack.title)}. Open queue.` : 'Finding the next song'}>
             {nextTrack
@@ -129,7 +130,7 @@ export function MobilePlayer({
           </button>
         )}
 
-        <div className="aura-mp__actions">
+        <div className="aura-mp__actions" data-vaul-no-drag>
           {onShuffle && (
             <button onClick={onShuffle}
               aria-label={shuffleActive ? 'Shuffle on — tap to deactivate' : 'Shuffle up-next'}

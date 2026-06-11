@@ -1,0 +1,34 @@
+/* Full-height variant of the vaul Drawer for the phone now-playing screen. The
+   MobilePlayer inside is `absolute inset-0`, so the content is its positioned
+   box. vaul drives the slide/drag via inline transform; we only own the look. */
+.aura-player-drawer {
+  top: 0;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border-top: 0;
+  box-shadow: none;
+  background: var(--color-bg);
+}
+
+/* The screen behind shows through as you drag the player down. */
+.aura-player-drawer__overlay { background: rgb(0 0 0 / 0.42); }
+
+/* Pull-down affordance, pinned at the very top centre over the player. Purely
+   visual (pointer-events:none) — vaul handles the drag from the content itself. */
+.aura-player-drawer__grip {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 6;
+  pointer-events: none;
+}
+.aura-player-drawer__grip span {
+  width: 36px;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink), transparent 62%);
+}
