@@ -1,0 +1,127 @@
+/* AURA speed dial — floating quick-action launcher, bottom-right on compact
+   surfaces. The FAB is the AuraMark; actions bloom up out of it. */
+
+.aura-sd {
+  position: fixed;
+  right: 16px;
+  bottom: 96px;   /* clears the bottom mini/nav pill */
+  z-index: 34;    /* above chrome (30), below sheets/toasts (40+) */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;   /* only the FAB + open items take pointers */
+}
+
+/* ── Action stack ─────────────────────────────────────────────────────── */
+.aura-sd__items {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.aura-sd__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: none;
+  /* closed: collapsed into the FAB. --i staggers the open. */
+  opacity: 0;
+  transform: translateY(14px) scale(0.7);
+  transform-origin: bottom right;
+  transition:
+    opacity 200ms ease,
+    transform 260ms cubic-bezier(.2, .8, .2, 1);
+  transition-delay: calc(var(--i, 0) * 18ms);
+}
+.aura-sd.is-open .aura-sd__item {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.aura-sd__item-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--color-ink);
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+  white-space: nowrap;
+}
+.aura-sd__item-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+  color: var(--color-ink);
+}
+.aura-sd__item:active .aura-sd__item-icon { transform: scale(0.92); }
+
+/* ── The FAB ──────────────────────────────────────────────────────────── */
+.aura-sd__fab {
+  position: relative;
+  pointer-events: auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 55%);
+  background: var(--color-bg);
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.20);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 260ms cubic-bezier(.2, .8, .2, 1), box-shadow 200ms ease, border-color 200ms ease;
+}
+.aura-sd__fab:hover { box-shadow: 0 12px 32px rgb(0 0 0 / 0.26); }
+.aura-sd__fab:active { transform: scale(0.94); }
+.aura-sd.is-open .aura-sd__fab {
+  border-color: var(--color-accent);
+  transform: rotate(135deg);
+}
+
+/* Mark (rings) ↔ cross cross-fade as the dial opens. */
+.aura-sd__fab-mark,
+.aura-sd__fab-cross {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 200ms ease, transform 200ms ease;
+  color: var(--color-accent);
+}
+.aura-sd__fab-cross { opacity: 0; transform: rotate(-135deg) scale(0.6); }
+.aura-sd.is-open .aura-sd__fab-mark { opacity: 0; transform: scale(0.6); }
+.aura-sd.is-open .aura-sd__fab-cross { opacity: 1; transform: rotate(-135deg) scale(1); }
+
+.theme-midnight .aura-sd__item-label,
+.theme-midnight .aura-sd__item-icon,
+.theme-midnight .aura-sd__fab {
+  background: color-mix(in srgb, var(--color-bg), white 4%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-sd__item,
+  .aura-sd__fab,
+  .aura-sd__fab-mark,
+  .aura-sd__fab-cross { transition: opacity 120ms ease; transform: none; }
+  .aura-sd.is-open .aura-sd__fab { transform: none; }
+}

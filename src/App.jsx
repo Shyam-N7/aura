@@ -19,7 +19,10 @@ import { MobileTopBar } from './components/nav/MobileTopBar';
 import { TalkAura } from './components/chat/TalkAura';
 import { Toast } from './components/Toast';
 import { PlayerDrawer } from './components/player/PlayerDrawer';
+import { SpeedDial } from './components/SpeedDial';
 import { AddToPlaylistSheet } from './components/AddToPlaylistSheet';
+import { openAddToPlaylist } from './lib/addToPlaylistSheet';
+import { openSleepTimer } from './lib/sleepTimerSheet';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { PromptDialog } from './components/PromptDialog';
 
@@ -1305,6 +1308,24 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         )}
         <SleepTimerSheet/>
         <SleepTimerOrb railCollapsed={railCollapsed} isDesktop={isDesktop}/>
+        {/* Quick-action speed dial — compact surfaces only (desktop has the
+            rails). Hidden over the player drawer / overlays / talk. */}
+        {isCompact && !overlay && !talkOpen && screen !== 'player' && (
+          <SpeedDial actions={[
+            { id: 'talk', label: 'ask aura', onClick: () => setTalkOpen(true),
+              icon: (<svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.2 3.5 a1.5 1.5 0 0 1 1.5 -1.5 h8.6 a1.5 1.5 0 0 1 1.5 1.5 v6 a1.5 1.5 0 0 1 -1.5 1.5 h-5.4 l-3.2 2.6 v-2.6 a1.5 1.5 0 0 1 -1.5 -1.5 z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>) },
+            { id: 'search', label: 'search', onClick: openSearch,
+              icon: (<svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.5"/><path d="M10.6 10.6 L14.5 14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>) },
+            { id: 'queue', label: 'queue', show: !!track,
+              onClick: () => { setQueueReturn(screen); setScreen('queue'); },
+              icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5 H17 M3 10 H17 M3 15 H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M14 12.5 L18 15.25 L14 18 Z" fill="currentColor"/></svg>) },
+            { id: 'playlist', label: 'add to playlist', show: !!track,
+              onClick: () => openAddToPlaylist(track),
+              icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 6 H13 M3 10 H10 M3 14 H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><circle cx="15" cy="14" r="3.6" stroke="currentColor" strokeWidth="1.4"/><path d="M15 12.4 V15.6 M13.4 14 H16.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>) },
+            { id: 'sleep', label: 'sleep timer', onClick: openSleepTimer,
+              icon: (<svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 12.5 A6.5 6.5 0 1 1 7.5 4 A5.5 5.5 0 0 0 16 12.5 Z" fill="currentColor"/></svg>) },
+          ]}/>
+        )}
         {isDesktop && <TrackContextMenu
           onPickLive={pickLiveTrack}
           onPlayNext={enqueueNext}
