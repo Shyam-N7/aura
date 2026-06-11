@@ -89,7 +89,7 @@ export function DesktopBridges({ onPickSequence }) {
 
       {/* ─── Build your own ─────────────────────────────────────────────── */}
       <div className="aura-dbr__config">
-        <MonoLabel className="text-ink-faint aura-dbr__config-label" size={10}>build your own</MonoLabel>
+        <MonoLabel className="text-ink-faint aura-dbr__config-label" size={16}>build your own</MonoLabel>
         <div className="aura-dbr__config-pick">
           <MoodPicker label="where you are" moods={FROM_MOODS} value={cfg.from}
             onPick={(k) => setCfg(c => ({ ...c, from: k }))}/>

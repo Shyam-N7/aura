@@ -7,7 +7,7 @@ export function TopStrip({ djName, onOpenSearch, t, setTweak }) {
       <div className="aura-dh-topstrip__brand">
         <AuraMark size={26}/>
         <span className="aura-dh-topstrip__wordmark">{djName}</span>
-        <span className="aura-dh-topstrip__tagline">captures your mood</span>
+        {/* <span className="aura-dh-topstrip__tagline">captures your mood</span> */}
       </div>
       <div className="flex items-center gap-3">
         <button type="button" onClick={onOpenSearch} className="aura-dh-topstrip__search">

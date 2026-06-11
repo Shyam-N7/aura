@@ -44,7 +44,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   return (
     <div ref={scrollRef} className="aura-dlib" onClick={() => setMenu(null)}>
       <div className="aura-dlib__header">
-        <MonoLabel className="text-ink-faint" size={10}>
+        <MonoLabel className="text-ink-faint" size={12}>
           your year of listening
         </MonoLabel>
         <h1 className="aura-dlib__hero">
@@ -52,9 +52,9 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
         </h1>
         {summary && (
           <div className="aura-dlib__stats">
-            <MonoLabel className="text-ink-faint" size={10}>{summary.tracksPlayed ?? 0} tracks</MonoLabel>
-            <MonoLabel className="text-ink-faint" size={10}>{summary.minutesListened ?? 0} minutes</MonoLabel>
-            <MonoLabel className="text-ink-faint" size={10}>{summary.topLanguage ?? '—'}</MonoLabel>
+            <MonoLabel className="text-ink-faint" size={11}>{summary.tracksPlayed ?? 0} tracks played &nbsp; &nbsp; for</MonoLabel>
+            <MonoLabel className="text-ink-faint" size={11}>{summary.minutesListened ?? 0} minutes</MonoLabel>
+            {/* <MonoLabel className="text-ink-faint" size={10}>{summary.topLanguage ?? '—'}</MonoLabel> */}
           </div>
         )}
       </div>
@@ -72,7 +72,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
         <div className="aura-dlib__cols">
           <div>
             <div className="flex items-baseline justify-between mb-[18px]">
-              <MonoLabel className="text-ink-faint" size={10}>{liked?.length ?? 0} liked</MonoLabel>
+              <h2 className="aura-dlib__col-title">Liked</h2>
               {onOpenLiked && liked && liked.length > 0 && (
                 <button onClick={onOpenLiked} className="aura-dlib__see-all">SEE ALL →</button>
               )}
@@ -115,7 +115,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
           </div>
 
           <div>
-            <MonoLabel className="text-ink-faint block mb-[18px]" size={10}>{playlists?.length ?? 0} playlists</MonoLabel>
+            <h2 className="aura-dlib__col-title mb-[18px]">Playlists</h2>
             {(!playlists || playlists.length === 0) && (
               <div className="aura-dlib__empty-row">No playlists yet. Create one from any song’s menu.</div>
             )}
@@ -138,7 +138,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
         </div>
 
         <section className="aura-dlib__browse">
-          <MonoLabel className="text-ink-faint" size={10}>browse by language</MonoLabel>
+          <MonoLabel className="text-ink-faint" size={12}>browse by language</MonoLabel>
           <div className="aura-dlib__lang-row">
             {HOME_LANGS.map(L => (
               <button key={L} onClick={() => onOpenLangHub?.(L)} className="aura-dlib__lang">

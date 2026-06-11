@@ -4,9 +4,9 @@ import { useEffect, useRef } from 'react';
 // headset buttons, and hardware media keys drive playback. Feature-gated:
 // no-op when the API isn't available (older Safari).
 //
-// `setPositionState` is throttled to 1 Hz — feeding it the 30 Hz progress
-// stream would saturate the API on some browsers and they'd start ignoring
-// updates entirely.
+// `setPositionState` is throttled to 1 Hz — feeding it every progress emit
+// would saturate the API on some browsers and they'd start ignoring updates
+// entirely.
 export function useMediaSession({ track, playing, player, setPlaying, goNext, goPrev }) {
   // Latest callbacks captured in a ref so the action handlers (registered
   // once) always call the freshest setPlaying / goNext / goPrev.

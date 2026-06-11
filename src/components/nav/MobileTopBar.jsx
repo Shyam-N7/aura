@@ -89,7 +89,7 @@ export function MobileTopBar({
       <AuraMark size={24}/>
       <span className="aura-mobile-top__brandtext">
         <span className="aura-mobile-top__wordmark">{djName}</span>
-        <span className="aura-mobile-top__tagline">captures your mood</span>
+        {/* <span className="aura-mobile-top__tagline">captures your mood</span> */}
       </span>
     </>
   );

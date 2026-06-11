@@ -241,7 +241,7 @@
 }
 .aura-dh__mood-hero {
   font-family: var(--font-sans);
-  font-size: clamp(34px, 4.4vw, 56px);
+  font-size: clamp(30px, 4.4vw, 56px);
   line-height: 1.02;
   letter-spacing: -0.03em;
   margin: 0;
@@ -807,7 +807,7 @@
      glass pill. Hide DesktopHome's internal strip entirely. */
   .aura-dh-topstrip { display: none; }
   .aura-dh__greeting { padding: 26px 22px 0; }
-  .aura-dh__mood-hero { font-size: 34px; }
+  .aura-dh__mood-hero { font-size: 30px; }
   .aura-dh__qp { padding: 22px 0 0; }
   .aura-dh__most-played-wrap { padding: 0 22px; }
   .aura-dh__most-played { --edge-fade: 16px; }
@@ -859,7 +859,7 @@
 /* Ultra-narrow (<=420px — small phones like iPhone SE). Mood hero drops
    further; hero band art shrinks. */
 @container dh (max-width: 420px) {
-  .aura-dh__mood-hero { font-size: 30px; }
+  .aura-dh__mood-hero { font-size: 28px; }
   .aura-dh-hero-band__headline { font-size: 22px; }
   .aura-dh-hero-band__art .aura-album-art { --size: 92px !important; }
 }

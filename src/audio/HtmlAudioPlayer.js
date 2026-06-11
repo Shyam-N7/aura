@@ -28,10 +28,12 @@ export class HtmlAudioPlayer {
     // paused state — iOS can pause the element on screen-lock without us asking,
     // so on return to foreground we re-arm playback if we still mean to play.
     this._intendedPlaying = false;
-    // HTMLAudio's native `timeupdate` fires only every ~250 ms — too coarse
-    // for syncing lyrics. We drive a rAF loop while playing and throttle the
-    // emit to ~30 Hz so the progress signal is smooth without rerendering the
-    // whole desktop tree at 120 Hz (which made scrolling feel laggy).
+    // HTMLAudio's native `timeupdate` cadence is browser-dependent (~250 ms
+    // to ~1 s). We drive a rAF loop while playing and gate the emit to 250 ms
+    // so every browser gets the same even ~4 Hz progress signal — enough for
+    // line-synced lyrics and the seek bar. Each emit re-renders the whole App
+    // tree (setProgress/setAudioTime in App.jsx), so the old ~30 Hz cap
+    // ground low-end phones to a halt under the blurred player backdrop.
     // Bind handlers once and store them so destroy() can remove them.
     this._onTimeUpdate = () => this._emitProgress();
     this._onEnded     = () => { this._stopTick(); this._emit('ended'); };
@@ -172,7 +174,7 @@ export class HtmlAudioPlayer {
 
   _emitProgress() {
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    if (now - this._lastEmit < 33) return;  // ~30 Hz cap — see ctor comment
+    if (now - this._lastEmit < 250) return;  // ~4 Hz cap — see ctor comment
     this._lastEmit = now;
     const p = this._el.currentTime / (this._el.duration || 1);
     this._emit('progress', p, this._el.currentTime);

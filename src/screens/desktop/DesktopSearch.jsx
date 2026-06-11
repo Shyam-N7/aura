@@ -278,7 +278,7 @@ export function DesktopSearch({
 
       <div className="aura-dse__layout">
         <div className="aura-dse__main">
-          {status === 'idle'    && <div className="aura-dse__hint">Type a title, artist, album, or movie.</div>}
+          {status === 'idle'    && <div className="aura-dse__hint">Your search results will appear here.</div>}
           {status === 'loading' && <AuraLoader label="Searching"/>}
           {status === 'error'   && <div className="aura-dse__hint">Search failed — {view.error}</div>}
 

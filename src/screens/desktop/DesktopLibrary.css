@@ -14,7 +14,7 @@
   color: var(--color-ink-soft);
   font-family: var(--font-sans);
   font-weight: 500;
-  font-size: 9.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 4px 8px;
@@ -40,14 +40,22 @@
   font-weight: 400;
   color: var(--color-ink);
 }
-.aura-dlib__hero em { font-style: italic; }
-
 /* Stat row — three clean segments separated by space, not middots. */
 .aura-dlib__stats {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
   margin-top: 14px;
+}
+
+/* Column headings — "Liked" / "Playlists". */
+.aura-dlib__col-title {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  margin: 0;
 }
 
 .aura-dlib__cols {
@@ -174,7 +182,6 @@
     color-mix(in srgb, var(--color-accent), transparent 80%));
   color: var(--color-bg);
   font-family: var(--font-serif);
-  font-style: italic;
   font-size: 22px;
 }
 

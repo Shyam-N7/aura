@@ -125,7 +125,7 @@
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: var(--color-ink-soft);
-  min-width: 72px;
+  /* min-width: 72px; */
 }
 
 .aura-dbr__preview {
