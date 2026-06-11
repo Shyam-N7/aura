@@ -55,7 +55,7 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
           <MonoLabel className="text-ink-faint" size={10}>
-            liked{hit.data ? ` · ${liked.length} ${liked.length === 1 ? 'track' : 'tracks'}` : ''}
+            {hit.data ? `${liked.length} liked ${liked.length === 1 ? 'song' : 'songs'}` : 'liked'}
           </MonoLabel>
         </div>
 

@@ -15,7 +15,7 @@ const MAX_SCROLL_VELOCITY = 16;
 const LONG_PRESS_MS = 450;
 
 export function DesktopQueue({
-  tracks, currentIdx, source, djName,
+  tracks, currentIdx, source,
   onPick, onClose, onRemove, onReorder,
   onPlayNext, onAddToQueue,
   onClear, onShuffle, shuffleActive = false, onSave,
@@ -312,7 +312,7 @@ export function DesktopQueue({
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
           <MonoLabel className="text-ink-faint" size={10}>
-            {djName} · Your set, adapting live
+            your set, adapting live
           </MonoLabel>
         </div>
         <h1 className="aura-dq__hero">

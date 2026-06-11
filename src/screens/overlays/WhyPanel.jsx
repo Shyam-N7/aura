@@ -3,7 +3,7 @@ import { MonoLabel, CircularDial } from '../../components/primitives';
 import { getWhy } from '../../api/why';
 import './WhyPanel.css';
 
-export function WhyPanel({ track, mood, djName, onClose }) {
+export function WhyPanel({ track, mood, onClose }) {
   const [hit, setHit] = useState({ key: null, data: null, error: null });
   const key = `${track.id}|${mood ?? 'any'}`;
   const status = hit.key === key
@@ -26,7 +26,7 @@ export function WhyPanel({ track, mood, djName, onClose }) {
       <div className="flex justify-between items-center">
         <MonoLabel className="text-ink-soft">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent mr-2 animate-aura-pulse"/>
-          {djName} · reasoning
+          why this song
         </MonoLabel>
         <button onClick={onClose} className="aura-why-close">
           CLOSE ✕

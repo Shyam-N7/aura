@@ -7,9 +7,7 @@ import { listPlaylists } from '../../api/playlists';
 import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
-import { useSeedShelf } from '../../hooks/useSeedShelf';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
-import { partOfDay } from '../../hooks/useNow';
 import { TopStrip } from './TopStrip';
 import { SectionHeader } from './SectionHeader';
 import { HeroBand } from './HeroBand';
@@ -21,16 +19,8 @@ import './DesktopHome.css';
 // reveal sections on every return. Fresh on hard reload.
 const _cache = {};
 
-// Greeting eyebrow keyed to the actual hour (not a fixed "Tonight is").
-const TIME_PHRASE = {
-  morning:   'This morning is',
-  afternoon: 'This afternoon is',
-  evening:   'This evening is',
-  night:     'Tonight is',
-};
-
 export function DesktopHome({
-  tracks, djName, mood,
+  tracks, djName,
   onPick, onPickLive, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenPlaylists, onOpenSearch,
   onOpenArtist,
@@ -44,7 +34,13 @@ export function DesktopHome({
   const [topArtists,     setTopArtists]     = useState(() => _cache.topArtists     ?? []);
   const [recentlyPlayed, setRecentlyPlayed] = useState(() => _cache.recentlyPlayed ?? []);
   const [yourPlaylists,  setYourPlaylists]  = useState(() => _cache.yourPlaylists  ?? []);
-  const seedShelf = useSeedShelf();
+  // Quick picks come from what you actually listen to — most-played first, then
+  // recently-played, then the featured pool only for brand-new accounts.
+  const quickPicks = (
+    mostPlayed.length >= 4 ? mostPlayed
+      : recentlyPlayed.length >= 4 ? recentlyPlayed
+        : tracks
+  ).slice(0, 8);
   const [discover,       setDiscover]       = useState(() => _cache.discover ?? { trending: [], popularPlaylists: [], movieSongs: [] });
   useEffect(() => {
     const ctl = new AbortController();
@@ -64,49 +60,38 @@ export function DesktopHome({
     <div ref={scrollRef} className="aura-dh">
       <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}/>
 
+      {/* Quick picks — a grid drawn from your LISTENING (most-played, then
+          recently-played, then featured for brand-new users), above the hero so
+          it's the first thing to act on. */}
+      {quickPicks.length > 0 && (
+        <section className="aura-dh__qp">
+          <SectionHeader title="Quick picks" sub="jump back into what you love" large/>
+          <div className="aura-dh__qp-grid">
+            {quickPicks.map(t => (
+              <button key={t.id} onClick={() => onPickLive?.(t)} onContextMenu={ctxOpen(t)} className="aura-dh__qp-tile">
+                <span className="aura-dh__qp-art">
+                  <AlbumArt track={t} radius={10} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
+                  <span className="aura-dh__qp-play">
+                    <svg width="11" height="13" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
+                  </span>
+                </span>
+                <div className="aura-dh__qp-title">{cleanTitle(t.title)}</div>
+                <MonoLabel className="text-ink-soft block truncate" size={9}>{(t.artist ?? '').toLowerCase()}</MonoLabel>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Hero banner — a simple tagline, not the brand (that lives in the top bar). */}
       <section className="aura-dh__greeting">
-        <div className="flex items-baseline gap-[18px] mb-3">
-          <MonoLabel className="text-ink-faint" size={10}>{TIME_PHRASE[partOfDay()]}</MonoLabel>
-          <span className="w-8 h-px bg-line"/>
-          <MonoLabel className="text-ink-faint" size={10}>Matched to your vibe</MonoLabel>
-        </div>
-        <h1 className="aura-dh__mood-hero"><em>{mood}.</em></h1>
-        <p className="aura-dh__mood-sub">
-          Twelve tracks tuned to your mood. Start anywhere &mdash; we&apos;ll follow.
-        </p>
+        <h1 className="aura-dh__mood-hero">music that gets your mood</h1>
       </section>
 
       {heroTrack && (
         <section className="aura-dh__hero-band-wrap">
           <HeroBand track={heroTrack} djName={djName} onPick={() => onPick?.(heroTrack.id)}/>
         </section>
-      )}
-
-      {seedShelf.tracks.length > 0 && (
-        <>
-          <SectionHeader title="Picks for you" sub="Based on the artists you chose" large/>
-          <div className="aura-dh__most-played-wrap">
-            <div className="aura-dh__most-played">
-              {seedShelf.tracks.slice(0, 12).map(t => (
-                <button key={t.id} onClick={() => onPickLive?.(t)} onContextMenu={ctxOpen(t)} className="aura-dh__pick">
-                  <span className="aura-dh__pick-art">
-                    <AlbumArt track={t} radius={6}
-                      style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
-                    <span className="aura-dh__pick-play">
-                      <svg width="10" height="12" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
-                    </span>
-                  </span>
-                  <div>
-                    <div className="aura-dh__pick-title">{cleanTitle(t.title)}</div>
-                    <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
-                      {(t.artist ?? '').toLowerCase()}
-                    </MonoLabel>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
       )}
 
       {recentlyPlayed.length > 0 && (
@@ -335,7 +320,6 @@ function MemoryTile({ track, onPick }) {
         </span>
       </div>
       <div className="aura-dh__memory-body-col">
-        <MonoLabel className="text-accent" size={9}>Recently played</MonoLabel>
         <div className="aura-dh__memory-title">{cleanTitle(track.title)}</div>
         <MonoLabel className="text-ink-faint mt-1 block truncate" size={9}>
           {track.artist ?? ''}{track.language ? ` · ${track.language}` : ''}

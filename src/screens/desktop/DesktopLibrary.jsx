@@ -45,15 +45,17 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
     <div ref={scrollRef} className="aura-dlib" onClick={() => setMenu(null)}>
       <div className="aura-dlib__header">
         <MonoLabel className="text-ink-faint" size={10}>
-          library · your year of listening
+          your year of listening
         </MonoLabel>
         <h1 className="aura-dlib__hero">
           Your <em>listening.</em>
         </h1>
         {summary && (
-          <MonoLabel className="text-ink-faint mt-3.5 block" size={10}>
-            {summary.tracksPlayed ?? 0} tracks · {summary.minutesListened ?? 0} minutes · top language {summary.topLanguage ?? '—'}
-          </MonoLabel>
+          <div className="aura-dlib__stats">
+            <MonoLabel className="text-ink-faint" size={10}>{summary.tracksPlayed ?? 0} tracks</MonoLabel>
+            <MonoLabel className="text-ink-faint" size={10}>{summary.minutesListened ?? 0} minutes</MonoLabel>
+            <MonoLabel className="text-ink-faint" size={10}>{summary.topLanguage ?? '—'}</MonoLabel>
+          </div>
         )}
       </div>
 
@@ -70,7 +72,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
         <div className="aura-dlib__cols">
           <div>
             <div className="flex items-baseline justify-between mb-[18px]">
-              <MonoLabel className="text-ink-faint" size={10}>your liked · {liked?.length ?? 0}</MonoLabel>
+              <MonoLabel className="text-ink-faint" size={10}>{liked?.length ?? 0} liked</MonoLabel>
               {onOpenLiked && liked && liked.length > 0 && (
                 <button onClick={onOpenLiked} className="aura-dlib__see-all">SEE ALL →</button>
               )}
@@ -113,7 +115,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
           </div>
 
           <div>
-            <MonoLabel className="text-ink-faint block mb-[18px]" size={10}>your playlists · {playlists?.length ?? 0}</MonoLabel>
+            <MonoLabel className="text-ink-faint block mb-[18px]" size={10}>{playlists?.length ?? 0} playlists</MonoLabel>
             {(!playlists || playlists.length === 0) && (
               <div className="aura-dlib__empty-row">No playlists yet. Create one from any song’s menu.</div>
             )}

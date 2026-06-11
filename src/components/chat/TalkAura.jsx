@@ -56,7 +56,7 @@ export function TalkAura({ djName, mood, onClose, onPickSequence }) {
       <div className="px-[22px] py-2 pb-4 flex justify-between items-center">
         <div className="flex items-center gap-2.5">
           <span className="w-2.5 h-2.5 rounded-[10px] bg-accent shadow-[0_0_12px_var(--color-accent)] animate-[aura-soft_1.6s_ease-in-out_infinite]"/>
-          <MonoLabel className="text-ink-soft">{djName} · listening</MonoLabel>
+          <MonoLabel className="text-ink-soft">listening</MonoLabel>
         </div>
         <button onClick={onClose}
           className="bg-transparent border-0 text-ink-soft cursor-pointer font-sans font-medium text-[10px] tracking-[0.08em]

@@ -3,7 +3,7 @@ import { MonoLabel, BreathingDot } from '../components/primitives';
 import { formatLongStamp, partOfDay } from '../hooks/useNow';
 import './SensingScreen.css';
 
-export function SensingScreen({ djName, mood, onReady }) {
+export function SensingScreen({ mood, onReady }) {
   // Snapshot the stamp + time-of-day at mount so the scripted intro doesn't
   // rewind if the minute rolls over mid-animation, and the copy matches the
   // actual hour (morning / afternoon / evening / night), not a fixed word.
@@ -36,7 +36,7 @@ export function SensingScreen({ djName, mood, onReady }) {
           <span className="aura-sensing-dot-ring aura-sensing-dot-ring--late"/>
           <BreathingDot color="var(--color-accent)"/>
         </span>
-        <MonoLabel className="text-ink-soft">{djName} · sensing</MonoLabel>
+        <MonoLabel className="text-ink-soft">sensing</MonoLabel>
       </span>
       <div className="flex-1 flex items-center justify-center relative">
         <div className="aura-sensing-breath-ring absolute w-[260px] h-[260px] rounded-full animate-aura-breathe"/>

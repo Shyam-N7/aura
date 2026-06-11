@@ -72,7 +72,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
           <MonoLabel className="text-ink-faint" size={10}>
-            playlist{hit.data ? ` · ${hit.data.trackCount} ${hit.data.trackCount === 1 ? 'track' : 'tracks'}` : ''}
+            {hit.data ? `${hit.data.trackCount} ${hit.data.trackCount === 1 ? 'track' : 'tracks'}` : 'playlist'}
           </MonoLabel>
         </div>
 

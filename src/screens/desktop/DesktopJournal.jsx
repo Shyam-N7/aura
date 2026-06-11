@@ -8,7 +8,7 @@ import './DesktopJournal.css';
 
 // Desktop journal — large serif editorial layout, 180px date column on first
 // entry, 140px on rest. Real entries from /api/journal (auto-written by AURA).
-export function DesktopJournal({ djName, onPickLive }) {
+export function DesktopJournal({ onPickLive }) {
   const [hit, setHit] = useState({ data: null, error: null });
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
@@ -29,7 +29,7 @@ export function DesktopJournal({ djName, onPickLive }) {
     <div className="aura-djr">
       <div className="aura-djr__header">
         <MonoLabel className="text-ink-faint" size={10}>
-          listening journal · auto-written by {djName.toLowerCase()} · private
+          your private listening journal
         </MonoLabel>
         <h1 className="aura-djr__hero">
           What you listened<br/><em>to, and why.</em>
