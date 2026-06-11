@@ -274,3 +274,30 @@
     0 12px 28px color-mix(in srgb, var(--color-accent), transparent 78%),
     inset 0 1px 0 rgb(255 255 255 / 0.5);
 }
+
+/* ── Auto / smart-playlist shelf ("From your listening") ────────────────
+   Read-only sets built from history. Distinguished from user playlists by
+   the accent-tinted cover + a play affordance instead of an overflow menu. */
+.aura-pl-auto-eyebrow { display: block; margin-bottom: 2px; }
+.aura-pl-auto-card .aura-lib-pl-cover--fallback {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 45%),
+    color-mix(in srgb, var(--color-accent), transparent 80%));
+  color: var(--color-bg);
+  font-size: 18px;
+}
+.aura-pl-auto-play {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), transparent 88%);
+  transition: background 140ms ease;
+}
+.aura-pl-auto-card:hover .aura-pl-auto-play {
+  background: color-mix(in srgb, var(--color-accent), transparent 80%);
+}

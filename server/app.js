@@ -12,6 +12,7 @@ import { listPlaylists, getPlaylist, createPlaylist, deletePlaylist, addTrackToP
 import { getLibrarySummary } from './library.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed } from './stats.js';
+import { getAutoPlaylists } from './autoPlaylists.js';
 import { getDiscoverHome } from './discover.js';
 import { getCatalogPlaylistDetail } from './catalog.js';
 import { getBridgeTracks } from './bridges.js';
@@ -474,6 +475,16 @@ app.delete('/api/likes/:track_id', requireAuth, async (req, res) => {
 app.get('/api/playlists', requireAuth, async (req, res) => {
   try {
     res.json({ playlists: await listPlaylists(req.userId) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// MUST be declared before `/:id` — Express matches in order, so otherwise
+// `getPlaylist(userId, 'auto')` would 404 instead of returning the smart sets.
+app.get('/api/playlists/auto', requireAuth, async (req, res) => {
+  try {
+    res.json({ playlists: await getAutoPlaylists(req.userId) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

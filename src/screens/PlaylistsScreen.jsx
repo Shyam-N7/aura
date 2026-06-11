@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { listPlaylists, createPlaylist, deletePlaylist } from '../api/playlists';
+import { listAutoPlaylists } from '../api/autoPlaylists';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
 import { AnchoredMenu } from '../components/AnchoredMenu';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import './PlaylistsScreen.css';
 
-export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
+export function PlaylistsScreen({ onClose, onOpenPlaylist, onPlaySequence }) {
   const [hit, setHit]       = useState({ data: null, error: null });
+  const [auto, setAuto]     = useState([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName]   = useState('');
   const [menu, setMenu]         = useState(null);
@@ -23,6 +25,16 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
         if (err.name === 'AbortError') return;
         setHit({ data: null, error: err.message });
       });
+    return () => ctl.abort();
+  }, []);
+
+  // Smart sets from the user's listening (read-only). Best-effort: if it fails or
+  // there's not enough history, the shelf just doesn't render.
+  useEffect(() => {
+    const ctl = new AbortController();
+    listAutoPlaylists({ signal: ctl.signal })
+      .then(setAuto)
+      .catch(() => { /* non-fatal — hide the shelf */ });
     return () => ctl.abort();
   }, []);
 
@@ -80,6 +92,31 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist }) {
           Your<br/><em className="italic">playlists.</em>
         </div>
       </div>
+
+      {/* Auto / smart sets — read-only, built from listening history. Tap plays
+          the prebuilt sequence; no create/delete affordances. */}
+      {auto.length > 0 && (
+        <div className="pt-6 px-[22px]">
+          <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">From your listening</span>
+          <div className="pt-2.5 flex flex-col gap-2">
+            {auto.map(a => (
+              <button key={a.id} onClick={() => onPlaySequence?.(a.tracks, 0, a.name)}
+                className="aura-lib-pl-card aura-pl-auto-card flex items-center gap-3.5 w-full">
+                {a.coverImageUrl
+                  ? <img src={a.coverImageUrl} alt="" className="aura-lib-pl-cover" loading="lazy"/>
+                  : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">♫</span>}
+                <div className="flex-1 min-w-0">
+                  <div className="aura-pl-row-name truncate">{a.name}</div>
+                  <div className="aura-pl-row-count truncate">{a.description}</div>
+                </div>
+                <span className="aura-pl-auto-play" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 2 L11 6.5 L3 11 Z" fill="currentColor"/></svg>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="pt-7 px-[22px] flex flex-col gap-2">
         {/* New-playlist form: tinted, clearly distinct from playlist rows */}

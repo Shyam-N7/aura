@@ -1,13 +1,14 @@
 import { pool } from './db.js';
 
 // Convert "days back from now" to a unix-ms cutoff. Caller passes days.
-function cutoffMs(days) {
+// Exported so server/autoPlaylists.js can reuse the same ms-epoch convention.
+export function cutoffMs(days) {
   return Date.now() - days * 24 * 60 * 60 * 1000;
 }
 
 // Shape: same as catalog tracks (id, title, artist, album, language, durationSec,
 // streamUrl, imageUrl) so HomeScreen shelves can reuse the same card components.
-function mapTrackRow(r) {
+export function mapTrackRow(r) {
   return {
     id:          r.id,
     title:       r.title,

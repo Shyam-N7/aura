@@ -1161,6 +1161,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {screen === 'playlists' && (
           <div key="playlists" className="absolute inset-0 animate-aura-screen-in">
             <PlaylistsScreen onClose={() => setScreen('library')}
+              onPlaySequence={pickLiveSequence}
               onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('playlists'); setScreen('playlist-detail'); }}/>
           </div>
         )}
