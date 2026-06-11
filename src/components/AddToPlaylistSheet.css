@@ -1,96 +1,16 @@
-.aura-sheet-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgb(0 0 0 / 0.32);
-  backdrop-filter: blur(2px);
-  z-index: 40;
-  animation: aura-fadein 220ms ease both;
-}
-
-/* Floats in the dimmed area directly above the sheet's top edge (bottom:100%),
-   so it rides with the sheet during a drag. Light text reads on the scrim in
-   every theme; taps pass through to the backdrop below. */
-.aura-sheet-hint {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  margin-bottom: 12px;
-  text-align: center;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  color: rgb(255 255 255 / 0.62);
-  pointer-events: none;
-  animation: aura-fadein 360ms ease both;
-}
-
-.aura-sheet {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 41;
-  background: var(--color-bg);
-  border-top: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
-  border-top-left-radius: 22px;
-  border-top-right-radius: 22px;
-  box-shadow: 0 -18px 40px rgb(0 0 0 / 0.22);
-  /* Fixed height (not max-height): the playlist fetch swaps loader→list, and a
-     content-driven resize mid-slide is what made the open feel janky. A stable
-     box + inner scroll keeps the slide a pure composited transform. */
-  height: min(75%, 560px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  will-change: transform;
-  animation: aura-sheet-rise 380ms cubic-bezier(.16, 1, .3, 1) both;
-}
-
-/* Open only — dismiss + drag are animated imperatively from the component so
-   the finger drives transform 1:1 without a React re-render per frame. */
-@keyframes aura-sheet-rise {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
-
-/* Grip — large invisible touch target around the visible handle bar so
-   users can actually grab it on mobile. Visible bar is 4 × 40 px; the
-   grip is a full-width 40 px tall band. touch-action:none keeps the
-   browser from converting the drag into a native scroll. */
-.aura-sheet-grip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 28px;
-  padding-top: 8px;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.aura-sheet-grip:active { cursor: grabbing; }
-
-.aura-sheet-handle {
-  width: 40px;
-  height: 4px;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--color-ink), transparent 75%);
-  pointer-events: none;
-}
+/* Fixed height (not max-height): the playlist fetch swaps loader→list, and a
+   content-driven resize mid-slide is what made the open feel janky. A stable box
+   + inner scroll keeps vaul's slide a pure composited transform. */
+.aura-drawer__content--playlist { height: min(75%, 560px); }
 
 .aura-sheet-header {
   padding: 4px 22px 12px;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
 }
-.aura-sheet-header:active { cursor: grabbing; }
 .aura-sheet-title {
+  margin: 0;
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
@@ -212,5 +132,3 @@
   font-size: 18px;
 }
 
-.theme-midnight .aura-sheet-backdrop { background: rgb(0 0 0 / 0.50); }
-.theme-midnight .aura-sheet { box-shadow: 0 -18px 40px rgb(0 0 0 / 0.50); }
