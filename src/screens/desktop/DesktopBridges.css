@@ -43,6 +43,103 @@
 }
 .aura-dbr__loading { opacity: 0.7; }
 
+/* ─── Build-your-own configurator ──────────────────────────────────── */
+.aura-dbr__config {
+  padding: 34px 56px 0;
+}
+.aura-dbr__config-label { display: block; margin-bottom: 16px; }
+.aura-dbr__config-pick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+.aura-dbr__moodcol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.aura-dbr__moodgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.aura-dbr__moodchip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.aura-dbr__moodchip:hover { border-color: color-mix(in srgb, var(--color-ink), transparent 70%); }
+.aura-dbr__moodchip--on {
+  border-color: var(--chip);
+  background: color-mix(in srgb, var(--chip), transparent 90%);
+  box-shadow: inset 0 0 0 1px var(--chip);
+}
+.aura-dbr__moodchip-key {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+.aura-dbr__moodchip--on .aura-dbr__moodchip-key { color: var(--chip); }
+.aura-dbr__moodchip-hint {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  color: var(--color-ink-faint);
+}
+
+.aura-dbr__steps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+.aura-dbr__steps-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-line);
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-ink);
+  font-size: 16px;
+  line-height: 1;
+  transition: background 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.aura-dbr__steps-btn:hover { background: color-mix(in srgb, var(--color-ink), transparent 92%); }
+.aura-dbr__steps-btn:disabled { opacity: 0.35; cursor: default; }
+.aura-dbr__steps-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--color-ink-soft);
+  min-width: 72px;
+}
+
+.aura-dbr__preview {
+  margin-top: 22px;
+  max-width: 440px;
+}
+.aura-dbr__hint {
+  margin-top: 20px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-ink-soft);
+}
+.aura-dbr__presets-label { display: block; padding: 40px 56px 0; }
+
 /* Mobile (<600 px container) — tighten gutters, drop hero font, stack the
    2-col bridge grid into a single column so each card has room to breathe. */
 @container dbr (max-width: 600px) {
@@ -54,4 +151,8 @@
     grid-template-columns: 1fr;
     gap: 14px;
   }
+  .aura-dbr__config { padding: 26px 22px 0; }
+  .aura-dbr__config-pick { grid-template-columns: 1fr; gap: 22px; }
+  .aura-dbr__preview { max-width: none; }
+  .aura-dbr__presets-label { padding: 30px 22px 0; }
 }

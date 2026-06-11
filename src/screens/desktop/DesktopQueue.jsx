@@ -12,6 +12,7 @@ import './DesktopQueue.css';
 
 const EDGE_ZONE = 90;
 const MAX_SCROLL_VELOCITY = 16;
+const LONG_PRESS_MS = 450;
 
 export function DesktopQueue({
   tracks, currentIdx, source, djName,
@@ -41,11 +42,23 @@ export function DesktopQueue({
   const scrollerRef = useRef(null);
   const dragRef = useRef(null);
   const rafRef = useRef(0);
+  const longPressRef = useRef(null);   // pending touch long-press: { timer, startX, startY }
+  const draggedRef   = useRef(false);  // a long-press drag happened → suppress the row's click-to-play
 
   const visibleCount = hidePast ? tracks.length - currentIdx : tracks.length;
 
   useEffect(() => { dragRef.current = drag; }, [drag]);
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+  // While a reorder drag is active, block page/list scroll so a touch long-press
+  // drag doesn't fight the scroller. Native non-passive listener — React's
+  // onTouchMove is passive, so its preventDefault wouldn't take.
+  useEffect(() => {
+    if (!drag) return undefined;
+    const block = (e) => e.preventDefault();
+    document.addEventListener('touchmove', block, { passive: false });
+    return () => document.removeEventListener('touchmove', block);
+  }, [drag]);
 
   // On open, bring the now-playing track into view near the top so it's visible
   // and focused immediately instead of buried under the played history. Mount-
@@ -97,28 +110,66 @@ export function DesktopQueue({
     rafRef.current = requestAnimationFrame(tick);
   };
 
-  const onDragStart = (i) => (e) => {
+  // Shared drag kickoff for both the grab handle (mouse, immediate) and the row
+  // long-press (touch). When past tracks are collapsed they're still in the DOM
+  // (so the height animation can run) but have no real geometry — exclude their
+  // data-row entries so the drop-index calculation isn't skewed by phantom
+  // zero-height zones at the top of the list.
+  const beginDrag = (i, el, pointerId, clientY) => {
     if (!onReorder) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    // When past tracks are collapsed they're still in the DOM (so the
-    // height animation can run) but have no real geometry — exclude
-    // their data-row entries so the drop-index calculation isn't
-    // skewed by phantom zero-height zones at the top of the list.
+    el.setPointerCapture?.(pointerId);
     const selector = hidePast
       ? '[data-row]:not(.aura-dq__past-wrap--collapsed [data-row])'
       : '[data-row]';
     const rects = listRef.current
-      ? [...listRef.current.querySelectorAll(selector)].map(el => {
-          const r = el.getBoundingClientRect();
-          return { top: r.top, height: r.height, idx: Number(el.dataset.idx) };
+      ? [...listRef.current.querySelectorAll(selector)].map(node => {
+          const r = node.getBoundingClientRect();
+          return { top: r.top, height: r.height, idx: Number(node.dataset.idx) };
         })
       : [];
     setDrag({
-      from: i, startY: e.clientY, currentY: e.clientY,
+      from: i, startY: clientY, currentY: clientY,
       hoverTo: i, rects,
       startScrollTop: scrollerRef.current?.scrollTop ?? 0,
       scrollDelta: 0,
     });
+  };
+
+  const onDragStart = (i) => (e) => {
+    if (!onReorder) return;
+    beginDrag(i, e.currentTarget, e.pointerId, e.clientY);
+  };
+
+  // Touch long-press on a row body picks it up to reorder (mouse keeps the grab
+  // handle for an instant drag). Holding still for LONG_PRESS_MS arms the drag;
+  // any real movement before that is a scroll/tap and cancels it.
+  const cancelLongPress = () => {
+    if (longPressRef.current) { clearTimeout(longPressRef.current.timer); longPressRef.current = null; }
+  };
+  const onRowPointerDown = (i) => (e) => {
+    if (!onReorder || e.pointerType === 'mouse') return;
+    draggedRef.current = false;
+    cancelLongPress();
+    const el = e.currentTarget, pointerId = e.pointerId;
+    const startX = e.clientX, startY = e.clientY;
+    const timer = setTimeout(() => {
+      draggedRef.current = true;
+      navigator.vibrate?.(12);
+      beginDrag(i, el, pointerId, startY);
+      longPressRef.current = null;
+    }, LONG_PRESS_MS);
+    longPressRef.current = { timer, startX, startY };
+  };
+  const onRowPointerMove = (e) => {
+    if (draggedRef.current) { onDragMove(e); return; }
+    const lp = longPressRef.current;
+    if (lp && (Math.abs(e.clientX - lp.startX) > 10 || Math.abs(e.clientY - lp.startY) > 10)) {
+      cancelLongPress();  // moved first → it's a scroll, let the list scroll
+    }
+  };
+  const onRowPointerUp = () => {
+    cancelLongPress();
+    if (draggedRef.current) onDragEnd();
   };
   const onDragMove = (e) => {
     if (!drag) return;
@@ -182,7 +233,13 @@ export function DesktopQueue({
         <div className={`aura-dq__idx ${isCurrent ? 'aura-dq__idx--current' : ''}`}>
           {String(i + 1).padStart(2, '0')}
         </div>
-        <button onClick={() => onPick?.(i)} className="aura-dq__main">
+        <button
+          onClick={() => { if (draggedRef.current) { draggedRef.current = false; return; } onPick?.(i); }}
+          onPointerDown={onRowPointerDown(i)}
+          onPointerMove={onRowPointerMove}
+          onPointerUp={onRowPointerUp}
+          onPointerCancel={onRowPointerUp}
+          className="aura-dq__main">
           <AlbumArt track={t} size={54} radius={4}/>
           <div className="flex-1 min-w-0">
             <div className="aura-dq__title">

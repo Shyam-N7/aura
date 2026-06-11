@@ -129,6 +129,11 @@
   cursor: pointer;
   color: var(--color-ink);
   min-width: 0;
+  /* Touch long-press reorders the row — suppress the native callout / text
+     selection that a hold would otherwise trigger on mobile. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .aura-dq__title {
   font-family: var(--font-serif);
