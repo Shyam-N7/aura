@@ -1,4 +1,5 @@
 import express from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { pool } from './db.js';
 import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
@@ -36,8 +37,32 @@ const app = express();
 // object is already present, use it as-is.
 app.use((req, res, next) => {
   if (req.body && typeof req.body === 'object') return next();
-  express.json()(req, res, next);
+  express.json({ limit: '64kb' })(req, res, next);
 });
+
+// ── Rate limiting ───────────────────────────────────────────────────
+// Behind Vercel's edge (a single proxy) — trust ONE hop so req.ip is the real
+// client for per-IP limiting. NOT `true`, which would let clients spoof
+// X-Forwarded-For. Locally there's no proxy header so req.ip is the socket addr.
+app.set('trust proxy', 1);
+
+const opts = (windowMs, limit, message) => ({
+  windowMs, limit, standardHeaders: true, legacyHeaders: false,
+  message: { error: message },
+});
+// Broad catch-all so one IP can't flood the API (a normal session makes a
+// handful of calls per page, so 600/5min is comfortable for real use).
+const generalLimiter = rateLimit(opts(5 * 60 * 1000, 600, 'too many requests — slow down a moment.'));
+// Tight on auth to blunt credential brute-force + OTP abuse (legit users make
+// only a few auth calls).
+const authLimiter = rateLimit(opts(15 * 60 * 1000, 40, 'too many attempts — try again in a few minutes.'));
+// Protects the unauthenticated, cost-bearing routes (Gemini "why", lyrics
+// provider) from being driven for spend/DoS on cache misses.
+const costLimiter = rateLimit(opts(5 * 60 * 1000, 60, 'too many requests — slow down a moment.'));
+
+app.use('/api', generalLimiter);
+app.use('/api/auth', authLimiter);
+app.use(['/api/why', '/api/lyrics'], costLimiter);
 
 // ── Auth routes (public) ────────────────────────────────────────────
 app.use('/api/auth', authRouter);
