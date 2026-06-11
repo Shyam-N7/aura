@@ -342,10 +342,15 @@
   border-radius: 9999px;
   cursor: pointer;
   color: var(--color-ink-soft);
-  transition: color 140ms ease, transform 100ms ease;
+  transition: color 140ms ease, background 140ms ease, transform 100ms ease;
 }
 .aura-mp__act:active { transform: scale(0.92); }
-.aura-mp__act--on { color: var(--color-accent); }
+/* Shuffle / repeat read as toggle chips — the active state fills to an
+   accent-tinted pill instead of only recolouring the icon. */
+.aura-mp__act--on {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+}
 
 /* Very short phones: tighten the fixed rows so the flex cover keeps its share. */
 @media (max-height: 670px) {

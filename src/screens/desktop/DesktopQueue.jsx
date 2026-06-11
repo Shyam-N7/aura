@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MonoLabel, AuraMark } from '../../components/primitives';
+import { ShuffleIcon, RepeatIcon } from '../../components/player/PlayerControlIcons';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
@@ -336,8 +337,9 @@ export function DesktopQueue({
                 title={shuffleActive ? 'Stop shuffling — restore queue order' : 'Shuffle the upcoming tracks'}
                 onClick={onShuffle}
                 disabled={!shuffleActive && tracks.length < 2}
-                className={`aura-dq__action-btn ${shuffleActive ? 'aura-dq__action-btn--on' : ''}`}
+                className={`aura-dq__chip ${shuffleActive ? 'aura-dq__chip--on' : ''}`}
                 aria-label={shuffleActive ? 'Shuffle on — tap to deactivate' : 'Shuffle up-next'}>
+                <ShuffleIcon/>
                 Shuffle
               </button>
             )}
@@ -345,8 +347,9 @@ export function DesktopQueue({
               <button type="button"
                 title={repeatMode === 'one' ? 'Repeat the current track' : repeatMode === 'all' ? 'Repeat the queue' : 'Repeat is off — tap to cycle'}
                 onClick={onCycleRepeat}
-                className={`aura-dq__action-btn aura-dq__action-btn--repeat ${repeatMode !== 'off' ? 'aura-dq__action-btn--on' : ''}`}
+                className={`aura-dq__chip aura-dq__chip--repeat ${repeatMode !== 'off' ? 'aura-dq__chip--on' : ''}`}
                 aria-label={`Repeat: ${repeatMode}`}>
+                <RepeatIcon mode={repeatMode}/>
                 {repeatMode === 'one' ? 'Repeat 1' : repeatMode === 'all' ? 'Repeat all' : 'Repeat'}
               </button>
             )}
