@@ -6,31 +6,45 @@ import { toast } from '../../lib/toast';
 import { BridgeCard } from './BridgeCard';
 import './DesktopBridges.css';
 
-// The six moods the bridge engine curates between (server/bridges.js MOOD_QUERIES).
-// Hints map them to plain feelings so "sad → happy" reads as calm → upbeat.
-const BRIDGE_MOODS = [
-  { key: 'restless', hint: 'antsy, wired' },
-  { key: 'calm',     hint: 'low, wistful' },
-  { key: 'focused',  hint: 'locked in' },
-  { key: 'warm',     hint: 'tender' },
-  { key: 'upbeat',   hint: 'lifted' },
-  { key: 'social',   hint: 'out, lively' },
+// Two DIFFERENT, plain word sets (each maps to a server MOOD_QUERIES bucket):
+// "where you are" (a current feeling) and "where you want to be" (the goal).
+// Colours tint the selected chip + the bridge arc.
+const FROM_MOODS = [
+  { key: 'sad',      hint: 'low, heavy',   color: '#5a6b9a' },
+  { key: 'stressed', hint: 'wound up',     color: '#a85a5a' },
+  { key: 'restless', hint: 'antsy, wired', color: '#c2603a' },
+  { key: 'tired',    hint: 'drained',      color: '#7a6f8a' },
+  { key: 'lonely',   hint: 'on your own',  color: '#5a7a8a' },
 ];
+const TO_MOODS = [
+  { key: 'happy',     hint: 'lifted',      color: '#d8956a' },
+  { key: 'calm',      hint: 'at ease',     color: '#5a8a72' },
+  { key: 'focused',   hint: 'locked in',   color: '#6e85a3' },
+  { key: 'energized', hint: 'fired up',    color: '#c47554' },
+  { key: 'social',    hint: 'out, lively', color: '#a8556a' },
+];
+// AURA's inferred mood → the closest "where you are" word, so the dial starts
+// where the user actually is.
+const INFERRED_FROM = {
+  restless: 'restless', calm: 'sad', focused: 'restless',
+  upbeat: 'tired', warm: 'lonely', social: 'tired',
+};
 const MIN_STEPS = 4;
 const MAX_STEPS = 8;
 
-// Last configured bridge persists per-device like the other aura.* prefs.
-function loadCfg() {
+// Last configured bridge persists per-device like the other aura.* prefs; with
+// no saved choice, start from the user's current mood.
+function loadCfg(mood) {
   try {
     const c = JSON.parse(localStorage.getItem('aura.moodBridge'));
     if (c && c.from && c.to && c.steps) return c;
   } catch { /* ignore */ }
-  return { from: 'calm', to: 'upbeat', steps: 5 };
+  return { from: INFERRED_FROM[mood] ?? 'sad', to: 'happy', steps: 5 };
 }
 
-export function DesktopBridges({ onPickSequence }) {
+export function DesktopBridges({ onPickSequence, mood }) {
   const [loadingId, setLoadingId] = useState(null);
-  const [cfg, setCfg] = useState(loadCfg);
+  const [cfg, setCfg] = useState(() => loadCfg(mood));
 
   useEffect(() => {
     try { localStorage.setItem('aura.moodBridge', JSON.stringify(cfg)); }
@@ -43,7 +57,7 @@ export function DesktopBridges({ onPickSequence }) {
     try {
       const { tracks } = await getBridge({ from: bridge.from, to: bridge.to, steps: bridge.steps });
       if (!tracks?.length) { toast('Couldn’t curate that bridge.'); return; }
-      onPickSequence?.(tracks, 0, `bridge · ${bridge.from} → ${bridge.to}`);
+      onPickSequence?.(tracks, 0, `${bridge.from} → ${bridge.to}`);
     } catch (err) {
       toast(`Couldn’t load bridge — ${err.message}`);
     } finally {
@@ -65,7 +79,7 @@ export function DesktopBridges({ onPickSequence }) {
     <div className="aura-dbr">
       <div className="aura-dbr__header">
         <MonoLabel className="text-ink-faint" size={10}>
-          mood bridges · gradual paths between feelings
+          gradual paths between feelings
         </MonoLabel>
         <h1 className="aura-dbr__hero">
           From here<br/><em>to there.</em>
@@ -79,9 +93,9 @@ export function DesktopBridges({ onPickSequence }) {
       <div className="aura-dbr__config">
         <MonoLabel className="text-ink-faint aura-dbr__config-label" size={10}>build your own</MonoLabel>
         <div className="aura-dbr__config-pick">
-          <MoodPicker label="where you are" value={cfg.from}
+          <MoodPicker label="where you are" moods={FROM_MOODS} value={cfg.from}
             onPick={(k) => setCfg(c => ({ ...c, from: k }))}/>
-          <MoodPicker label="where you want to be" value={cfg.to}
+          <MoodPicker label="where you want to be" moods={TO_MOODS} value={cfg.to}
             onPick={(k) => setCfg(c => ({ ...c, to: k }))}/>
         </div>
 
@@ -132,17 +146,17 @@ export function DesktopBridges({ onPickSequence }) {
   );
 }
 
-function MoodPicker({ label, value, onPick }) {
+function MoodPicker({ label, moods, value, onPick }) {
   return (
     <div className="aura-dbr__moodcol">
       <MonoLabel className="text-ink-faint" size={9}>{label}</MonoLabel>
       <div className="aura-dbr__moodgrid">
-        {BRIDGE_MOODS.map(m => {
+        {moods.map(m => {
           const on = value === m.key;
           return (
             <button key={m.key} type="button" onClick={() => onPick(m.key)}
               className={`aura-dbr__moodchip ${on ? 'aura-dbr__moodchip--on' : ''}`}
-              style={on ? { '--chip': `var(--mood-${m.key})` } : undefined}>
+              style={on ? { '--chip': m.color } : undefined}>
               <span className="aura-dbr__moodchip-key">{m.key}</span>
               <span className="aura-dbr__moodchip-hint">{m.hint}</span>
             </button>

@@ -5,13 +5,22 @@
 
 import { searchSongs, dedupeSongs } from './catalog.js';
 
+// Plain-emotion buckets. The left group is "where you are" (current feeling),
+// the right is "where you want to be" — the configurator shows different words
+// on each side, all mapping to a search query here.
 const MOOD_QUERIES = {
-  restless: 'soft acoustic indie',
-  focused:  'instrumental focus music',
-  calm:     'melancholy indie songs',
-  upbeat:   'upbeat dance hits',
-  warm:     'romantic ballads',
-  social:   'party hits',
+  // where you are
+  sad:       'sad emotional songs',
+  stressed:  'calm soothing music',
+  restless:  'soft acoustic indie',
+  tired:     'mellow chill songs',
+  lonely:    'melancholy indie songs',
+  // where you want to be
+  happy:     'happy feel-good hits',
+  calm:      'relaxing chill music',
+  focused:   'instrumental focus music',
+  energized: 'high energy upbeat hits',
+  social:    'party hits',
 };
 
 export const MOODS = Object.keys(MOOD_QUERIES);

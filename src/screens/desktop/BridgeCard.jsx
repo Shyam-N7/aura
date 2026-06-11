@@ -1,15 +1,16 @@
 import { MonoLabel } from '../../components/primitives';
 
 const MOOD_COLOR = {
-  restless: 'var(--mood-restless)', focused: 'var(--mood-focused)',
-  calm: 'var(--mood-calm)', upbeat: 'var(--mood-upbeat)',
-  warm: 'var(--mood-warm)', social: 'var(--mood-social)',
+  // where you are
+  sad: '#5a6b9a', stressed: '#a85a5a', restless: '#c2603a', tired: '#7a6f8a', lonely: '#5a7a8a',
+  // where you want to be
+  happy: '#d8956a', calm: '#5a8a72', focused: '#6e85a3', energized: '#c47554', social: '#a8556a',
 };
 
 export function BridgeCard({ bridge, idx, onClick }) {
   const fromC = MOOD_COLOR[bridge.from] || bridge.accent;
   const toC   = MOOD_COLOR[bridge.to]   || bridge.accent;
-  const dip   = ['restless','calm'].includes(bridge.from) ? 1 : -1;
+  const dip   = ['sad', 'stressed', 'restless', 'tired', 'lonely'].includes(bridge.from) ? 1 : -1;
   return (
     <button onClick={onClick} className="aura-dh-bridge-card">
       <div className="flex justify-between items-center">
