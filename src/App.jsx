@@ -1298,7 +1298,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {/* TalkAura modal still triggered by compact chrome's onTalk; will be
             unified into the screen='talk' route in a later phase. */}
         {isCompact && talkOpen && <TalkAura djName={t.djName} mood={t.mood}
-          onClose={() => setTalkOpen(false)} onPickSequence={pickLiveSequence}/>}
+          onClose={() => setTalkOpen(false)} onPickSequence={pickLiveSequence}
+          t={t} setTweak={setTweak}/>}
         <Toast/>
         <AddToPlaylistSheet/>
         <ConfirmDialog/>

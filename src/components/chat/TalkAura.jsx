@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { MonoLabel } from '../primitives';
+import { AuraMark, MonoLabel } from '../primitives';
+import { ThemeToggle } from '../ThemeToggle';
 import { talk } from '../../api/talk';
 import './TalkAura.css';
 
@@ -10,7 +11,7 @@ const SUGGESTIONS = [
   'play tamil indie',
 ];
 
-export function TalkAura({ djName, mood, onClose, onPickSequence }) {
+export function TalkAura({ djName, mood, onClose, onPickSequence, t, setTweak }) {
   const [messages, setMessages] = useState([
     { who: 'aura', text: `i'm reading you as ${mood} right now. the set is built around that — but tell me how it actually feels and i'll shift it.` },
   ]);
@@ -50,32 +51,33 @@ export function TalkAura({ djName, mood, onClose, onPickSequence }) {
   };
 
   return (
-    <div className="absolute inset-0 z-30 text-ink flex flex-col pt-[54px] animate-aura-rise
+    <div className="absolute inset-0 z-30 text-ink flex flex-col pt-[82px] animate-aura-rise
                     bg-[rgb(255_250_242/0.96)] dark:bg-[rgb(10_9_8/0.94)]
                     backdrop-blur-[40px]">
-      <div className="px-[22px] py-2 pb-4 flex justify-between items-center">
-        <div className="flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 rounded-[10px] bg-accent shadow-[0_0_12px_var(--color-accent)] animate-[aura-soft_1.6s_ease-in-out_infinite]"/>
-          <MonoLabel className="text-ink-soft">listening</MonoLabel>
+      <div className="aura-talk-topbar">
+        <div className="aura-talk-topbar__brand">
+          <AuraMark size={24}/>
+          <span className="aura-talk-topbar__wordmark">talk to aura</span>
         </div>
-        <button onClick={onClose}
-          className="bg-transparent border-0 text-ink-soft cursor-pointer font-sans font-medium text-[10px] tracking-[0.08em]
-                     px-2.5 py-1 rounded-full transition-colors duration-150
-                     hover:bg-[rgb(0_0_0/0.05)] hover:text-ink dark:hover:bg-white/[0.06]">
-          CLOSE ✕
-        </button>
+        <div className="aura-talk-topbar__actions">
+          {t && setTweak && <ThemeToggle t={t} setTweak={setTweak}/>}
+          <button type="button" onClick={onClose} aria-label="Close talk" className="aura-talk-topbar__close">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
-
       <div ref={scrollRef} className="flex-1 overflow-auto px-[22px] pt-2 pb-3 flex flex-col gap-3.5">
         {messages.map((m, i) => {
           const isAura = m.who === 'aura';
           const bubbleCls = isAura
-            ? 'font-serif italic text-[21px] tracking-[-0.005em] p-0 bg-transparent rounded-none'
+            ? 'font-serif italic text-[14px] tracking-[-0.005em] p-0 bg-transparent rounded-none'
             : 'text-[15px] tracking-normal py-2 px-3 rounded-2xl bg-black/5 dark:bg-white/[0.08]';
           return (
             <div key={i}
               className={`max-w-[85%] flex flex-col gap-1 animate-aura-rise ${isAura ? 'self-start' : 'self-end'}`}>
-              <MonoLabel className="text-ink-faint" size={9}>
+              <MonoLabel className="text-ink-faint" size={isAura ? 11 : 9}>
                 {isAura ? djName : 'you'}
               </MonoLabel>
               <div className={`leading-[1.35] ${m.error ? 'text-ink-soft' : 'text-ink'} text-pretty ${bubbleCls}`}>{m.text}</div>
@@ -118,7 +120,7 @@ export function TalkAura({ djName, mood, onClose, onPickSequence }) {
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); send(draft); }}
-        className="pt-2.5 px-3.5 pb-7 flex gap-2 items-center border-t border-ink-faint/15">
+        className="pt-2 px-3 pb-7 flex gap-2 items-center border-t border-ink-faint/15">
         <input
           value={draft}
           onChange={e => setDraft(e.target.value)}

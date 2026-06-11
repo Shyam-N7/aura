@@ -1,3 +1,82 @@
+.aura-talk-topbar {
+  position: absolute;
+  top: 16px;
+  left: 14px;
+  right: 14px;
+  z-index: 40;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.02));
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+  color: var(--color-ink);
+}
+
+.theme-midnight .aura-talk-topbar {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015));
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.36),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.aura-talk-topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.aura-talk-topbar__wordmark {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+
+.aura-talk-topbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.aura-talk-topbar__close {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+
+.aura-talk-topbar__close:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+
+.aura-talk-topbar__close:active {
+  transform: scale(0.92);
+}
+
 .aura-thinking-dot {
   animation: aura-soft 1s ease-in-out infinite;
   animation-delay: var(--aura-thinking-delay);
