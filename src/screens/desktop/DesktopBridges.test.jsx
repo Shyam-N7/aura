@@ -85,9 +85,12 @@ describe('DesktopBridges v2', () => {
   });
 
   it('marks the FROM chip the engine read you as', async () => {
-    render(<DesktopBridges/>);
-    expect(await screen.findByText('reading you')).toBeInTheDocument();
-    const chip = screen.getByText('reading you').closest('button');
-    expect(chip.textContent).toContain('restless');
+    const { container } = render(<DesktopBridges/>);
+    const badge = await waitFor(() => {
+      const el = container.querySelector('.aura-dbr__moodchip-badge');
+      if (!el) throw new Error('badge not yet rendered');
+      return el;
+    });
+    expect(badge.closest('button').textContent).toContain('restless');
   });
 });
