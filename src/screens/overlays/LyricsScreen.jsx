@@ -4,6 +4,7 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getLyrics } from '../../api/lyrics';
 import { cleanLyric, cleanTitle } from '../../utils/title';
 import { useCinematicIdle } from '../../hooks/useCinematicIdle';
+import '@fontsource/dancing-script/400.css';
 import './LyricsScreen.css';
 
 export function LyricsScreen({ track, audioTime, playing, ended = false, onClose, onSeekToTime, closing = false }) {
@@ -14,6 +15,13 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
   const status = hit.trackId === track.id
     ? (hit.error ? 'error' : hit.data ? 'ok' : 'loading')
     : 'loading';
+
+  // Warm the epigraph's handwriting face as soon as the overlay mounts — the
+  // cinematic idle state only appears after seconds of inactivity, so the
+  // woff2 is long since ready and the title card never flashes a fallback.
+  useEffect(() => {
+    document.fonts?.load('400 44px "Dancing Script"').catch(() => {});
+  }, []);
 
   useEffect(() => {
     const ctl = new AbortController();

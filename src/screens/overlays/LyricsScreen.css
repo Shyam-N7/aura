@@ -386,8 +386,10 @@
   }
 }
 
-/* Cinematic epigraph — song title across the top of the panel, like an opening
-   title card. The cursive font is gone; this is now the clean primary sans. */
+/* Cinematic epigraph — song title rendered as a handwritten title card, like
+   a movie's opening credits. Dancing Script is loaded via @fontsource (see
+   LyricsScreen.jsx) and scoped HERE only — Phase A's no-cursive rule stands
+   everywhere else in the product. */
 .aura-lyrics-epigraph {
   position: absolute;
   top: 28px;
@@ -397,11 +399,11 @@
   pointer-events: none;
   padding: 0 22px;
   text-align: center;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 40px;
+  font-family: "Dancing Script", cursive;
+  font-weight: 400;
+  font-size: 44px;
   line-height: 1.05;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
   color: rgb(255 255 255 / 0.96);
   text-shadow:
     0 3px 24px rgb(0 0 0 / 0.7),

@@ -20,7 +20,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
-    "@fontsource/fraunces": "^5.2.9",
+    "@fontsource/dancing-script": "^5.2.8",
     "@fontsource/hanken-grotesk": "^5.1.0",
     "@google/genai": "^2.3.0",
     "@vercel/analytics": "^2.0.1",
