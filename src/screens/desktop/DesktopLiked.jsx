@@ -4,7 +4,7 @@ import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { listLiked } from '../../api/likes';
 import { useLikes } from '../../hooks/useLikes';
-import { fmtTime } from '../../utils/fmtTime';
+import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
@@ -54,9 +54,6 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
-          <MonoLabel className="text-ink-faint" size={10}>
-            {hit.data ? `${liked.length} liked ${liked.length === 1 ? 'song' : 'songs'}` : 'liked'}
-          </MonoLabel>
         </div>
 
         {status === 'loading' && (
@@ -69,11 +66,11 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
         )}
         {status === 'ok' && (
           <>
-            <h1 className="aura-dpd__hero">
-              Your <em>liked.</em>
-            </h1>
+            <div className="aura-dpd__kind">your collection</div>
+            <h1 className="aura-dpd__hero">liked</h1>
+            {liked.length > 0 && <div className="aura-dpd__by">by you</div>}
             {liked.length > 0 && (
-              <div className="mt-7">
+              <div className="mt-6">
                 <button onClick={playAll} className="aura-dpd__play-all">
                   <span className="aura-dpd__play-disc">
                     <svg width="10" height="12" viewBox="0 0 12 14">
@@ -100,6 +97,10 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
 
         {status === 'ok' && liked.length > 0 && (
           <div className="aura-dpd__list">
+            <div className="aura-dpd__count">
+              <span>{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span>
+              <span>{fmtRuntime(liked.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
+            </div>
             {liked.map((t, i) => (
               <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>

@@ -3,7 +3,7 @@ import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getPlaylist, removeFromPlaylist } from '../../api/playlists';
-import { fmtTime } from '../../utils/fmtTime';
+import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
@@ -71,9 +71,6 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
-          <MonoLabel className="text-ink-faint" size={10}>
-            {hit.data ? `${hit.data.trackCount} ${hit.data.trackCount === 1 ? 'track' : 'tracks'}` : 'playlist'}
-          </MonoLabel>
         </div>
 
         {status === 'loading' && (
@@ -86,11 +83,11 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
         )}
         {status === 'ok' && (
           <>
-            <h1 className="aura-dpd__hero">
-              <em>{hit.data.name}</em>.
-            </h1>
+            <div className="aura-dpd__kind">playlist</div>
+            <h1 className="aura-dpd__hero">{hit.data.name}</h1>
+            {tracks.length > 0 && <div className="aura-dpd__by">by you</div>}
             {tracks.length > 0 && (
-              <div className="mt-7">
+              <div className="mt-6">
                 <button onClick={playAll} className="aura-dpd__play-all">
                   <span className="aura-dpd__play-disc">
                     <svg width="10" height="12" viewBox="0 0 12 14">
@@ -117,6 +114,10 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
 
         {status === 'ok' && tracks.length > 0 && (
           <div className="aura-dpd__list">
+            <div className="aura-dpd__count">
+              <span>{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>
+              <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
+            </div>
             {tracks.map((t, i) => (
               <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
