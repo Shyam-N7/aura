@@ -15,7 +15,9 @@ export function PlaylistPickerBody({ tracks, onPicked, compact = false }) {
   const [playlists, setPlaylists] = useState(null);
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState('');
-  const [busyId, setBusyId]       = useState(null);
+  // Name of the playlist a track is being added to — drives the loader while
+  // the (1-2s) add is in flight. Doubles as the in-flight guard.
+  const [busyName, setBusyName]   = useState(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -59,15 +61,15 @@ export function PlaylistPickerBody({ tracks, onPicked, compact = false }) {
   };
 
   const pick = async (playlist) => {
-    if (busyId) return;
-    setBusyId(playlist.id);
+    if (busyName) return;
+    setBusyName(playlist.name);
     try {
       const added = await addAll(playlist.id);
       successToast(playlist.name, added);
       onPicked?.();
     } catch (err) {
       toast(`Couldn't add — ${err.message}`);
-      setBusyId(null);
+      setBusyName(null);
     }
   };
 
@@ -75,6 +77,7 @@ export function PlaylistPickerBody({ tracks, onPicked, compact = false }) {
     e?.preventDefault?.();
     const name = newName.trim();
     if (!name) { setCreating(false); setNewName(''); return; }
+    setBusyName(name);
     try {
       const playlist = await createPlaylist({ name });
       const added = await addAll(playlist.id);
@@ -82,10 +85,20 @@ export function PlaylistPickerBody({ tracks, onPicked, compact = false }) {
       onPicked?.();
     } catch (err) {
       toast(`Couldn't create — ${err.message}`);
+      setBusyName(null);
     }
   };
 
   const rowSize = compact ? 'aura-sheet-row aura-sheet-row--compact' : 'aura-sheet-row';
+
+  // Adding in flight — the same loader used everywhere, naming the destination.
+  if (busyName) {
+    return (
+      <div className="py-2">
+        <AuraLoader label={`adding to ${busyName}`}/>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -132,7 +145,7 @@ export function PlaylistPickerBody({ tracks, onPicked, compact = false }) {
       )}
 
       {(playlists ?? []).map(p => (
-        <button key={p.id} onClick={() => pick(p)} disabled={busyId === p.id} className={rowSize}>
+        <button key={p.id} onClick={() => pick(p)} className={rowSize}>
           {p.coverImageUrl
             ? <img src={p.coverImageUrl} alt="" className="aura-sheet-cover" loading="lazy"/>
             : <span className="aura-sheet-cover-fallback">{p.name?.[0]?.toUpperCase() ?? '·'}</span>}
