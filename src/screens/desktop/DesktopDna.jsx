@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getSonicDna } from '../../api/sonicDna';
+import { CrumbBack } from './CrumbBack';
 import './DesktopDna.css';
 
 // Desktop sonic-dna — radar + axes list + this-month stat cards + top moods.
 // Real data from /api/sonic-dna.
-export function DesktopDna() {
+export function DesktopDna({ onClose }) {
   const [hit, setHit] = useState({ data: null, error: null });
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
@@ -26,6 +27,7 @@ export function DesktopDna() {
   return (
     <div className="aura-ddna">
       <div className="aura-ddna__header">
+        {onClose && <div className="mb-4"><CrumbBack onClick={onClose}/></div>}
         <MonoLabel className="text-ink-faint" size={10}>
           sonic dna · a fingerprint of you
         </MonoLabel>

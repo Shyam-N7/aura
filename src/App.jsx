@@ -209,6 +209,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // instead of always dumping the user on home.
   const [queueReturn,       setQueueReturn]      = useState('home');
   const [playerReturn,      setPlayerReturn]     = useState('home');
+  // journal / dna are reachable from both home and the library shelf (the only
+  // route on mobile) — back returns to wherever they were opened from.
+  const [journalReturn,     setJournalReturn]    = useState('home');
+  const [dnaReturn,         setDnaReturn]        = useState('home');
   // Where closing the mobile search returns to (it can be opened from home,
   // library, etc. — and from the bottom nav).
   const [searchReturn,      setSearchReturn]     = useState('home');
@@ -977,6 +981,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     // carry stale return state from a prior drill-down.
     setPlayerReturn('home');
     setQueueReturn('home');
+    setJournalReturn('home');
+    setDnaReturn('home');
     if (target === 'search') { openSearch(); return; }
     if (screen === 'player' && target !== 'player') leavePlayer(target);
     else setScreen(target);
@@ -1064,8 +1070,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onRetry={featured.refetch}
               djName={t.djName} mood={t.mood}
               onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
-              onOpenJournal={() => setScreen('journal')}
-              onOpenDna={() => setScreen('dna')}
+              onOpenJournal={() => { setJournalReturn('home'); setScreen('journal'); }}
+              onOpenDna={() => { setDnaReturn('home'); setScreen('dna'); }}
               onOpenBridges={() => setScreen('bridges')}
               onOpenBridge={() => setScreen('bridges')}
               onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('home'); setScreen('catalog-playlist-detail'); }}
@@ -1155,8 +1161,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onOpenLiked={() => setScreen('liked')}
               onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('library'); setScreen('playlist-detail'); }}
               onOpenLangHub={(L) => { setHubLang(L); setScreen('language-hub'); }}
-              onOpenJournal={() => setScreen('journal')}
-              onOpenDna={() => setScreen('dna')}
+              onOpenJournal={() => { setJournalReturn('library'); setScreen('journal'); }}
+              onOpenDna={() => { setDnaReturn('library'); setScreen('dna'); }}
               t={t} setTweak={setTweak}/>
           </div>
         )}
@@ -1219,12 +1225,12 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {morph && <MorphLayer {...morph}/>}
         {screen === 'journal' && (
           <div key="journal" className="absolute inset-0 animate-aura-screen-in">
-            <DesktopJournal djName={t.djName} onPickLive={pickLiveTrack} onClose={() => setScreen('home')}/>
+            <DesktopJournal djName={t.djName} onPickLive={pickLiveTrack} onClose={() => setScreen(journalReturn)}/>
           </div>
         )}
         {screen === 'dna' && (
           <div key="dna" className="absolute inset-0 animate-aura-screen-in">
-            <DesktopDna onClose={() => setScreen('home')}/>
+            <DesktopDna onClose={() => setScreen(dnaReturn)}/>
           </div>
         )}
         {screen === 'bridges' && (

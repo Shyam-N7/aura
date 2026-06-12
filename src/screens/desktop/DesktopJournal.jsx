@@ -4,11 +4,12 @@ import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getJournal } from '../../api/journal';
 import { cleanTitle } from '../../utils/title';
+import { CrumbBack } from './CrumbBack';
 import './DesktopJournal.css';
 
 // Desktop journal — large serif editorial layout, 180px date column on first
 // entry, 140px on rest. Real entries from /api/journal (auto-written by AURA).
-export function DesktopJournal({ onPickLive }) {
+export function DesktopJournal({ onPickLive, onClose }) {
   const [hit, setHit] = useState({ data: null, error: null });
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
@@ -28,6 +29,7 @@ export function DesktopJournal({ onPickLive }) {
   return (
     <div className="aura-djr">
       <div className="aura-djr__header">
+        {onClose && <div className="mb-4"><CrumbBack onClick={onClose}/></div>}
         <MonoLabel className="text-ink-faint" size={10}>
           your private listening journal
         </MonoLabel>
