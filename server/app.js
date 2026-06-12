@@ -16,11 +16,12 @@ import { getMostPlayed, getTopArtists, getRecentlyPlayed } from './stats.js';
 import { getAutoPlaylists } from './autoPlaylists.js';
 import { getDiscoverHome } from './discover.js';
 import { getCatalogPlaylistDetail } from './catalog.js';
-import { getBridgeTracks } from './bridges.js';
+import { getBridgeTracks, getBridgeSuggestion } from './bridges.js';
 import { getRelatedTracks } from './related.js';
 import { getArtistDetails, getAlbumDetail } from './artists.js';
-import { generateTalk } from './prompts/talk.js';
+import { generateTalk, sanitizeSuggestions } from './prompts/talk.js';
 import { getCurrentMood, inferMood, inferIfStale } from './mood.js';
+import { buildTalkContext } from './context.js';
 import authRouter from './auth.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 
@@ -371,47 +372,6 @@ app.get('/api/discover/playlist/:id', async (req, res) => {
   }
 });
 
-async function buildTalkContext(userId, clientContext) {
-  const { rows: recentRows } = await pool.query(`
-    SELECT t.title, t.artist, MAX(e.ts) AS last_ts
-    FROM listening_events e
-    JOIN tracks t ON t.id = e.track_id
-    WHERE e.user_id = $1 AND e.kind = 'play'
-    GROUP BY t.title, t.artist
-    ORDER BY last_ts DESC
-    LIMIT 8
-  `, [userId]);
-  const { rows: likedRows } = await pool.query(`
-    SELECT t.title, t.artist
-    FROM liked_tracks lt
-    JOIN tracks t ON t.id = lt.track_id
-    WHERE lt.user_id = $1
-    ORDER BY lt.liked_at DESC
-    LIMIT 10
-  `, [userId]);
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const { rows: langRows } = await pool.query(`
-    SELECT language, COUNT(*)::int AS plays
-    FROM listening_events
-    WHERE user_id = $1 AND kind = 'play' AND language IS NOT NULL AND ts > $2
-    GROUP BY language
-    ORDER BY plays DESC
-    LIMIT 5
-  `, [userId, cutoff]);
-  const totalLangPlays = langRows.reduce((s, r) => s + r.plays, 0);
-  const langAffinity = langRows.map(r => {
-    const pct = totalLangPlays ? Math.round((r.plays / totalLangPlays) * 100) : 0;
-    return `${r.language} ${pct}%`;
-  });
-
-  return {
-    ...(clientContext ?? {}),
-    recentListens: recentRows.map(r => `${r.title} — ${r.artist}`),
-    likedSample:   likedRows.map(r => `${r.title} — ${r.artist}`),
-    langAffinity,
-  };
-}
-
 app.get('/api/mood/current', requireAuth, async (req, res) => {
   try {
     const snapshot = req.query.refresh === '1'
@@ -465,17 +425,31 @@ app.post('/api/llm/talk', requireAuth, async (req, res) => {
         console.warn('[talk] catalog search failed:', searchErr.message);
       }
     }
-    res.json({ reply: result.reply, action: result.action, tracks });
+    res.json({ reply: result.reply, action: result.action, tracks, suggestions: sanitizeSuggestions(result.suggestions) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
-app.get('/api/bridges/:from/:to', async (req, res) => {
+app.get('/api/bridges/suggest', requireAuth, async (req, res) => {
+  try {
+    const h = Number.parseInt(req.query.hour, 10);
+    const hour = Number.isInteger(h) ? h : new Date().getHours();
+    res.json(await getBridgeSuggestion(req.userId, { hour }));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get('/api/bridges/:from/:to', requireAuth, async (req, res) => {
   try {
     const steps = Number(req.query.steps) || 5;
-    const tracks = await getBridgeTracks({ from: req.params.from, to: req.params.to, steps });
-    res.json({ from: req.params.from, to: req.params.to, tracks });
+    const langs = String(req.query.langs ?? '')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const bridge = await getBridgeTracks({
+      userId: req.userId, from: req.params.from, to: req.params.to, steps, langs,
+    });
+    res.json({ from: req.params.from, to: req.params.to, ...bridge });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

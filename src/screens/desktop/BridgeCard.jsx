@@ -1,6 +1,6 @@
 import { MonoLabel } from '../../components/primitives';
 
-const MOOD_COLOR = {
+export const MOOD_COLOR = {
   // where you are
   sad: '#5a6b9a', stressed: '#a85a5a', restless: '#c2603a', tired: '#7a6f8a', lonely: '#5a7a8a',
   // where you want to be

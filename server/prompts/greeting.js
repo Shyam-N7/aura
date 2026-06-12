@@ -23,7 +23,7 @@ const SCHEMA = {
   propertyOrdering: ['greeting'],
 };
 
-function timeOfDayFromHour(h) {
+export function timeOfDayFromHour(h) {
   if (h < 5)  return 'late-night';
   if (h < 11) return 'morning';
   if (h < 15) return 'afternoon';
