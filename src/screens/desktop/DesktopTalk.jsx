@@ -38,9 +38,9 @@ export function DesktopTalk({ djName = 'aura', mood, onPickSequence }) {
     setDraft('');
     setThinking(true);
     try {
-      const { reply, tracks, action } = await talk({ message: trimmed, history: nextHistory, context: { mood } });
+      const { reply, tracks, action, suggestions } = await talk({ message: trimmed, history: nextHistory, context: { mood } });
       const intentCount = (typeof action?.count === 'number' && action.count > 0) ? action.count : tracks?.length ?? 0;
-      addMessage({ who: 'aura', text: reply, tracks: tracks?.length ? tracks : null, intentCount });
+      addMessage({ who: 'aura', text: reply, tracks: tracks?.length ? tracks : null, intentCount, suggestions: suggestions?.length ? suggestions : undefined });
     } catch (err) {
       addMessage({ who: 'aura', text: `Couldn’t reach the DJ — ${err.message}`, error: true });
     } finally {
@@ -54,6 +54,11 @@ export function DesktopTalk({ djName = 'aura', mood, onPickSequence }) {
   };
 
   const dj = djName;
+
+  // Chips follow the conversation: latest aura turn with suggestions wins,
+  // static list covers the first turn and error turns.
+  const latest = [...messages].reverse().find(m => m.who === 'aura' && m.suggestions?.length);
+  const chips = latest?.suggestions ?? SUGGESTIONS;
 
   return (
     <div ref={scrollRef} className="aura-dtk">
@@ -106,7 +111,7 @@ export function DesktopTalk({ djName = 'aura', mood, onPickSequence }) {
 
       <div className="aura-dtk__compose">
         <div className="aura-dtk__suggestions">
-          {SUGGESTIONS.map((s, i) => (
+          {chips.map((s, i) => (
             <button key={i} onClick={() => send(s)} disabled={thinking} className="aura-dtk__chip">
               {s}
             </button>

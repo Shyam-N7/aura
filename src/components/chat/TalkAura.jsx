@@ -31,12 +31,12 @@ export function TalkAura({ djName, mood, onClose, onPickSequence, t, setTweak })
     setDraft('');
     setThinking(true);
     try {
-      const { reply, tracks } = await talk({
+      const { reply, tracks, suggestions } = await talk({
         message: trimmed,
         history: nextHistory,
         context: { mood },
       });
-      setMessages(m => [...m, { who: 'aura', text: reply, tracks: tracks?.length ? tracks : null }]);
+      setMessages(m => [...m, { who: 'aura', text: reply, tracks: tracks?.length ? tracks : null, suggestions: suggestions?.length ? suggestions : undefined }]);
     } catch (err) {
       setMessages(m => [...m, { who: 'aura', text: `couldn’t reach the dj — ${err.message}`, error: true }]);
     } finally {
@@ -49,6 +49,11 @@ export function TalkAura({ djName, mood, onClose, onPickSequence, t, setTweak })
     onPickSequence?.(tracks, 0, 'Suggested for you');
     onClose();
   };
+
+  // Chips follow the conversation: latest aura turn with suggestions wins,
+  // static list covers the first turn and error turns.
+  const latest = [...messages].reverse().find(m => m.who === 'aura' && m.suggestions?.length);
+  const chips = latest?.suggestions ?? SUGGESTIONS;
 
   return (
     <div className="absolute inset-0 z-30 text-ink flex flex-col pt-[82px] animate-aura-rise
@@ -108,7 +113,7 @@ export function TalkAura({ djName, mood, onClose, onPickSequence, t, setTweak })
       </div>
 
       <div className="pt-1 px-[22px] pb-2 flex gap-1.5 flex-wrap">
-        {SUGGESTIONS.map((s, i) => (
+        {chips.map((s, i) => (
           <button key={i} onClick={() => send(s)} disabled={thinking}
             className="px-2.5 py-[5px] rounded-full cursor-pointer
                        bg-transparent border border-ink-faint/25 text-ink-soft
