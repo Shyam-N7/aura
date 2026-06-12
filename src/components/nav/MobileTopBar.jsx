@@ -1,15 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { AuraMark } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
-import { AccountMenu } from './AccountMenu';
+import { ProfileButton } from './ProfileButton';
 import { useSearchQuery, getSearchQuery } from '../../lib/searchQuery';
 import { subscribeSearchFocus } from '../../lib/searchFocus';
 import './MobileTopBar.css';
 
 // Mobile-only top pill — mirrors MobileBottomBar's glass-pill recipe at the
 // top of the viewport. Left = identity/status (AuraMark + djName + short stamp);
-// right = an action trio (search · theme · account). `showAccount` is false
-// during onboarding. Search only wires up when `onOpenSearch` is supplied.
+// right = an action trio (search · theme · profile). The avatar navigates to
+// the library (profile and library are one identity; account actions live in
+// Settings). `showAccount` is false during onboarding. Search only wires up
+// when `onOpenSearch` is supplied.
 //
 // Morph-to-search: the pill never resizes. Two absolutely-stacked layers live
 // inside it — `__bar-content` (brand + trio) and `__searchfield` (back · ⌕ ·
@@ -19,7 +21,7 @@ import './MobileTopBar.css';
 // driven by `screen === 'search'`; the field input is the live search query
 // (shared via the searchQuery store so DesktopSearch below shows results).
 export function MobileTopBar({
-  djName = 'aura', t, setTweak, showAccount = true,
+  djName = 'aura', t, setTweak, showAccount = true, onOpenProfile,
   onOpenSearch, searching = false, onCloseSearch,
 }) {
   const { query, setQuery } = useSearchQuery();
@@ -119,7 +121,7 @@ export function MobileTopBar({
             </button>
           )}
           <ThemeToggle t={t} setTweak={setTweak} className="aura-mobile-top__theme"/>
-          {showAccount && <AccountMenu placement="down"/>}
+          {showAccount && <ProfileButton onClick={onOpenProfile}/>}
         </div>
       </div>
 

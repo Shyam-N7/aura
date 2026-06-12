@@ -1,6 +1,6 @@
 import { ICON, AuraMark } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
-import { AccountMenu } from './AccountMenu';
+import { ProfileButton } from './ProfileButton';
 import './TopNavStrip.css';
 
 const ITEMS = [
@@ -59,7 +59,7 @@ export function TopNavStrip({ djName = 'aura', active, onNav, onTalk, t, setTwea
       </div>
       <div className="aura-top-nav__right">
         <ThemeToggle t={t} setTweak={setTweak} className="aura-top-nav__theme"/>
-        <AccountMenu placement="down"/>
+        <ProfileButton onClick={() => onNav('library')}/>
       </div>
     </nav>
   );

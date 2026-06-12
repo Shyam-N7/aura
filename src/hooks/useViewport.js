@@ -11,9 +11,31 @@ function readBreakpoint(width) {
   return 'mobile';
 }
 
+// Pure + exported for tests. The width-only breakpoints mis-file a rotated
+// phone (844×390 reads as "tablet-portrait" → a clipped 402×874 preview
+// frame), so classification also raises a `phoneLandscape` flag: landscape
+// aspect + phone-short height + sub-tablet width + a touch pointer (so a
+// 900×450 desktop browser window never counts). Root responds by keeping the
+// portrait mobile UI mounted and covering it with the rotate prompt — audio
+// and screen state survive the rotation both ways.
+export function classifyViewport({ width, height, coarse }) {
+  const phoneLandscape =
+    width > height &&
+    height <= 500 &&
+    width <= 1000 &&
+    coarse;
+  return { breakpoint: readBreakpoint(width), phoneLandscape };
+}
+
 function readViewport() {
-  const w = typeof window === 'undefined' ? 1440 : window.innerWidth;
-  return { width: w, breakpoint: readBreakpoint(w) };
+  if (typeof window === 'undefined') {
+    return { width: 1440, height: 900, breakpoint: 'desktop', phoneLandscape: false };
+  }
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const coarse = typeof window.matchMedia === 'function'
+    && window.matchMedia('(any-pointer: coarse)').matches;
+  return { width, height, ...classifyViewport({ width, height, coarse }) };
 }
 
 export function useViewport() {

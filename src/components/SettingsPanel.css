@@ -1,0 +1,115 @@
+/* Inline settings panel — rendered inside the library's settings shelf, so it
+   expands in place with the capsule. Flat sections; delete account sits alone
+   at the very bottom. */
+
+.aura-set { padding-top: 4px; }
+
+.aura-set__group-label {
+  margin: 0 4px 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-faint);
+}
+.aura-set__group-label + .aura-set__group { margin-top: 0; }
+.aura-set__themes + .aura-set__group-label,
+.aura-set__group + .aura-set__group-label { margin-top: 20px; }
+
+/* ── Row groups ── */
+.aura-set__group {
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  background: color-mix(in srgb, var(--color-surface), transparent 30%);
+}
+.aura-set__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 140ms ease;
+}
+.aura-set__row + .aura-set__row { border-top: 1px solid var(--color-line); }
+.aura-set__row:hover { background: color-mix(in srgb, var(--color-ink), transparent 95%); }
+.aura-set__row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+.aura-set__row-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.aura-set__row-label { font-size: 15px; font-weight: 500; }
+.aura-set__row-caption { font-size: 12px; color: var(--color-ink-faint); }
+
+.aura-set__row--accent { color: var(--color-accent); font-weight: 500; }
+.aura-set__row--danger { color: #d14343; font-weight: 500; }
+.aura-set__row--danger:hover { background: color-mix(in srgb, #d14343, transparent 92%); }
+
+/* Delete sits alone at the very bottom, far from everything else. */
+.aura-set__danger-zone { margin-top: 32px; }
+.aura-set__danger-zone .aura-set__row--danger {
+  border: 1px solid color-mix(in srgb, #d14343, transparent 70%);
+  border-radius: 16px;
+}
+.aura-set__caption {
+  margin: 10px 4px 0;
+  font-size: 12px;
+  color: var(--color-ink-faint);
+}
+
+/* ── Theme swatch cards ── */
+.aura-set__themes { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.aura-set__theme {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-surface), transparent 30%);
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.aura-set__theme:hover { background: color-mix(in srgb, var(--color-ink), transparent 95%); }
+.aura-set__theme:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.aura-set__theme.is-on { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
+.aura-set__theme-chips {
+  width: 44px; height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--color-line);
+  display: inline-flex; align-items: flex-end; justify-content: flex-end;
+  padding: 5px;
+  flex-shrink: 0;
+}
+.aura-set__theme-chips span {
+  width: 12px; height: 12px;
+  border-radius: 9999px;
+  display: block;
+}
+
+/* ── Analytics switch ── */
+.aura-set__switch {
+  width: 40px; height: 24px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink), transparent 80%);
+  padding: 3px;
+  flex-shrink: 0;
+  transition: background 160ms ease;
+}
+.aura-set__switch span {
+  display: block;
+  width: 18px; height: 18px;
+  border-radius: 9999px;
+  background: var(--color-bg);
+  transition: transform 160ms ease;
+}
+.aura-set__switch.is-on { background: var(--color-accent); }
+.aura-set__switch.is-on span { transform: translateX(16px); }

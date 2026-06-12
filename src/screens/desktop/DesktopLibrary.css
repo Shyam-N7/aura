@@ -1,8 +1,7 @@
 .aura-dlib {
   position: relative;
   height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;          /* the scroller is __scroll; the id chip floats above it */
   color: var(--color-ink);
   container-type: inline-size;
   container-name: dlib;
@@ -25,46 +24,268 @@
   background: rgb(0 0 0 / 0.04);
   color: var(--color-ink);
 }
-.aura-dlib__header {
-  padding: 40px 56px 0;
+/* Identity bits — used by the bottom identity row (this screen IS the profile). */
+.aura-dlib__avatar {
+  width: 44px; height: 44px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-accent), transparent 82%);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 17px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
+.theme-midnight .aura-dlib__avatar { background: rgb(255 255 255 / 0.06); }
+.aura-dlib__who { min-width: 0; flex: 1; }
+.aura-dlib__who-name {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.aura-dlib__who-email {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-ink-faint);
+  margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Quiet entry points to the study screens (journal / dna), inside `your year`. */
+.aura-dlib__study-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.aura-dlib__study-link {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.aura-dlib__study-link:hover { background: rgb(0 0 0 / 0.04); color: var(--color-ink); border-color: var(--color-ink); }
+.theme-midnight .aura-dlib__study-link:hover { background: rgb(255 255 255 / 0.06); }
+
 .aura-dlib__scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-bottom: 80px;
 }
-.aura-dlib__hero {
-  font-family: var(--font-serif);
-  font-size: 88px;
-  line-height: 0.94;
-  letter-spacing: -0.03em;
-  margin: 28px 0 0;
-  font-weight: 400;
-  color: var(--color-ink);
+
+/* Identity chip — floating glass signature, bottom-left of the screen, level
+   with the quick-access dial on phones. Display-only. */
+.aura-dlib__id-chip {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 9px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface), transparent 25%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.10), inset 0 1px 0 rgb(255 255 255 / 0.35);
+  max-width: min(60cqw, 320px);
 }
-/* Stat row — three clean segments separated by space, not middots. */
+.theme-midnight .aura-dlib__id-chip {
+  background: rgb(28 24 20 / 0.72);
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.10);
+}
+/* The chip bows out with the quick-access dial while any shelf is open, so
+   expanded content (settings' bottom rows especially) is never blocked. */
+.aura-dlib__id-chip {
+  transition: opacity 240ms ease, transform 240ms cubic-bezier(.2,.7,.2,1);
+}
+.aura-dlib:has(.aura-dlib__shelf.is-open) .aura-dlib__id-chip {
+  opacity: 0;
+  transform: translateY(14px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-dlib__id-chip { transition: none; }
+}
+/* Stat row — clean segments separated by space, not middots. */
 .aura-dlib__stats {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
-  margin-top: 14px;
 }
 
-/* Column headings — "Liked" / "Playlists". */
-.aura-dlib__col-title {
+/* ── Glass shelves ──────────────────────────────────────────────────────────
+   The library's sections live in frosted capsules: title always visible,
+   body expands in place (grid-rows 0fr→1fr), and while closed each shelf
+   "peeks" its content — a fan of covers, counts, language dots. */
+.aura-dlib__shelves {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 36px 56px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.aura-dlib__shelf {
+  border-radius: 22px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface), transparent 45%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.35);
+  transition: transform 200ms cubic-bezier(.2,.7,.2,1), box-shadow 200ms ease;
+}
+.theme-midnight .aura-dlib__shelf {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.015));
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 0.36), inset 0 1px 0 rgb(255 255 255 / 0.10);
+}
+
+.aura-dlib__shelf-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Your year — pinned open at the top; never collapses, never lifts. */
+.aura-dlib__shelf--pinned { padding: 16px 20px 18px; }
+.aura-dlib__pinned-head { margin-bottom: 12px; }
+
+.aura-dlib__peek-cog { color: var(--color-ink-soft); }
+.aura-dlib__shelf-head:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: inherit; }
+.aura-dlib__shelf-title {
   font-family: var(--font-sans);
-  font-size: 28px;
+  font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--color-ink);
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+.aura-dlib__shelf-plus {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--color-ink-faint);
+  transition: transform 320ms cubic-bezier(.2,.7,.2,1);
+}
+.aura-dlib__shelf.is-open .aura-dlib__shelf-plus { transform: rotate(45deg); }  /* + → × */
+
+/* 0fr → 1fr expand. The clip layer's delayed visibility gates focus + AT:
+   hidden flips AFTER the collapse finishes, visible flips immediately on open. */
+.aura-dlib__shelf-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms cubic-bezier(.2,.7,.2,1);
+}
+.aura-dlib__shelf-clip {
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  transition: visibility 0s linear 320ms;
+}
+.aura-dlib__shelf.is-open .aura-dlib__shelf-body { grid-template-rows: 1fr; }
+.aura-dlib__shelf.is-open .aura-dlib__shelf-clip { visibility: visible; transition-delay: 0s; }
+/* Padding lives on the grandchild so the 0fr row truly reaches zero height. */
+.aura-dlib__shelf-inner {
+  padding: 2px 20px 18px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 200ms ease, transform 280ms cubic-bezier(.2,.7,.2,1);
+}
+.aura-dlib__shelf.is-open .aura-dlib__shelf-inner {
+  opacity: 1;
+  transform: none;
+  transition-delay: 60ms, 60ms;   /* rows fade up as the peek fan eases out */
+}
+.aura-dlib__shelf-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
-.aura-dlib__cols {
-  padding: 48px 56px 0;
-  display: grid;
-  /* minmax(0, …) lets the tracks shrink below their content so long titles
-     ellipsis-truncate instead of overflowing the row off the right edge. */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 40px;
+/* Living previews while closed. */
+.aura-dlib__peek {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  transition: opacity 200ms ease, transform 240ms cubic-bezier(.2,.7,.2,1);
+}
+.aura-dlib__shelf.is-open .aura-dlib__peek { opacity: 0; transform: translateX(10px); pointer-events: none; }
+.aura-dlib__fan { display: inline-flex; align-items: center; }
+.aura-dlib__fan > * { margin-left: -10px; flex-shrink: 0; }
+.aura-dlib__fan > *:first-child { margin-left: 0; }
+.aura-dlib__fan > *:nth-child(1) { transform: rotate(-5deg); }
+.aura-dlib__fan > *:nth-child(3) { transform: rotate(5deg); }
+.aura-dlib__peek-cover {
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  object-fit: cover;
+  font-size: 11px;
+  background: var(--color-line);
+}
+.aura-dlib__peek-dot {
+  width: 18px; height: 18px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-accent), transparent 80%);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.aura-dlib__peek-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-ink-faint);
+}
+
+/* Desktop flourish: a closed shelf lifts and cracks open a few px on hover —
+   grid-rows can't interpolate 0fr→px, so the crack is head padding. */
+@media (hover: hover) and (pointer: fine) {
+  .aura-dlib__shelf:not(.is-open):not(.aura-dlib__shelf--static):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 36px rgb(0 0 0 / 0.10), inset 0 1px 0 rgb(255 255 255 / 0.4);
+  }
+  .theme-midnight .aura-dlib__shelf:not(.is-open):not(.aura-dlib__shelf--static):hover {
+    box-shadow: 0 18px 44px rgb(0 0 0 / 0.46), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  }
+  /* The crack only applies to expandable shelves — the settings capsule has
+     nothing to peek at, so it just lifts. */
+  .aura-dlib__shelf:not(.is-open) .aura-dlib__shelf-head { transition: padding-bottom 200ms cubic-bezier(.2,.7,.2,1); }
+  .aura-dlib__shelf:not(.is-open):hover .aura-dlib__shelf-head { padding-bottom: 24px; }
+  .aura-dlib__shelf:not(.is-open):hover .aura-dlib__peek { transform: translateX(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-dlib__shelf,
+  .aura-dlib__shelf-body,
+  .aura-dlib__shelf-clip,
+  .aura-dlib__shelf-inner,
+  .aura-dlib__peek,
+  .aura-dlib__shelf-plus,
+  .aura-dlib__shelf-head { transition: none; }
 }
 
 .aura-dlib__empty {
@@ -76,13 +297,9 @@
   max-width: 520px;
 }
 
-.aura-dlib__browse {
-  padding: 48px 56px 0;
-}
 .aura-dlib__lang-row {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
   flex-wrap: wrap;
 }
 .aura-dlib__lang {
@@ -184,23 +401,31 @@
   font-family: var(--font-serif);
   font-size: 22px;
 }
+/* Peek-sized fallback: the gradient recipe above at fan scale. Declared after
+   __cover--fallback so the size wins when both classes are present. */
+.aura-dlib__cover--fallback.aura-dlib__peek-cover {
+  width: 24px; height: 24px;
+  font-size: 11px;
+}
 
 @container dlib (max-width: 600px) {
-  .aura-dlib__header {
-    padding: 14px 22px 12px;
-    position: sticky;
-    top: 74px;
-    z-index: 5;
-    background: var(--color-bg);
-    border-bottom: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
-  }
-  .aura-dlib__hero { font-size: 44px; margin-top: 12px; }
+  .aura-dlib__avatar { width: 32px; height: 32px; font-size: 13px; }
+  .aura-dlib__who-name { font-size: 14px; }
   .aura-dlib__scroll { padding-bottom: 0; }
-  .aura-dlib__cols { padding: 28px 22px 0; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  /* 150px floor keeps the last expanded shelf clear of the bottom pill AND
+     the floating identity chip. */
+  .aura-dlib__shelves { padding: 14px 22px 150px; gap: 12px; }
+  .aura-dlib__shelf { border-radius: 18px; }
+  .aura-dlib__shelf-head { padding: 14px 16px; }
+  .aura-dlib__shelf--pinned { padding: 14px 16px 16px; }
+  /* Same line as the quick-access dial (fixed right:16px bottom:96px). */
+  .aura-dlib__id-chip { left: 16px; bottom: 96px; }
+  .aura-dlib__shelf-inner { padding: 0 16px 14px; }
+  .aura-dlib__shelf-title { font-size: 17px; }
   .aura-dlib__empty { padding: 28px 22px 0; font-size: 14px; }
-  .aura-dlib__browse { padding: 32px 22px 0; }
   .aura-dlib__row-title { font-size: 17px; }
   .aura-dlib__cover { width: 44px; height: 44px; }
   .aura-dlib__cover--fallback { font-size: 18px; }
+  .aura-dlib__cover--fallback.aura-dlib__peek-cover { width: 24px; height: 24px; font-size: 11px; }
   .aura-dlib__more { opacity: 0.6; }
 }

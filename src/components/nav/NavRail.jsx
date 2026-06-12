@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MonoLabel, BreathingDot, ICON, AuraMark } from '../primitives';
-import { AccountMenu } from './AccountMenu';
+import { ProfileButton } from './ProfileButton';
 import { getCurrentMood } from '../../api/mood';
 import './NavRail.css';
 
@@ -150,9 +150,10 @@ export function NavRail({ djName = 'aura', mood, active, onNav, collapsed = fals
         </div>
       )}
 
-      {/* account — avatar + name/email + sign out (opens upward over the rail) */}
+      {/* identity row — "this is you → your library"; account actions live in
+          Settings (gear inside the library header) */}
       <div className="aura-nav-rail__account">
-        <AccountMenu placement="up" collapsed={collapsed} />
+        <ProfileButton variant="row" collapsed={collapsed} onClick={() => onNav('library')}/>
       </div>
     </aside>
   );

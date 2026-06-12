@@ -11,6 +11,20 @@
   align-items: flex-end;
   gap: 12px;
   pointer-events: none;   /* only the FAB + open items take pointers */
+  transition: opacity 240ms ease, transform 240ms cubic-bezier(.2,.7,.2,1);
+}
+/* While a library shelf is expanded, the dial bows out so the shelf's last
+   rows (settings' delete account, etc.) are never blocked. Returns when the
+   shelf closes. */
+.aura-responsive-shell:has(.aura-dlib__shelf.is-open) .aura-sd {
+  opacity: 0;
+  transform: translateY(14px);
+}
+.aura-responsive-shell:has(.aura-dlib__shelf.is-open) .aura-sd * {
+  pointer-events: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-sd { transition: none; }
 }
 
 /* ── Action stack ─────────────────────────────────────────────────────── */

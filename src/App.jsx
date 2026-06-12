@@ -85,6 +85,7 @@ import { useListeningRecorder } from './hooks/useListeningRecorder';
 import { useMediaSession } from './hooks/useMediaSession';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
+import { RotateOverlay } from './components/RotateOverlay';
 import { SleepTimerSheet } from './components/SleepTimerSheet';
 import { SleepTimerOrb } from './components/SleepTimerOrb';
 import { TrackContextMenu } from './components/TrackContextMenu';
@@ -1153,7 +1154,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onAddToQueue={enqueueLast}
               onOpenLiked={() => setScreen('liked')}
               onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('library'); setScreen('playlist-detail'); }}
-              onOpenLangHub={(L) => { setHubLang(L); setScreen('language-hub'); }}/>
+              onOpenLangHub={(L) => { setHubLang(L); setScreen('language-hub'); }}
+              onOpenJournal={() => setScreen('journal')}
+              onOpenDna={() => setScreen('dna')}
+              t={t} setTweak={setTweak}/>
           </div>
         )}
         {screen === 'liked' && (
@@ -1257,6 +1261,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             hide on the player screen so DesktopPlayer's floating back / ⋯
             buttons aren't covered and the page swiper claims the full surface. */}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}
+          onOpenProfile={() => onNav('library')}
           onOpenSearch={openSearch} searching={screen === 'search'} onCloseSearch={closeSearch}/>}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileBottomBar
           track={track} playing={playing}
@@ -1368,7 +1373,11 @@ export function Root({ user } = {}) {
     ...(user?.djName ? { djName: user.djName } : {}),
   });
   const theme = THEMES[t.theme] || THEMES.dusk;
-  const { breakpoint } = useViewport();
+  // A phone held in landscape keeps the PORTRAIT mobile layout mounted (so
+  // audio, queue and screen state survive the rotation) and gets the rotate
+  // prompt painted over everything — see classifyViewport in useViewport.js.
+  const { breakpoint: rawBreakpoint, phoneLandscape } = useViewport();
+  const breakpoint = phoneLandscape ? 'mobile' : rawBreakpoint;
   const rails = useRailToggles();
   // Skip the initial write — the value already matches whatever
   // readStoredTheme() returned (or the default for fresh users).
@@ -1418,6 +1427,7 @@ export function Root({ user } = {}) {
       (isDesktopReal || isTabletLandscape) && rails.railCollapsed ? 'aura-shell--rail-collapsed' : '',
     ].filter(Boolean).join(' ')}>
       <div className="aura-responsive-shell__stage">{content}</div>
+      {phoneLandscape && <RotateOverlay/>}
     </div>,
     document.body,
   );
