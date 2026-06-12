@@ -93,7 +93,7 @@ export function DesktopBridges({ onPickSequence }) {
   return (
     <div className="aura-dbr">
       <div className="aura-dbr__header">
-        <MonoLabel className="text-ink-faint" size={10}>
+        <MonoLabel className="text-ink-faint" size={14}>
           gradual paths between feelings
         </MonoLabel>
         <h1 className="aura-dbr__hero">
@@ -107,7 +107,7 @@ export function DesktopBridges({ onPickSequence }) {
       {/* ─── The clairvoyant hero ───────────────────────────────────────── */}
       {!suggestGone && (
         <section className="aura-dbr-hero">
-          <MonoLabel className="text-accent aura-dbr-hero__tag" size={10}>
+          <MonoLabel className="text-accent aura-dbr-hero__tag" size={12}>
             the bridge already knows
           </MonoLabel>
           {suggestion ? (
@@ -140,7 +140,7 @@ export function DesktopBridges({ onPickSequence }) {
         </div>
 
         <div className="aura-dbr__langs">
-          <MonoLabel className="text-ink-faint" size={9}>languages</MonoLabel>
+          <MonoLabel className="text-ink-faint" size={16}>languages</MonoLabel>
           <div className="aura-dbr__langrow">
             <button type="button" onClick={() => toggleLang('mix')}
               className={`aura-dbr__langchip ${cfg.langs.length === 0 ? 'aura-dbr__langchip--on' : ''}`}>
@@ -156,7 +156,7 @@ export function DesktopBridges({ onPickSequence }) {
         </div>
 
         <div className="aura-dbr__steps">
-          <MonoLabel className="text-ink-faint" size={9}>length</MonoLabel>
+          <MonoLabel className="text-ink-faint" size={12}>length</MonoLabel>
           <button type="button" className="aura-dbr__steps-btn" aria-label="fewer tracks"
             disabled={cfg.steps <= MIN_STEPS}
             onClick={() => updateCfg({ steps: Math.max(MIN_STEPS, cfg.steps - 1) })}>−</button>
@@ -185,7 +185,7 @@ export function DesktopBridges({ onPickSequence }) {
 
       {/* ─── Classic paths ──────────────────────────────────────────────── */}
       <div className="aura-dbr__scroll">
-        <MonoLabel className="text-ink-faint aura-dbr__presets-label" size={10}>
+        <MonoLabel className="text-ink-faint aura-dbr__presets-label" size={16}>
           classic paths
         </MonoLabel>
         <div className="aura-dbr__grid">
@@ -218,7 +218,7 @@ function MoodPicker({ label, moods, value, onPick, badgeKey = null }) {
               style={on ? { '--chip': m.color } : undefined}>
               <span className="aura-dbr__moodchip-key">
                 {m.key}
-                {badgeKey === m.key && <span className="aura-dbr__moodchip-badge">reading you</span>}
+                {badgeKey === m.key && <span className="aura-dbr__moodchip-badge">you</span>}
               </span>
               <span className="aura-dbr__moodchip-hint">{m.hint}</span>
             </button>

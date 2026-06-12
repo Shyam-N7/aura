@@ -74,7 +74,14 @@ export function BridgeItinerary({ bridge, tracks = null, narrative = '', loading
                 : <circle cx={x} cy={y} r="11" fill={col} opacity="0.5"/>}
               <circle cx={x} cy={y} r="11" fill="none" stroke={col} strokeWidth="1.1"/>
               {track.stepLabel && (
-                <text x={x} y={y + 21} textAnchor="middle" className="aura-dbr-itin__label">
+                // Edge labels anchor inward so the first/last words never spill
+                // past the viewBox and get clipped (a centered "unwinding" under
+                // the leftmost dot at x=16 loses its first letters otherwise).
+                <text
+                  x={i === 0 ? X0 - 12 : i === n - 1 ? X1 + 12 : x}
+                  y={y + 21}
+                  textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
+                  className="aura-dbr-itin__label">
                   {track.stepLabel}
                 </text>
               )}

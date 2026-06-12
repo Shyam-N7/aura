@@ -18,7 +18,7 @@ export function SearchSidebar({ lang = 'all', onPick }) {
     <aside className="aura-dse__sidebar">
       <section className="aura-dse__sidebar-section">
         <div className="flex items-baseline justify-between mb-2">
-          <MonoLabel className="aura-dse__sidebar-heading" size={10}>recent</MonoLabel>
+          <MonoLabel className="aura-dse__sidebar-heading" size={16}>recent</MonoLabel>
           {recents.length > 0 && (
             <button onClick={clear} className="aura-dse__sidebar-clear">clear</button>
           )}
@@ -39,7 +39,7 @@ export function SearchSidebar({ lang = 'all', onPick }) {
       </section>
 
       <section className="aura-dse__sidebar-section">
-        <MonoLabel className="aura-dse__sidebar-heading mb-2 block" size={10}>
+        <MonoLabel className="aura-dse__sidebar-heading mb-2 block" size={16}>
           trending{lang !== 'all' ? ` · ${lang}` : ''}
         </MonoLabel>
         <div className="aura-dse__chips">

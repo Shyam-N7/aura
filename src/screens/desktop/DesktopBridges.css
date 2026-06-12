@@ -82,7 +82,7 @@
 .aura-dbr-itin__svg { width: 100%; height: auto; display: block; margin-top: 4px; }
 .aura-dbr-itin__label {
   font-family: var(--font-mono);
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.06em;
   fill: var(--color-ink-faint);
 }
@@ -267,7 +267,7 @@
   .aura-dbr__sub { font-size: 14px; margin-top: 14px; }
   .aura-dbr-hero { margin: 24px 22px 0; padding: 16px 16px 14px; border-radius: 18px; }
   .aura-dbr-hero__reason { font-size: 13.5px; }
-  .aura-dbr-itin__label { font-size: 7.5px; }
+  .aura-dbr-itin__label { font-size: 8px; }
   .aura-dbr__grid {
     padding: 28px 22px 0;
     grid-template-columns: 1fr;
