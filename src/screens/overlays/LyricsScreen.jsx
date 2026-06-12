@@ -4,7 +4,7 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getLyrics } from '../../api/lyrics';
 import { cleanLyric, cleanTitle } from '../../utils/title';
 import { useCinematicIdle } from '../../hooks/useCinematicIdle';
-import '@fontsource/dancing-script/400.css';
+import '@fontsource/dancing-script/700.css';
 import './LyricsScreen.css';
 
 export function LyricsScreen({ track, audioTime, playing, ended = false, onClose, onSeekToTime, closing = false }) {
@@ -20,7 +20,7 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
   // cinematic idle state only appears after seconds of inactivity, so the
   // woff2 is long since ready and the title card never flashes a fallback.
   useEffect(() => {
-    document.fonts?.load('400 44px "Dancing Script"').catch(() => {});
+    document.fonts?.load('700 44px "Dancing Script"').catch(() => {});
   }, []);
 
   useEffect(() => {
