@@ -40,6 +40,16 @@ describe('SettingsPanel', () => {
     expect(getByText('analytics is off.')).toBeInTheDocument();
   });
 
+  it('audio quality defaults to high and switching persists', () => {
+    const { getByText } = renderPanel();
+    expect(getByText('high').closest('button')).toHaveAttribute('aria-pressed', 'true');
+    expect(getByText('normal').closest('button')).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(getByText('normal'));
+    expect(localStorage.getItem('aura.audioQuality')).toBe('normal');
+    expect(getByText('normal').closest('button')).toHaveAttribute('aria-pressed', 'true');
+    expect(getByText('high').closest('button')).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('keeps delete last, after sign out', () => {
     const { getByText } = renderPanel();
     const signOut = getByText('sign out');

@@ -5,6 +5,8 @@ import { clearPostAuthPath } from '../lib/routes';
 import { exportMyData, deleteMyAccount } from '../api/account';
 import { toast } from '../lib/toast';
 import { getConsent, setConsent, subscribeConsent } from '../lib/consent';
+import { QUALITIES } from '../lib/audioQuality';
+import { useAudioQuality } from '../hooks/useAudioQuality';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
 
@@ -25,6 +27,9 @@ export function SettingsPanel({ t, setTweak }) {
   // also dismisses the banner for good.
   const [consent, setConsentState] = useState(getConsent());
   useEffect(() => subscribeConsent(setConsentState), []);
+
+  const [quality, setQuality] = useAudioQuality();
+  const qualityCaption = QUALITIES.find(q => q.id === quality)?.caption ?? '';
 
   const handleSignOut = async () => {
     const ok = await confirm({
@@ -115,6 +120,19 @@ export function SettingsPanel({ t, setTweak }) {
           </button>
         ))}
       </div>
+
+      <p className="aura-set__group-label">sound</p>
+      <div className="aura-set__pills" role="group" aria-label="audio quality">
+        {QUALITIES.map((q) => (
+          <button key={q.id} type="button"
+            className={`aura-set__pill ${quality === q.id ? 'is-on' : ''}`}
+            aria-pressed={quality === q.id}
+            onClick={() => setQuality(q.id)}>
+            {q.label}
+          </button>
+        ))}
+      </div>
+      <p className="aura-set__caption">{qualityCaption}</p>
 
       <p className="aura-set__group-label">privacy & data</p>
       <div className="aura-set__group">

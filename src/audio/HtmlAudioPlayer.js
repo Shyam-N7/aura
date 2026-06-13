@@ -1,4 +1,6 @@
 import { EQ_FREQS, EQ_FLAT, sanitizeGains } from './eqConfig.js';
+import { getAudioQuality, subscribeAudioQuality, bitrateFor, qualityLadder } from '../lib/audioQuality.js';
+import { isIOS } from '../lib/platform.js';
 
 // Real audio via HTMLAudioElement. Plays track.streamUrl (catalog CDN mp4).
 // Tracks without a streamUrl (e.g. the mock demo catalog) become no-ops:
@@ -76,6 +78,12 @@ export class HtmlAudioPlayer {
       const eq = JSON.parse(localStorage.getItem('aura.eq.gains') ?? 'null');
       if (Array.isArray(eq)) this._eqGains = sanitizeGains(eq);
     } catch { /* localStorage disabled / corrupt — leave flat defaults */ }
+    // Audio quality: bitrate is a swappable suffix in the stream url (see
+    // lib/audioQuality). Resolve the chosen bitrate now and react to later
+    // changes by hot-reloading the current track at the new quality.
+    this._baseUrl = null;
+    this._bitrate = bitrateFor(getAudioQuality());
+    this._unsubQuality = subscribeAudioQuality(id => this._setBitrate(bitrateFor(id)));
   }
 
   // Build the AudioContext graph: source → [BiquadFilter per band] → destination.
@@ -193,6 +201,7 @@ export class HtmlAudioPlayer {
 
   async load(track) {
     const url = track?.streamUrl;
+    this._baseUrl = url ?? null;
     this._silent = !url;
     this._el.pause();
     // Reset the progress signal up-front so the UI bar/time never carry the
@@ -202,8 +211,29 @@ export class HtmlAudioPlayer {
       this._el.removeAttribute('src');
       return;
     }
+    await this._loadUrl(url);
+  }
+
+  // Try the chosen bitrate, then descending fallbacks (qualityLadder), so
+  // "highest by default" never breaks a track that lacks a 320 variant. Resolves
+  // on the first source that can play; rejects only when every candidate errors.
+  async _loadUrl(baseUrl) {
+    const candidates = qualityLadder(baseUrl, this._bitrate);
+    let lastErr;
+    for (const candidate of candidates) {
+      try {
+        await this._setSrc(candidate);
+        return;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr ?? new Error('no playable source');
+  }
+
+  _setSrc(url) {
     this._el.src = url;
-    await new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const onCan = () => { cleanup(); resolve(); };
       const onErr = (e) => { cleanup(); reject(e); };
       const cleanup = () => {
@@ -215,14 +245,32 @@ export class HtmlAudioPlayer {
     });
   }
 
+  // Quality changed mid-session: reload the current track at the new bitrate,
+  // preserving position + play state. Best-effort — a failure leaves the current
+  // source untouched. The Web Audio EQ tap survives an src change.
+  async _setBitrate(bitrate) {
+    if (bitrate === this._bitrate) return;
+    this._bitrate = bitrate;
+    if (this._silent || !this._baseUrl) return;
+    const at = this._el.currentTime;
+    const wasPlaying = !this._el.paused;
+    try {
+      await this._loadUrl(this._baseUrl);
+      if (Number.isFinite(at)) this._el.currentTime = at;
+      if (wasPlaying) await this._el.play();
+    } catch { /* keep playing whatever was loaded before */ }
+  }
+
   async play() {
     if (this._silent) return;
     this._intendedPlaying = true;
-    // Tap through Web Audio ONLY when the EQ is in use (already tapped this
-    // session, or a saved non-flat preset). Otherwise play the bare element so
-    // iOS keeps it alive on the lock screen. The tap is also built lazily on the
-    // first EQ adjustment (_enableEq). Once tapped, it stays tapped — keep using it.
-    if (this._ctx || this._eqActive()) {
+    // Tap through Web Audio when the EQ is genuinely in use: already tapped this
+    // session (a real gesture built _ctx), or — off iOS, where Web Audio doesn't
+    // cost background playback — a saved non-flat preset we can auto-apply. On
+    // iOS we deliberately do NOT auto-tap from a saved preset: that would forfeit
+    // lock-screen / background playback with no user action this session. An
+    // explicit EQ adjustment still taps via _enableEq. Once tapped, stays tapped.
+    if (this._ctx || (this._eqActive() && !isIOS())) {
       this._ensureGraph();
       if (this._ctx?.state === 'suspended') { try { await this._ctx.resume(); } catch { /* ignore */ } }
     }
@@ -250,6 +298,7 @@ export class HtmlAudioPlayer {
   }
 
   destroy() {
+    this._unsubQuality?.();
     this._stopTick();
     this._el.pause();
     this._el.removeAttribute('src');

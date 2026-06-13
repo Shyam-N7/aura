@@ -251,12 +251,16 @@
    the interaction; no other visual change so the lines still read
    as poetry, not buttons. */
 .aura-lyrics-line {
+  /* Lyric body type — Fraunces serif, scoped here so the rest of the product
+     keeps the one-sans (Hanken) system. The plain-text fallback matches. */
+  font-family: "Fraunces", serif;
   cursor: pointer;
   text-align: left;
   background: transparent;
   border: 0;
   padding: 0;
 }
+.aura-lyrics-plain { font-family: "Fraunces", serif; }
 .aura-lyrics-line:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--color-accent), transparent 60%);
   outline-offset: 4px;

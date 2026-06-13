@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { MonoLabel } from '../primitives';
 import { VolumeSlider } from './VolumeSlider';
 import { EQ_FREQS, EQ_LABELS, EQ_RANGE_DB, EQ_PRESETS, gainsMatch } from '../../audio/eqConfig';
+import { QUALITIES } from '../../lib/audioQuality';
+import { useAudioQuality } from '../../hooks/useAudioQuality';
 import './Equalizer.css';
 
 // Geometry for the curve-fader area (a fixed-size canvas inside the popup, so
@@ -91,6 +93,7 @@ export function EqualizerControl({ player, compact = false }) {
 function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   const panelRef = useRef(null);
   const dragRef = useRef(null);            // band index currently dragged (or null)
+  const [quality, setQuality] = useAudioQuality();
   const [gains, setGains] = useState(() => player.getEqGains());
   const [activeBand, setActiveBand] = useState(null);
   const [volumeActive, setVolumeActive] = useState(false);
@@ -224,6 +227,20 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
         </div>
         <div className="aura-eq__labels" style={{ width: FADERS_W }}>
           {EQ_LABELS.map((l, i) => <span key={i} className="aura-eq__label">{l}</span>)}
+        </div>
+      </div>
+
+      <div className="aura-eq__quality">
+        <MonoLabel className="text-ink-faint" size={9}>quality</MonoLabel>
+        <div className="aura-eq__quality-pills" role="group" aria-label="audio quality">
+          {QUALITIES.map(q => (
+            <button key={q.id} type="button"
+              onClick={() => setQuality(q.id)}
+              aria-pressed={quality === q.id}
+              className={`aura-eq__chip ${quality === q.id ? 'is-on' : ''}`}>
+              {q.label}
+            </button>
+          ))}
         </div>
       </div>
 

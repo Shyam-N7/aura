@@ -5,6 +5,7 @@ import { getLyrics } from '../../api/lyrics';
 import { cleanLyric, cleanTitle } from '../../utils/title';
 import { useCinematicIdle } from '../../hooks/useCinematicIdle';
 import '@fontsource/dancing-script/700.css';
+import '@fontsource/fraunces/400.css'; // lyric body serif (scoped to this overlay)
 import './LyricsScreen.css';
 
 export function LyricsScreen({ track, audioTime, playing, ended = false, onClose, onSeekToTime, closing = false }) {
@@ -21,6 +22,7 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
   // woff2 is long since ready and the title card never flashes a fallback.
   useEffect(() => {
     document.fonts?.load('700 44px "Dancing Script"').catch(() => {});
+    document.fonts?.load('400 30px "Fraunces"').catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -141,7 +143,7 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
           <div className="font-sans text-[12px] text-ink-faint mb-3">
             Synced lyrics aren&rsquo;t available &mdash; showing plain text.
           </div>
-          <div className="font-serif text-[20px] leading-[1.5] text-ink whitespace-pre-wrap text-pretty">
+          <div className="aura-lyrics-plain text-[20px] leading-[1.5] text-ink whitespace-pre-wrap text-pretty">
             {cleanLyric(effectiveView === 'en' && hit.data.plain_en ? hit.data.plain_en : hit.data.plain)}
           </div>
         </div>
@@ -274,7 +276,7 @@ function SyncedView({ lines, view, audioTime, durationSec, onSeekToTime, playing
               onClick={() => seekTo(l)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seekTo(l); } }}
               style={motion}
-              className={`aura-lyrics-line font-serif leading-[1.15] tracking-[-0.01em] text-pretty transition-all duration-[380ms] ease-in-out ${sizeCls} ${colorCls} ${cinemaCls}`}>
+              className={`aura-lyrics-line leading-[1.15] tracking-[-0.01em] text-pretty transition-all duration-[380ms] ease-in-out ${sizeCls} ${colorCls} ${cinemaCls}`}>
               {lineFor(l)}
             </div>
             {showMarkAfter && <LyricsGapMark/>}
