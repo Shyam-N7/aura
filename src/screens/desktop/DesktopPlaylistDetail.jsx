@@ -115,7 +115,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
         {status === 'ok' && tracks.length > 0 && (
           <div className="aura-dpd__list">
             <div className="aura-dpd__count">
-              <span>{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>
+              <span>{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>-
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
