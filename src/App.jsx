@@ -58,6 +58,7 @@ const DesktopAlbumDetail        = lazyNamed(() => import('./screens/desktop/Desk
 const DesktopLanguageHub        = lazyNamed(() => import('./screens/desktop/DesktopLanguageHub'),        'DesktopLanguageHub');
 const DesktopArtist             = lazyNamed(() => import('./screens/desktop/DesktopArtist'),             'DesktopArtist');
 const DesktopLiked              = lazyNamed(() => import('./screens/desktop/DesktopLiked'),              'DesktopLiked');
+const DesktopHistory            = lazyNamed(() => import('./screens/desktop/DesktopHistory'),            'DesktopHistory');
 // First-run tour — loaded only the one time it actually shows.
 const SiteTour                  = lazyNamed(() => import('./components/tour/SiteTour'),                  'SiteTour');
 
@@ -71,6 +72,7 @@ const SCREEN_LABELS = {
   artist:                  'Loading artist',
   library:                 'Loading library',
   liked:                   'Loading liked songs',
+  history:                 'Loading history',
   playlists:               'Loading playlists',
   'playlist-detail':       'Loading playlist',
   'catalog-playlist-detail': 'Loading playlist',
@@ -295,6 +297,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       search: 'search · AURA',
       library: 'library · AURA',
       liked: 'liked · AURA',
+      history: 'history · AURA',
       playlists: 'playlists · AURA',
       'playlist-detail': 'playlist · AURA',
       'catalog-playlist-detail': 'playlist · AURA',
@@ -1190,6 +1193,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onPlayNext={enqueueNext}
               onAddToQueue={enqueueLast}
               onOpenLiked={() => setScreen('liked')}
+              onOpenHistory={() => setScreen('history')}
               onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('library'); setScreen('playlist-detail'); }}
               onOpenLangHub={(L) => { setHubLang(L); setScreen('language-hub'); }}
               onOpenJournal={() => { setJournalReturn('library'); setScreen('journal'); }}
@@ -1202,6 +1206,12 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             <DesktopLiked onClose={() => setScreen('library')}
               onPlaySequence={pickLiveSequence} onPickLive={pickLiveTrack} onPlayOne={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </div>
+        )}
+        {screen === 'history' && (
+          <div key="history" className="absolute inset-0 animate-aura-screen-in">
+            <DesktopHistory onClose={() => setScreen('library')}
+              onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
           </div>
         )}
         {screen === 'playlists' && (

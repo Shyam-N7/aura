@@ -19,3 +19,20 @@ export async function getRecentlyPlayed({ limit = 10, signal } = {}) {
   const { tracks } = await res.json();
   return tracks ?? [];
 }
+
+// Paginated play log. Pass `before` (a ts) to load older plays. Returns
+// { plays: [{...track, playedAt}], nextBefore }.
+export async function getHistory({ limit = 80, before, signal } = {}) {
+  const cursor = before ? `&before=${before}` : '';
+  const res = await fetchAuthed(`/api/history?limit=${limit}${cursor}`, { signal });
+  if (!res.ok) throw new Error(`history failed (${res.status})`);
+  return res.json();
+}
+
+// Windowed plays for the music clock — the client buckets them by local hour.
+export async function getMusicClockPlays({ days = 60, signal } = {}) {
+  const res = await fetchAuthed(`/api/history/clock?days=${days}`, { signal });
+  if (!res.ok) throw new Error(`music-clock failed (${res.status})`);
+  const { plays } = await res.json();
+  return plays ?? [];
+}

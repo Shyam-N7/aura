@@ -92,3 +92,50 @@ export async function getRecentlyPlayed(userId, { limit = 10 } = {}) {
     .slice(0, limit)
     .map(mapTrackRow);
 }
+
+// Full play log, newest first, with track metadata — one row per play (NOT
+// deduped, unlike recently-played). Cursor-paginated by ts: pass `before` (a ts)
+// to walk further back. Returns one extra row internally to compute nextBefore.
+export async function getHistory(userId, { limit = 80, before } = {}) {
+  const params = [userId];
+  let cursor = '';
+  if (before) { params.push(before); cursor = `AND e.ts < $${params.length}`; }
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
+            e.ts AS played_at
+     FROM listening_events e
+     JOIN tracks t ON t.id = e.track_id
+     WHERE e.user_id = $1 AND e.kind = 'play' ${cursor}
+     ORDER BY e.ts DESC
+     LIMIT $${params.length}`,
+    params,
+  );
+  const page = rows.slice(0, limit);
+  return {
+    plays: page.map(r => ({ ...mapTrackRow(r), playedAt: Number(r.played_at) })),
+    nextBefore: rows.length > limit ? Number(page[page.length - 1].played_at) : null,
+  };
+}
+
+// Lightweight play rows for the "music clock". The client buckets these by the
+// viewer's LOCAL time of day (the server runs UTC), so "your 2am songs" are
+// correct per listener. Capped so a heavy listener's window stays a small payload.
+export async function getMusicClockPlays(userId, { days = 60, cap = 2000 } = {}) {
+  const { rows } = await pool.query(
+    `SELECT t.id, t.title, t.artist, t.raw, e.ts
+     FROM listening_events e
+     JOIN tracks t ON t.id = e.track_id
+     WHERE e.user_id = $1 AND e.kind = 'play' AND e.ts > $2
+     ORDER BY e.ts DESC
+     LIMIT $3`,
+    [userId, cutoffMs(days), cap],
+  );
+  return rows.map(r => ({
+    trackId:  r.id,
+    title:    r.title,
+    artist:   r.artist,
+    imageUrl: r.raw?.imageUrl ?? null,
+    ts:       Number(r.ts),
+  }));
+}

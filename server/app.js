@@ -19,7 +19,7 @@ import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
 import { listPlaylists, getPlaylist, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists } from './playlists.js';
 import { getLibrarySummary } from './library.js';
 import { getGreeting } from './greeting.js';
-import { getMostPlayed, getTopArtists, getRecentlyPlayed } from './stats.js';
+import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getAutoPlaylists } from './autoPlaylists.js';
 import { getDiscoverHome } from './discover.js';
 import { getCatalogPlaylistDetail } from './catalog.js';
@@ -443,6 +443,27 @@ app.get('/api/stats/recently-played', requireAuth, async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 10;
     res.json({ tracks: await getRecentlyPlayed(req.userId, { limit }) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Full listening history (paginated, newest first) for the song-history screen.
+app.get('/api/history', requireAuth, async (req, res) => {
+  try {
+    const limit  = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200);
+    const before = req.query.before ? Number(req.query.before) : undefined;
+    res.json(await getHistory(req.userId, { limit, before }));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Windowed plays for the "music clock" — bucketed into parts of day on the client.
+app.get('/api/history/clock', requireAuth, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 60, 1), 365);
+    res.json({ plays: await getMusicClockPlays(req.userId, { days }) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

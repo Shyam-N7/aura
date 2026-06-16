@@ -1,0 +1,141 @@
+/* ── Song history: "music clock" + day-grouped log. Rides on the .aura-dpd
+   layout (header / scroll / list / row), so only the clock card, day headings
+   and load-more live here. ─────────────────────────────────────────────── */
+
+/* Day groups */
+.aura-dhist__day { margin-bottom: 6px; }
+.aura-dhist__day-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  padding: 16px 0 8px;
+}
+
+/* ── Music clock ── */
+.aura-dhist__clock {
+  margin-bottom: 28px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-surface), transparent 40%);
+}
+
+/* Distribution bar — one segment per part, sized by share of plays. */
+.aura-dhist__clock-bar {
+  display: flex;
+  gap: 4px;
+  height: 8px;
+  margin: 12px 0 18px;
+}
+.aura-dhist__clock-seg {
+  border-radius: 999px;
+  background: var(--color-accent);
+  min-width: 6px;
+}
+.aura-dhist__clock-seg--morning   { opacity: 0.40; }
+.aura-dhist__clock-seg--afternoon { opacity: 0.62; }
+.aura-dhist__clock-seg--evening   { opacity: 0.82; }
+.aura-dhist__clock-seg--night     { opacity: 1; }
+
+.aura-dhist__clock-parts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 28px;
+}
+/* min-width:0 lets the no-wrap track list ellipsis-truncate instead of
+   stretching its grid column past the card. */
+.aura-dhist__clock-part { min-width: 0; }
+.aura-dhist__clock-part-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.aura-dhist__clock-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+.aura-dhist__clock-count {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--color-ink-faint);
+}
+.aura-dhist__clock-sub {
+  margin: 4px 0 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--color-ink-soft);
+}
+/* Top songs for the part, each on its own line — full names, never truncated. */
+.aura-dhist__clock-tracks {
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.aura-dhist__clock-tracks li {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-ink-soft);
+}
+.aura-dhist__clock-empty {
+  margin-top: 5px;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--color-ink-faint);
+}
+.aura-dhist__clock-headline {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--color-ink);
+}
+.aura-dhist__clock-headline em { font-style: italic; }
+
+/* ── Load more ── */
+.aura-dhist__more { display: flex; justify-content: center; padding: 12px 0 8px; }
+.aura-dhist__more-btn {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 9px 22px;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.aura-dhist__more-btn:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 70%);
+  background: color-mix(in srgb, var(--color-ink), transparent 95%);
+}
+.aura-dhist__more-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Match the rest of the .aura-dpd shell, which is container- (not viewport-)
+   driven, so the clock collapses with the screen's actual width. */
+@container dpd (max-width: 600px) {
+  .aura-dhist__clock { margin-bottom: 22px; padding: 16px 16px 18px; border-radius: 12px; }
+  .aura-dhist__clock-parts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .aura-dhist__clock-headline { font-size: 15px; }
+  .aura-dhist__day-head { padding: 14px 0 6px; }
+}

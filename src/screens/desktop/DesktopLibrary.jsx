@@ -6,6 +6,7 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getLibrarySummary } from '../../api/library';
 import { listLiked } from '../../api/likes';
 import { listPlaylists } from '../../api/playlists';
+import { getHistory } from '../../api/stats';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
@@ -47,11 +48,12 @@ function Shelf({ id, title, peek, open, onToggle, children }) {
   );
 }
 
-export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddToQueue, onOpenLiked, onOpenPlaylists, onOpenPlaylistDetail, onOpenLangHub, onOpenJournal, onOpenDna, t, setTweak }) {
+export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddToQueue, onOpenLiked, onOpenPlaylists, onOpenHistory, onOpenPlaylistDetail, onOpenLangHub, onOpenJournal, onOpenDna, t, setTweak }) {
   const { user } = useAuth();
   const [summary, setSummary]     = useState(null);
   const [liked, setLiked]         = useState(null);
   const [playlists, setPlaylists] = useState(null);
+  const [history, setHistory]     = useState(null);
   const [loading, setLoading]     = useState(true);
   const [menu, setMenu]           = useState(null);
   const [openShelf, setOpenShelf] = useState(() => {
@@ -73,7 +75,8 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
       getLibrarySummary({ signal: ctl.signal }).catch(() => null),
       listLiked({ signal: ctl.signal }).catch(() => []),
       listPlaylists({ signal: ctl.signal }).catch(() => []),
-    ]).then(([s, l, p]) => { setSummary(s); setLiked(l); setPlaylists(p); setLoading(false); });
+      getHistory({ limit: 4, signal: ctl.signal }).then(r => r.plays).catch(() => []),
+    ]).then(([s, l, p, h]) => { setSummary(s); setLiked(l); setPlaylists(p); setHistory(h); setLoading(false); });
     return () => ctl.abort();
   }, []);
 
@@ -212,6 +215,34 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
             {onOpenPlaylists && playlists?.length > 0 && (
               <div className="aura-dlib__shelf-foot">
                 <button onClick={onOpenPlaylists} className="aura-dlib__see-all">SEE ALL →</button>
+              </div>
+            )}
+          </Shelf>
+
+          <Shelf id="history" title="history"
+            open={openShelf === 'history'} onToggle={() => toggleShelf('history')}
+            peek={history?.length > 0 ? (
+              <span className="aura-dlib__fan" aria-hidden="true">
+                {history.slice(0, 3).map((t, i) => <AlbumArt key={`${t.id}-${i}`} track={t} size={26} radius={5}/>)}
+              </span>
+            ) : emptyPeek}>
+            {(!history || history.length === 0) && (
+              <div className="aura-dlib__empty-row">No history yet. It fills in as you listen.</div>
+            )}
+            {history?.length > 0 && history.map((t, i) => (
+              <button key={`${t.id}-${i}`} onClick={() => onPickLive?.(t)} className="aura-dlib__row">
+                <AlbumArt track={t} size={50} radius={4}/>
+                <div className="flex-1 min-w-0">
+                  <div className="aura-dlib__row-title">{cleanTitle(t.title)}</div>
+                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={9.5}>
+                    {(t.artist ?? '').toLowerCase()} · {t.language ?? ''}
+                  </MonoLabel>
+                </div>
+              </button>
+            ))}
+            {onOpenHistory && history?.length > 0 && (
+              <div className="aura-dlib__shelf-foot">
+                <button onClick={onOpenHistory} className="aura-dlib__see-all">SEE ALL →</button>
               </div>
             )}
           </Shelf>

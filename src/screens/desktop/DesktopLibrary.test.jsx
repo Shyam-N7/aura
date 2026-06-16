@@ -23,6 +23,9 @@ vi.mock('../../api/likes', () => ({
 vi.mock('../../api/playlists', () => ({
   listPlaylists: vi.fn().mockResolvedValue([{ id: 'p1', name: 'Drive', trackCount: 3 }]),
 }));
+vi.mock('../../api/stats', () => ({
+  getHistory: vi.fn().mockResolvedValue({ plays: [], nextBefore: null }),
+}));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/addToPlaylistSheet', () => ({ openAddToPlaylist: vi.fn() }));
 vi.mock('../../lib/trackContextMenu', () => ({ ctxOpen: () => () => {} }));
@@ -34,9 +37,9 @@ const renderLib = (props = {}) =>
 beforeEach(() => sessionStorage.clear());
 
 describe('DesktopLibrary glass shelves', () => {
-  it('renders four closed shelves and the pinned your-year card', async () => {
+  it('renders five closed shelves and the pinned your-year card', async () => {
     renderLib();
-    for (const title of ['liked songs', 'playlists', 'languages', 'settings']) {
+    for (const title of ['liked songs', 'playlists', 'history', 'languages', 'settings']) {
       expect((await screen.findByText(title)).closest('button')).toHaveAttribute('aria-expanded', 'false');
     }
     // Your year is pinned open — its data is visible with NO interaction.
@@ -93,6 +96,7 @@ describe('DesktopLibrary glass shelves', () => {
     listPlaylists.mockResolvedValueOnce([]);
     renderLib();
     await screen.findByText('liked songs');
-    expect(screen.getAllByText('nothing yet')).toHaveLength(2);
+    // liked + history + playlists all empty here (history has no plays in tests).
+    expect(screen.getAllByText('nothing yet')).toHaveLength(3);
   });
 });
