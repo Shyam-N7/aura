@@ -1,32 +1,149 @@
-import { useCallback, useEffect, useRef, Fragment } from 'react';
+import { useCallback, useRef, useState, Fragment } from 'react';
 import { AuraMark } from '../components/primitives/AuraMark';
 import { BreathingDot } from '../components/primitives/BreathingDot';
 import { toast } from '../lib/toast';
+import { FeatureBand } from './landing/FeatureBand';
+import { MoodBridgesSpotlight } from './landing/spotlights/MoodBridgesSpotlight';
+import { LyricsSpotlight } from './landing/spotlights/LyricsSpotlight';
+import { ThemesSpotlight } from './landing/spotlights/ThemesSpotlight';
+import { SensingSpotlight } from './landing/spotlights/SensingSpotlight';
+import { OrbitSpotlight } from './landing/spotlights/OrbitSpotlight';
+import { EqualizerSpotlight } from './landing/spotlights/EqualizerSpotlight';
+import { TalkAuraSpotlight } from './landing/spotlights/TalkAuraSpotlight';
+import { PlayerSpotlight } from './landing/spotlights/PlayerSpotlight';
+import { useGsap, landingScrollTo } from './landing/useGsap';
+import { CursorFollower } from './landing/CursorFollower';
+import { HeroOrb, hasWebGL } from './landing/HeroOrb';
+import { useHeroOrbAudio } from './landing/useHeroOrbAudio';
 import './LandingPage.css';
 
-/* ── useReveal ─────────────────────────────────────────────────────────
-   IntersectionObserver (threshold 0.12) that adds the `in` class to every
-   `.reveal` element under `rootRef` once it scrolls into view. One-shot per
-   element; disconnects the observer on unmount.
-   ───────────────────────────────────────────────────────────────────── */
-function useReveal(rootRef) {
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return undefined;
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add('in');
-            io.unobserve(e.target);
-          }
-        });
-      },
-      { threshold: 0.12 },
-    );
-    root.querySelectorAll('.reveal').forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [rootRef]);
+/* ── runLandingAnimations ──────────────────────────────────────────────────
+   Continuous, depth-driven scroll. The page flows normally (Lenis in useGsap
+   eases the scroll for inertia); GSAP ties motion CONTINUOUSLY to scroll position
+   (scrub) instead of one-shot pops: a springy hero entrance on load, two-layer
+   hero parallax for depth, and a scroll-linked rise+fade reveal per section that
+   reverses cleanly. The DNA build + count-up stay; per-spotlight flourishes live
+   in their own components. Runs only under (prefers-reduced-motion: no-preference)
+   — reduced motion gets a plain, fully-visible native scroll. */
+const POP = 'back.out(1.7)';      // springy hero entrance
+const POP_BIG = 'back.out(2.2)';  // hero CTAs / DNA vertices
+const CLEAR = 'transform';        // free CSS :hover after a pop settles
+
+function runLandingAnimations({ gsap, q, ScrollTrigger }) {
+  // 1 ─ Hero springs in on load.
+  gsap.timeline({ defaults: { ease: POP, duration: 0.7, clearProps: CLEAR } })
+    .from(q('.hero .eyebrow'), { opacity: 0, y: 18, scale: 0.9 })
+    .from(q('.hero h1 .brand-line'), { opacity: 0, y: 20, scale: 0.9 }, '-=0.45')
+    .from(q('.hero h1 .hero-h1-line'), { opacity: 0, y: 42, scale: 0.85, duration: 0.85 }, '-=0.45')
+    .from(q('.hero h1 em'), { opacity: 0, y: 42, scale: 0.85, duration: 0.85 }, '-=0.6')
+    .from(q('.hero .lead'), { opacity: 0, y: 18 }, '-=0.55')
+    .from(q('.hero .ctas .btn'), { opacity: 0, y: 16, scale: 0.8, stagger: 0.1, ease: POP_BIG }, '-=0.45')
+    .from(q('.hero .quote'), { opacity: 0, x: -24, ease: 'power3.out' }, '-=0.3')
+    // hero-visual: clear ONLY opacity (the parallax below owns its transform).
+    .from(q('.hero-visual'), { opacity: 0, scale: 0.85, duration: 1, ease: 'back.out(1.4)', clearProps: 'opacity' }, 0.1)
+    .from(q('.hero-visual .album, .hero-visual .moodlet'),
+      { opacity: 0, stagger: 0.08, duration: 0.6, ease: 'power2.out', clearProps: 'opacity' }, 0.5);
+
+  // 2 ─ Hero parallax depth: the visual drifts up faster than the text as you
+  //     leave the hero → a continuous two-layer depth (scrub = 1:1 with scroll).
+  const heroPar = { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true };
+  if (q('.hero-visual')[0]) gsap.to(q('.hero-visual'), { yPercent: -22, ease: 'none', scrollTrigger: { ...heroPar } });
+  if (q('.hero > div:first-child')[0]) gsap.to(q('.hero > div:first-child'), { yPercent: -8, ease: 'none', scrollTrigger: { ...heroPar } });
+
+  // 2b ─ Magnetic CTAs: the primary buttons gently pull toward the pointer (the
+  //      "gravity" touch). Fine pointers only; listeners die with the page DOM.
+  if (window.matchMedia('(pointer: fine)').matches) {
+    q('.hero .ctas .btn, .lp-top .auth-cta').forEach((btn) => {
+      const xTo = gsap.quickTo(btn, 'x', { duration: 0.4, ease: 'power3' });
+      const yTo = gsap.quickTo(btn, 'y', { duration: 0.4, ease: 'power3' });
+      btn.addEventListener('pointermove', (e) => {
+        const r = btn.getBoundingClientRect();
+        xTo((e.clientX - (r.left + r.width / 2)) * 0.3);
+        yTo((e.clientY - (r.top + r.height / 2)) * 0.3);
+      });
+      btn.addEventListener('pointerleave', () => { xTo(0); yTo(0); });
+    });
+  }
+
+  // 3 ─ Continuous motion: every section both (a) fades in as it enters and
+  //     (b) DRIFTS the whole time it's on screen (parallax), so the page is never
+  //     "reveal then freeze" — there's always movement tied 1:1 to scroll. Bands
+  //     get a second, opposing layer (text vs live stage) for real depth.
+  q('.lp-stage').forEach((stage) => {
+    if (stage.querySelector('.hero')) return;
+    const inner = stage.querySelector('.lp-stage__inner');
+    if (!inner) return;
+    // fade in over the entry window (reverses on scroll-up)
+    gsap.fromTo(inner, { opacity: 0 }, {
+      opacity: 1, ease: 'none',
+      scrollTrigger: { trigger: stage, start: 'top 92%', end: 'top 60%', scrub: true },
+    });
+    // continuous parallax drift across the full crossing (gentle; padding absorbs it)
+    gsap.fromTo(inner, { yPercent: 6 }, {
+      yPercent: -6, ease: 'none',
+      scrollTrigger: { trigger: stage, start: 'top bottom', end: 'bottom top', scrub: true },
+    });
+    // bands: opposing drift between the text column and the live component → depth
+    const text = stage.querySelector('.lp-band__text');
+    const liveStage = stage.querySelector('.lp-band__stage');
+    if (text && liveStage) {
+      gsap.fromTo(text, { yPercent: 8 }, { yPercent: -8, ease: 'none',
+        scrollTrigger: { trigger: stage, start: 'top bottom', end: 'bottom top', scrub: true } });
+      gsap.fromTo(liveStage, { yPercent: -5 }, { yPercent: 5, ease: 'none',
+        scrollTrigger: { trigger: stage, start: 'top bottom', end: 'bottom top', scrub: true } });
+    }
+  });
+
+  // 4 ─ DNA radar builds itself: grid sweeps, profile draws, vertices pop, count up.
+  const radar = q('.dna-radar')[0];
+  if (radar) {
+    const at = { trigger: radar, start: 'top 82%', once: true };
+    // Opacity only — .dna-radar carries a static 3D CSS transform we must keep.
+    gsap.from(radar, { opacity: 0, duration: 0.8, ease: 'power2.out', clearProps: 'opacity', scrollTrigger: { ...at } });
+    // Grid hexagons + axes stroke-draw in a quick outward sweep.
+    radar.querySelectorAll('polygon[fill="none"], line').forEach((el, i) => {
+      if (typeof el.getTotalLength !== 'function') return;
+      const len = el.getTotalLength();
+      gsap.fromTo(el,
+        { strokeDasharray: len, strokeDashoffset: len },
+        { strokeDashoffset: 0, duration: 0.7, ease: 'power2.out', delay: i * 0.05,
+          clearProps: 'strokeDasharray,strokeDashoffset', scrollTrigger: { ...at } });
+    });
+    // The profile polygon draws on, then its vertices pop.
+    const poly = radar.querySelector('polygon[fill^="url"]');
+    if (poly && typeof poly.getTotalLength === 'function') {
+      const len = poly.getTotalLength();
+      gsap.fromTo(poly,
+        { strokeDasharray: len, strokeDashoffset: len, opacity: 0.4 },
+        { strokeDashoffset: 0, opacity: 1, duration: 1.1, ease: 'power2.inOut', delay: 0.45,
+          clearProps: 'strokeDasharray,strokeDashoffset', scrollTrigger: { ...at } });
+    }
+    const verts = radar.querySelectorAll('circle');
+    if (verts.length) {
+      gsap.from(verts, {
+        attr: { r: 0 }, duration: 0.5, stagger: 0.06, ease: POP_BIG, delay: 1, scrollTrigger: { ...at },
+      });
+    }
+  }
+  // Count each [data-count] up from 0 → its target. The JSX MUST render the real
+  // final value as the node's text (not "0"): under reduced motion this block
+  // never runs, so that text is what the visitor sees.
+  q('[data-count]').forEach((node) => {
+    const target = parseFloat(node.dataset.count);
+    if (Number.isNaN(target)) return;
+    const decimals = (node.dataset.count.split('.')[1] || '').length;
+    const prefix = node.dataset.prefix || '';
+    const proxy = { v: 0 };
+    gsap.to(proxy, {
+      v: target, duration: 1.2, ease: 'power1.out',
+      scrollTrigger: { trigger: node, start: 'top 90%', once: true },
+      onUpdate: () => { node.textContent = prefix + proxy.v.toFixed(decimals); },
+    });
+  });
+
+  // Re-measure once after all triggers (incl. the per-spotlight ones created in
+  // child components) are set up, so positions line up under Lenis.
+  ScrollTrigger.refresh();
 }
 
 /* Honour the OS "reduce motion" setting for the page's one SMIL animation —
@@ -60,10 +177,12 @@ function TopNav({ onNavigateAuth, theme, onToggleTheme }) {
   const scrollTo = useCallback(
     (id) => (e) => {
       e.preventDefault();
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+      landingScrollTo(document.getElementById(id));
     },
     [],
   );
+  // Where the next click in the light → dark → pink cycle lands.
+  const nextThemeLabel = theme === 'midnight' ? 'pink' : theme === 'bloom' ? 'light' : 'dark';
 
   return (
     <nav className="lp-top">
@@ -85,18 +204,36 @@ function TopNav({ onNavigateAuth, theme, onToggleTheme }) {
           className="theme-toggle"
           type="button"
           onClick={onToggleTheme}
-          aria-label={theme === 'midnight' ? 'Switch to light theme' : 'Switch to dark theme'}
+          aria-label={`Switch to ${nextThemeLabel} theme`}
+          title={`Switch to ${nextThemeLabel} theme`}
         >
-          {theme === 'midnight' ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          {/* All three icons are always rendered; CSS cross-fades + rotates to
+              the one matching the active theme (light → dark → pink cycle) so the
+              swap morphs instead of snapping. */}
+          <span className="ttico ttico--sun" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.3" />
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          </span>
+          <span className="ttico ttico--moon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M14 9.5A6.5 6.5 0 016.5 2 5.5 5.5 0 1014 9.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          )}
+          </span>
+          {/* Blossom — outline only (sketch), fixed pink so it always reads as
+              "the pink theme". */}
+          <span className="ttico ttico--bloom" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                 stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" strokeLinecap="round">
+              <ellipse cx="8" cy="4.4" rx="1.3" ry="2.65" />
+              <ellipse cx="8" cy="4.4" rx="1.3" ry="2.65" transform="rotate(72 8 8)" />
+              <ellipse cx="8" cy="4.4" rx="1.3" ry="2.65" transform="rotate(144 8 8)" />
+              <ellipse cx="8" cy="4.4" rx="1.3" ry="2.65" transform="rotate(216 8 8)" />
+              <ellipse cx="8" cy="4.4" rx="1.3" ry="2.65" transform="rotate(288 8 8)" />
+              <circle cx="8" cy="8" r="0.95" />
+            </svg>
+          </span>
         </button>
       </div>
     </nav>
@@ -107,11 +244,15 @@ function TopNav({ onNavigateAuth, theme, onToggleTheme }) {
    HERO 3D VISUAL — breathing orb, orbiting ring, three floating albums,
    four mood spheres.
    ══════════════════════════════════════════════════════════════════════ */
-function Hero3DVisual() {
+function Hero3DVisual({ enableOrb, isPlaying, analyser }) {
+  // The CSS orb (.orb-bg/.orb-ring) is the always-present fallback; once the WebGL
+  // orb is live (onReady), `.orb-active` hides it so they don't double up.
+  const [orbReady, setOrbReady] = useState(false);
   return (
-    <div className="hero-visual" aria-hidden="true">
+    <div className={`hero-visual${orbReady ? ' orb-active' : ''}`} aria-hidden="true">
       <div className="orb-bg" />
       <div className="orb-ring" />
+      {enableOrb && <HeroOrb isPlaying={isPlaying} analyser={analyser} onReady={() => setOrbReady(true)} />}
 
       <div className="album-stack">
         {/* a1 — violet */}
@@ -152,9 +293,16 @@ function Hero3DVisual() {
 /* ══════════════════════════════════════════════════════════════════════
    HERO
    ══════════════════════════════════════════════════════════════════════ */
-function Hero({ onNavigateAuth }) {
+function Hero({ onNavigateAuth, audio }) {
+  // The orb + its audio only run on a capable, motion-OK device; otherwise the
+  // CSS orb stands in and there's no play control.
+  const [enableOrb] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    return hasWebGL();
+  });
   return (
-    <header className="hero" id="top">
+    <header className="hero">
       <div>
         <div className="eyebrow">
           <span className="mono">
@@ -164,7 +312,7 @@ function Hero({ onNavigateAuth }) {
         </div>
         <h1>
           <span className="brand-line">AURA FM</span>
-          music that<br />
+          <span className="hero-h1-line">music that</span><br />
           <em>gets your mood.</em>
         </h1>
         <p className="lead">
@@ -193,7 +341,25 @@ function Hero({ onNavigateAuth }) {
         </div>
       </div>
 
-      <Hero3DVisual />
+      <div className="hero-stage">
+        <Hero3DVisual enableOrb={enableOrb} isPlaying={audio.isPlaying} analyser={audio.analyser} />
+        {enableOrb && (
+          <button
+            className={`orb-play${audio.isPlaying ? ' is-playing' : ''}`}
+            type="button"
+            onClick={audio.toggle}
+            aria-pressed={audio.isPlaying}
+            aria-label={audio.isPlaying ? 'Pause the ambient sound' : 'Play the ambient sound'}
+          >
+            <span className="orb-play__icon" aria-hidden="true">
+              {audio.isPlaying
+                ? <svg width="11" height="13" viewBox="0 0 12 14"><rect x="0" width="4" height="14" fill="currentColor" /><rect x="8" width="4" height="14" fill="currentColor" /></svg>
+                : <svg width="11" height="13" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor" /></svg>}
+            </span>
+            <span className="orb-play__label">{audio.isPlaying ? 'sound on' : 'feel it'}</span>
+          </button>
+        )}
+      </div>
     </header>
   );
 }
@@ -236,8 +402,8 @@ function Marquee() {
    ══════════════════════════════════════════════════════════════════════ */
 function ProblemSection() {
   return (
-    <section className="lp-body" id="problem">
-      <div className="section-head reveal">
+    <section className="lp-body">
+      <div className="section-head">
         <span className="mono">01 &middot; the problem</span>
         <h2>
           Music apps know your playlists.<br />
@@ -250,7 +416,7 @@ function ProblemSection() {
         </p>
       </div>
 
-      <div className="problem-grid reveal">
+      <div className="problem-grid">
         <div className="problem-card">
           <span className="num">01</span>
           <h3>They optimise for plays, not <em className="italic">feeling.</em></h3>
@@ -287,9 +453,9 @@ function ProblemSection() {
 function HowItWorksSection() {
   const reduceMotion = prefersReducedMotion();
   return (
-    <section className="lp-body how-section" id="how">
+    <section className="lp-body how-section">
       <div className="how-inner">
-        <div className="section-head reveal">
+        <div className="section-head">
           <span className="mono">02 &middot; how aura works</span>
           <h2>
             Three things AURA does,<br />
@@ -301,7 +467,7 @@ function HowItWorksSection() {
           </p>
         </div>
 
-        <div className="steps-3d reveal">
+        <div className="steps-3d">
           {/* Step 1 — SENSE */}
           <div className="step-card">
             <span className="step-num">01 &middot; SENSE</span>
@@ -389,82 +555,90 @@ function HowItWorksSection() {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   TALK SPOTLIGHT — mock 3-message chat
+   FEATURE SPOTLIGHTS — full-bleed bands showing the REAL in-app components
+   (not mockups), each fed static data so they run with no auth/API/audio.
    ══════════════════════════════════════════════════════════════════════ */
-function TalkSpotlight({ onNavigateAuth }) {
+function FeatureSpotlights({ analyser, isPlaying }) {
+  // A Fragment (not a wrapper div) so each band is a DIRECT child of .lp-stack —
+  // sticky stacking needs all stages to share one containing block to cover/stack.
   return (
-    <section className="lp-body" id="talk">
-      <div className="talk-spotlight">
-        <div className="reveal">
-          <span className="mono">the headline feature &middot; talk to your AI DJ</span>
-          <h2
-            className="serif"
-            style={{ fontSize: 'clamp(36px,5vw,64px)', lineHeight: 1, letterSpacing: '-0.025em', margin: '16px 0 0' }}
-          >
-            Just tell AURA<br />
-            <em>what you want.</em>
-          </h2>
-          <p
-            style={{
-              fontFamily: "'Hanken Grotesk', system-ui, sans-serif",
-              fontSize: 18,
-              lineHeight: 1.5,
-              color: 'var(--ink-soft)',
-              margin: '24px 0 0',
-              maxWidth: 480,
-              textWrap: 'pretty',
-            }}
-          >
-            No menus. No mood sliders. No &ldquo;for you&rdquo; rows. Just talk.
-            AURA replies in plain words and rebuilds your queue on the spot — a
-            music app that actually responds.
-          </p>
-          <div className="ctas" style={{ display: 'flex', gap: 12, marginTop: 32, flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" type="button" onClick={() => onNavigateAuth('signup')}>
-              See how it works
-              <ArrowSvg />
-            </button>
-          </div>
-        </div>
+    <>
+      <FeatureBand
+        id="bridges"
+        eyebrow="the flagship · mood bridges"
+        title={<>Move from one mood<br /><em>to another.</em></>}
+        copy="Tell AURA where you are and where you want to be — it threads real songs to carry you there, one gentle step at a time. Pick a path and watch it redraw."
+      >
+        <MoodBridgesSpotlight />
+      </FeatureBand>
 
-        <div className="talk-chat reveal">
-          <div className="chat-head">
-            <span className="dot" />
-            <span className="mono" style={{ color: 'var(--ink-soft)' }}>AURA &middot; listening</span>
-          </div>
-          <div className="msg user">
-            <span className="who">you</span>
-            <div className="bubble">take me somewhere quieter</div>
-          </div>
-          <div className="msg aura">
-            <span className="who">aura</span>
-            <div className="bubble">
-              got it. easing things down — softer sounds, a longer pause before the
-              next track.
-            </div>
-            <button className="play-it" type="button" onClick={() => onNavigateAuth('signup')}>
-              <span className="icon">
-                <svg width="7" height="9" viewBox="0 0 7 9">
-                  <path d="M0 0 L7 4.5 L0 9 Z" fill="currentColor" />
-                </svg>
-              </span>
-              <span>play it</span>
-            </button>
-          </div>
-          <div className="msg user">
-            <span className="who">you</span>
-            <div className="bubble">remind me of last fall</div>
-          </div>
-          <div className="msg aura">
-            <span className="who">aura</span>
-            <div className="bubble">
-              here&apos;s one — you played it seventy-three times last November.
-              didn&apos;t want to bring it back without checking first.
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+      <FeatureBand
+        flip
+        id="lyrics"
+        eyebrow="lyrics, reimagined"
+        title={<>Your song&apos;s words,<br /><em>lit line by line.</em></>}
+        copy="Stop touching the screen and the lyrics take over — the song's words drifting over its album art, lit line by line. Press play to watch it move."
+      >
+        <LyricsSpotlight analyser={analyser} isPlaying={isPlaying} />
+      </FeatureBand>
+
+      <FeatureBand
+        id="themes"
+        eyebrow="make it yours · themes"
+        title={<>Three moods,<br /><em>one tap away.</em></>}
+        copy="Warm light, dark, or soft pink. Switch any time and the whole app follows — try it here on real components."
+      >
+        <ThemesSpotlight />
+      </FeatureBand>
+
+      <FeatureBand
+        flip
+        id="sensing"
+        eyebrow="it reads the room · mood sensing"
+        title={<>It already knows<br /><em>how you feel.</em></>}
+        copy="No mood picker, no questionnaire. From the time of day and what you play, AURA reads the moment the second you open it. Run the read again."
+      >
+        <SensingSpotlight />
+      </FeatureBand>
+
+      <FeatureBand
+        id="orbit"
+        eyebrow="straight back in · quick picks"
+        title={<>Your rotation,<br /><em>in orbit.</em></>}
+        copy="The songs you reach for most, circling one tap from play. Hover a disc to lift it; spin the hub to shuffle them all."
+      >
+        <OrbitSpotlight analyser={analyser} isPlaying={isPlaying} />
+      </FeatureBand>
+
+      <FeatureBand
+        flip
+        id="talk"
+        eyebrow="say it out loud · talk to your DJ"
+        title={<>Just tell AURA<br /><em>what you want.</em></>}
+        copy="No menus, no mood sliders. Say it in plain words and AURA reshapes the queue on the spot. Tap a line to try it."
+      >
+        <TalkAuraSpotlight />
+      </FeatureBand>
+
+      <FeatureBand
+        id="equalizer"
+        eyebrow="dial in the sound · equalizer"
+        title={<>Tune the sound<br /><em>to your ears.</em></>}
+        copy="An 8-band equalizer with presets, volume, and three quality tiers — open it and drag the curve. Highest quality by default."
+      >
+        <EqualizerSpotlight />
+      </FeatureBand>
+
+      <FeatureBand
+        flip
+        id="player"
+        eyebrow="the now playing · player"
+        title={<>A player that<br /><em>breathes.</em></>}
+        copy="Album art that morphs between tracks, a scrub ribbon you can grab, transport in the thumb zone. Press play."
+      >
+        <PlayerSpotlight />
+      </FeatureBand>
+    </>
   );
 }
 
@@ -473,8 +647,8 @@ function TalkSpotlight({ onNavigateAuth }) {
    ══════════════════════════════════════════════════════════════════════ */
 function FeatureGrid() {
   return (
-    <section className="lp-body" id="features">
-      <div className="section-head reveal">
+    <section className="lp-body features-body">
+      <div className="section-head">
         <span className="mono">03 &middot; everything else it does</span>
         <h2>
           Six small things<br />
@@ -486,7 +660,7 @@ function FeatureGrid() {
         </p>
       </div>
 
-      <div className="feature-grid reveal">
+      <div className="feature-grid">
         <article className="feature">
           <span className="icon-wrap">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -592,10 +766,10 @@ function FeatureGrid() {
    ══════════════════════════════════════════════════════════════════════ */
 function DnaShowcase() {
   return (
-    <section className="lp-body dna-section" id="dna">
+    <section className="lp-body dna-section">
       <div className="dna-inner">
-        <div className="dna-radar reveal" aria-hidden="true">
-          <svg viewBox="0 0 400 400" style={{ width: '100%', height: '100%' }}>
+        <div className="dna-radar" aria-hidden="true">
+          <svg viewBox="-50 -50 500 500" style={{ width: '100%', height: '100%' }}>
             <defs>
               <radialGradient id="dna-fill" cx="50%" cy="50%" r="50%">
                 <stop offset="0%" stopColor="#d6a988" stopOpacity="0.6" />
@@ -639,7 +813,7 @@ function DnaShowcase() {
           </svg>
         </div>
 
-        <div className="reveal">
+        <div>
           <div className="section-head" style={{ marginBottom: 32 }}>
             <span className="mono">04 &middot; your music profile</span>
             <h2>
@@ -661,7 +835,7 @@ function DnaShowcase() {
               <span className="label">DRIFT</span>
               <span className="value">
                 warmer mood{' '}
-                <em style={{ fontStyle: 'normal', color: '#d6a988' }}>+0.12</em>
+                <em data-count="0.12" data-prefix="+" style={{ fontStyle: 'normal', color: '#d6a988' }}>+0.12</em>
               </span>
               <span className="stat-meta">
                 a small shift toward more spacious, open tracks — though you&apos;re
@@ -670,7 +844,12 @@ function DnaShowcase() {
             </div>
             <div className="dna-stat">
               <span className="label">THIS MONTH</span>
-              <span className="value">47 hrs &middot; 23 artists &middot; 31 new &middot; 8 returns</span>
+              <span className="value">
+                <span data-count="47">47</span> hrs &middot;{' '}
+                <span data-count="23">23</span> artists &middot;{' '}
+                <span data-count="31">31</span> new &middot;{' '}
+                <span data-count="8">8</span> returns
+              </span>
             </div>
           </div>
         </div>
@@ -684,8 +863,8 @@ function DnaShowcase() {
    ══════════════════════════════════════════════════════════════════════ */
 function VisionSection() {
   return (
-    <section className="lp-body" id="vision">
-      <div className="section-head reveal">
+    <section className="lp-body vision-body">
+      <div className="section-head">
         <span className="mono">05 &middot; vision &amp; mission</span>
         <h2>
           Why we&apos;re<br />
@@ -694,7 +873,7 @@ function VisionSection() {
       </div>
 
       <div className="vision-grid">
-        <div className="reveal">
+        <div>
           <blockquote className="vision-quote">
             We don&apos;t want to be the next Spotify. We want to be the music app
             that, for the first time in twenty years, makes you feel like the
@@ -709,7 +888,7 @@ function VisionSection() {
           </div>
         </div>
 
-        <div className="pillars reveal">
+        <div className="pillars">
           <div className="pillar">
             <h4>OUR VISION</h4>
             <h5>
@@ -763,14 +942,14 @@ function TestimonialsSection() {
   return (
     <section className="lp-body testimonials-section">
       <div className="test-inner">
-        <div className="section-head reveal" style={{ textAlign: 'center', margin: '0 auto 60px' }}>
+        <div className="section-head" style={{ textAlign: 'center', margin: '0 auto 60px' }}>
           <span className="mono">early voices</span>
           <h2 style={{ marginTop: 14 }}>
             From<br />
             <em>early users.</em>
           </h2>
         </div>
-        <div className="test-grid reveal">
+        <div className="test-grid">
           <article className="test-card">
             {stars}
             <blockquote>
@@ -828,7 +1007,7 @@ function TestimonialsSection() {
    ══════════════════════════════════════════════════════════════════════ */
 function FinalCTA({ onNavigateAuth }) {
   return (
-    <section className="final-cta reveal" id="pricing">
+    <section className="final-cta">
       <h2>
         Let AURA<br />
         <em>set the mood tonight.</em>
@@ -877,7 +1056,7 @@ function Footer({ onNavigateAuth, onNavigate }) {
   const scrollTo = useCallback(
     (id) => (e) => {
       e.preventDefault();
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+      landingScrollTo(document.getElementById(id));
     },
     [],
   );
@@ -948,6 +1127,17 @@ function Footer({ onNavigateAuth, onNavigate }) {
   );
 }
 
+/* A plain flow wrapper grouping each major section; `.lp-stage__inner` is the
+   element runLandingAnimations fades + parallax-drifts. `id` carries the nav
+   anchor. (The old sticky-cover model is gone; these are normal-flow blocks.) */
+function Stage({ children, id }) {
+  return (
+    <div className="lp-stage" id={id}>
+      <div className="lp-stage__inner">{children}</div>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    LANDING PAGE — main export
 
@@ -955,25 +1145,40 @@ function Footer({ onNavigateAuth, onNavigate }) {
    The theme class is owned by the caller (main.jsx wraps both pre-auth pages
    in `theme-${theme}`), so this root carries no theme class of its own — but
    the nav's light/dark toggle calls back up via onToggleTheme.
+
+   Layout: the nav is fixed (outside the scrolled content). Everything that
+   scrolls lives in .lp-scroll — Lenis's content element. Sections flow normally
+   (the .lp-stage wrappers are plain grouping blocks now); GSAP adds the parallax
+   + scroll-linked reveals on top.
    ══════════════════════════════════════════════════════════════════════ */
 export function LandingPage({ onNavigateAuth, onNavigate, theme, onToggleTheme }) {
   const rootRef = useRef(null);
-  useReveal(rootRef);
+  useGsap(rootRef, runLandingAnimations);
+  // The hero orb owns the only audio source; lift it here so the orb AND the
+  // lyrics / orbit spotlights can react to one shared analyser + play state.
+  const audio = useHeroOrbAudio();
 
   return (
     <div className="aura-landing" ref={rootRef}>
+      <CursorFollower />
       <TopNav onNavigateAuth={onNavigateAuth} theme={theme} onToggleTheme={onToggleTheme} />
-      <Hero onNavigateAuth={onNavigateAuth} />
-      <Marquee />
-      <ProblemSection />
-      <HowItWorksSection />
-      <TalkSpotlight onNavigateAuth={onNavigateAuth} />
-      <FeatureGrid />
-      <DnaShowcase />
-      <VisionSection />
-      <TestimonialsSection />
-      <FinalCTA onNavigateAuth={onNavigateAuth} />
-      <Footer onNavigateAuth={onNavigateAuth} onNavigate={onNavigate} />
+      <div className="lp-scroll">
+        <div className="lp-stack">
+          <Stage id="top">
+            <Hero onNavigateAuth={onNavigateAuth} audio={audio} />
+            <Marquee />
+          </Stage>
+          <Stage id="problem"><ProblemSection /></Stage>
+          <Stage id="how"><HowItWorksSection /></Stage>
+          <FeatureSpotlights analyser={audio.analyser} isPlaying={audio.isPlaying} />
+          <Stage id="features"><FeatureGrid /></Stage>
+          <Stage id="dna"><DnaShowcase /></Stage>
+          <Stage id="vision"><VisionSection /></Stage>
+          <Stage><TestimonialsSection /></Stage>
+          <Stage id="pricing"><FinalCTA onNavigateAuth={onNavigateAuth} /></Stage>
+        </div>
+        <Footer onNavigateAuth={onNavigateAuth} onNavigate={onNavigate} />
+      </div>
     </div>
   );
 }

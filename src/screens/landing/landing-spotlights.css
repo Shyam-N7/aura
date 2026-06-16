@@ -1,0 +1,292 @@
+/* Full-bleed feature bands + the per-spotlight stages. Reuses the landing's
+   .section-head / .mono / .kicker for the text column; everything else is
+   scoped under .lp-band / .lp-* so it can't leak into the app. The real feature
+   stylesheets (DesktopBridges.css, LyricsScreen.css, …) are imported by the
+   spotlight components themselves and are already class-scoped. */
+
+.lp-band { padding: 90px 56px; }
+.lp-band__inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 64px;
+  align-items: center;
+}
+.lp-band--flip .lp-band__text  { order: 2; }
+.lp-band--flip .lp-band__stage { order: 1; }
+/* min-width:0 lets these grid cells shrink instead of letting a wide child
+   (orbit ring, player art) blow the column out past the band. */
+.lp-band__text  { max-width: 460px; min-width: 0; }
+.lp-band__stage { min-width: 0; }
+
+@media (max-width: 900px) {
+  .lp-band { padding: 60px 24px; }
+  .lp-band__inner { grid-template-columns: 1fr; gap: 32px; }
+  .lp-band--flip .lp-band__text,
+  .lp-band--flip .lp-band__stage { order: 0; }
+}
+
+/* ── Shared pill/chip ─────────────────────────────────────────────────── */
+.lp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface), transparent 30%);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.lp-chip:hover { color: var(--color-ink); }
+.lp-chip.is-on {
+  color: var(--color-ink);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+/* ── Mood Bridges ─────────────────────────────────────────────────────── */
+.lp-bridges { display: flex; flex-direction: column; gap: 18px; }
+.lp-bridges__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.lp-bridges__card,
+.lp-themes__card {
+  padding: 22px 24px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--color-surface), transparent 18%);
+  border: 1px solid var(--color-line);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+/* Redefined locally so we don't pull all of DesktopHome.css into the landing. */
+.aura-dh-bridge-card__mood {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/* ── Themes ───────────────────────────────────────────────────────────── */
+.lp-themes { display: flex; flex-direction: column; gap: 18px; }
+.lp-themes__pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.lp-themes__swatch {
+  width: 22px; height: 16px;
+  border-radius: 5px;
+  border: 1px solid var(--color-line);
+  display: inline-flex; align-items: flex-end; justify-content: flex-end;
+  padding: 3px;
+}
+.lp-themes__swatch span { width: 7px; height: 7px; border-radius: 50%; display: block; }
+.lp-themes__preview {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 22px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: background 420ms ease, color 420ms ease, border-color 420ms ease;
+}
+.lp-np { display: flex; align-items: center; gap: 14px; }
+.lp-np__cover { width: 56px; height: 56px; border-radius: 10px; background-size: cover; background-position: center; flex-shrink: 0; }
+.lp-np__meta { flex: 1; min-width: 0; }
+.lp-np__title { font-family: var(--font-serif); font-size: 18px; color: var(--color-ink); }
+.lp-np__artist { font-family: var(--font-sans); font-size: 12px; color: var(--color-ink-soft); margin-top: 2px; }
+.lp-np__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--color-accent); flex-shrink: 0; }
+
+/* ── Cinematic lyrics ─────────────────────────────────────────────────── */
+.lp-lyrics { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.lp-lyrics-stage {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 4 / 5;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #14110d;
+}
+.lp-lyrics__lines {
+  position: absolute;
+  left: 0; right: 0; top: 48%;
+  transform: translateY(-50%);
+  padding: 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lp-lyrics__lines .aura-lyrics-line { text-align: center; cursor: default; }
+.lp-lyrics__controls { display: flex; align-items: center; gap: 14px; width: 100%; max-width: 400px; }
+.lp-lyrics__play {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.theme-midnight .lp-lyrics__play { color: var(--color-ink); }
+.lp-lyrics__scrub { flex: 1; accent-color: var(--color-accent); cursor: pointer; }
+
+/* Decorative visualizer bars under the lyric stage. Animate only while the demo
+   is "playing"; rest near-flat when paused. No audio is read — pure motion. */
+.lp-lyrics__viz {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  max-width: 400px;
+  height: 22px;
+  opacity: 0.45;
+  transition: opacity 240ms ease;
+}
+.lp-lyrics__viz.is-playing { opacity: 1; }
+.lp-lyrics__viz-bar {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent);
+  transform: scaleY(0.16);
+  transform-origin: bottom;
+}
+.lp-lyrics__viz.is-playing .lp-lyrics__viz-bar {
+  animation: lp-lyrics-viz 900ms ease-in-out infinite;
+  animation-delay: calc(var(--i) * -90ms);
+}
+/* Break the perfect ripple so it reads like a visualizer, not a sine wave. */
+.lp-lyrics__viz.is-playing .lp-lyrics__viz-bar:nth-child(3n)   { animation-duration: 1150ms; }
+.lp-lyrics__viz.is-playing .lp-lyrics__viz-bar:nth-child(4n+1) { animation-duration: 760ms; }
+@keyframes lp-lyrics-viz {
+  0%, 100% { transform: scaleY(0.16); }
+  50%      { transform: scaleY(1); }
+}
+/* Audio-reactive mode: the hero pad is playing, so the bars track REAL frequency
+   data — height set per-bar via --bar — instead of the canned ripple. */
+.lp-lyrics__viz.is-audio { opacity: 1; }
+.lp-lyrics__viz.is-audio .lp-lyrics__viz-bar {
+  animation: none;
+  transform: scaleY(var(--bar, 0.16));
+  transition: transform 90ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-lyrics__viz.is-playing .lp-lyrics__viz-bar { animation: none; transform: scaleY(0.3); }
+  .lp-lyrics__viz.is-audio .lp-lyrics__viz-bar { transition: none; transform: scaleY(0.3); }
+}
+
+/* ── Mood Sensing ─────────────────────────────────────────────────────── */
+.lp-sensing { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.lp-sensing__frame {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  height: 560px;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+}
+@media (max-width: 900px) { .lp-sensing__frame { height: 520px; } }
+
+/* ── Quick Picks Orbit ────────────────────────────────────────────────── */
+/* The orbit component sizes its ring with `80vw` (viewport-relative), which
+   overruns this narrower band column on laptop widths. Re-scope it to the
+   container so it always fits and stays centered. */
+.lp-orbit { display: flex; justify-content: center; width: 100%; }
+.lp-orbit .aura-qpo { padding: 8px 0 24px; width: 100%; }
+.lp-orbit .aura-qpo__ring { width: min(380px, 100%); }
+
+/* ── Equalizer + audio quality ────────────────────────────────────────── */
+.lp-eq { display: flex; flex-direction: column; gap: 14px; max-width: 460px; }
+.lp-eq__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.lp-eq__label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+.lp-eq__hint { margin: 0; font-family: var(--font-sans); font-size: 12.5px; line-height: 1.5; color: var(--color-ink-soft); }
+.lp-eq__quality { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--color-line); }
+.lp-eq__pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.lp-eq__caption { font-family: var(--font-sans); font-size: 12px; color: var(--color-ink-faint); }
+
+/* ── Talk to AURA ─────────────────────────────────────────────────────── */
+.lp-talk {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 440px;
+  height: 540px;
+  margin: 0 auto;
+  border-radius: 22px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface), transparent 14%);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  overflow: hidden;
+}
+.lp-talk__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-line);
+}
+.lp-talk__brand { font-family: var(--font-sans); font-weight: 600; font-size: 14px; color: var(--color-ink); }
+.lp-talk__msgs { flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.lp-talk__chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 20px; }
+.lp-talk__form { display: flex; align-items: center; gap: 8px; padding: 8px 12px 14px; border-top: 1px solid var(--color-line); }
+
+/* ── Player ───────────────────────────────────────────────────────────── */
+.lp-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface), transparent 14%);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+.lp-player__cover { width: 100%; max-width: 280px; aspect-ratio: 1; }
+/* The art carries a fixed `size` (px) on its own root; descendant selectors
+   here outspecify it so the whole subtree fills the responsive cover box. */
+.lp-player__cover > *,
+.lp-player__cover .aura-morphing-art,
+.lp-player__cover .aura-album-art { width: 100%; height: 100%; }
+.lp-player__meta { text-align: center; }
+.lp-player__title { font-family: var(--font-serif); font-size: 24px; line-height: 1.1; color: var(--color-ink); }
+.lp-player__artist { font-family: var(--font-sans); font-size: 13px; color: var(--color-ink-soft); margin-top: 4px; }
+.lp-player__scrub { width: 100%; }
+.lp-player__time {
+  display: flex; justify-content: space-between; margin-top: 2px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--color-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.lp-player__transport { display: flex; align-items: center; gap: 26px; }
+.lp-player__nav { background: none; border: 0; cursor: pointer; color: var(--color-ink-soft); padding: 6px; }
+.lp-player__nav:hover { color: var(--color-ink); }
+.lp-player__play {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+.theme-midnight .lp-player__play { color: var(--color-ink); }
+.lp-player__play:hover { filter: brightness(1.05); }
