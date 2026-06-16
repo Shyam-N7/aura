@@ -12,81 +12,9 @@
   container-name: dh;
 }
 
-/* ── Most-played grid (mirrors new-picks shape) ─────────────────────── */
-/* Outer wrapper holds the section's gutters so both the cards AND the
-   horizontal scrollbar stay aligned with the section header above. */
-.aura-dh__most-played-wrap {
-  padding: 0 48px;
-}
-/* The scroll container itself owns the mask-image edge-fade — applied here
-   (not on the wrapper) so the fade lands on the visible content edges, not
-   inside the wrapper's 48 px padding. Scrolled tiles dissolve into the gutter
-   instead of hard-cutting at the column edge (ChatGPT / Claude composer
-   bar feel). */
-.aura-dh__most-played {
-  --edge-fade: 32px;
-  display: flex;
-  gap: 14px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x proximity;
-  scroll-padding: 0 var(--edge-fade);
-  padding: 0 var(--edge-fade);
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    #000 var(--edge-fade),
-    #000 calc(100% - var(--edge-fade)),
-    transparent 100%
-  );
-          mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    #000 var(--edge-fade),
-    #000 calc(100% - var(--edge-fade)),
-    transparent 100%
-  );
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-ink), transparent 80%) transparent;
-}
-.aura-dh__most-played::-webkit-scrollbar { height: 6px; }
-.aura-dh__most-played::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-ink), transparent 80%);
-  border-radius: 9999px;
-}
-/* Lock the on-repeat tile width hard. Flex items default to `min-width: auto`
-   (= min-content of the child), and the AlbumArt's outer CSS still declares
-   `width: var(--size, 260px)` — the inline `width: 100%` style overrides it
-   at paint time but flex layout can still pick the 260 figure when deciding
-   min-content, letting some tiles balloon past 150 px. Setting width + min/max
-   on the tile AND on its art wrapper keeps every tile uniform. */
-.aura-dh__most-played .aura-dh__pick {
-  flex: 0 0 150px;
-  width: 150px;
-  min-width: 0;
-  max-width: 150px;
-  scroll-snap-align: start;
-}
-.aura-dh__most-played .aura-dh__pick > .aura-dh__pick-art {
-  width: 100%;
-}
-.aura-dh__most-played .aura-dh__pick > .aura-dh__pick-art > .aura-album-art {
-  width: 100% !important;
-  height: auto !important;
-  aspect-ratio: 1;
-}
-@media (min-width: 1700px) {
-  .aura-dh__most-played .aura-dh__pick {
-    flex-basis: 170px;
-    width: 170px;
-    max-width: 170px;
-  }
-}
-.aura-dh__most-played .aura-dh__pick-title { font-size: 16px; }
-
 /* ── Top artists shelf — round avatars, horizontal-scroll carousel ───── */
-/* Same wrapper-outer-gutter + inner-mask-fade pattern as .aura-dh__most-played
-   ("on repeat") so the two shelves read as a consistent carousel motif. */
+/* Outer-gutter wrapper + inner mask-fade edge — the shared carousel motif used
+   by the horizontal-scroll shelves on this screen. */
 .aura-dh__artists-wrap {
   padding: 0 48px;
 }
@@ -698,7 +626,6 @@
     0 2px 6px rgb(0 0 0 / 0.10),
     inset 0 0 0 1px rgb(255 255 255 / 0.7);
 }
-.aura-dh__most-played .aura-dh__pick-play { --fab-size: 30px; right: 7px; bottom: 7px; }
 .aura-dh__pick-title {
   font-family: var(--font-serif);
   font-size: 18px;
@@ -809,8 +736,6 @@
   .aura-dh__greeting { padding: 26px 22px 0; }
   .aura-dh__mood-hero { font-size: 30px; }
   .aura-dh__qp { padding: 22px 0 0; }
-  .aura-dh__most-played-wrap { padding: 0 22px; }
-  .aura-dh__most-played { --edge-fade: 16px; }
   .aura-dh-section-header { padding: 0 22px 12px; margin-top: 32px; }
   .aura-dh-section-header--large { margin-top: 36px; }
   .aura-dh-section-header__title { font-size: 22px; }

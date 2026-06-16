@@ -7,7 +7,7 @@ import { AnchoredMenu } from '../components/AnchoredMenu';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import './PlaylistsScreen.css';
 
-export function PlaylistsScreen({ onClose, onOpenPlaylist, onPlaySequence }) {
+export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySequence }) {
   const [hit, setHit]       = useState({ data: null, error: null });
   const [auto, setAuto]     = useState([]);
   const [creating, setCreating] = useState(false);
@@ -93,14 +93,14 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onPlaySequence }) {
         </div>
       </div>
 
-      {/* Auto / smart sets — read-only, built from listening history. Tap plays
-          the prebuilt sequence; no create/delete affordances. */}
+      {/* Auto / smart sets — read-only, built from listening history. Tapping the
+          card OPENS the set (like a normal playlist); the ▶ plays it directly. */}
       {auto.length > 0 && (
         <div className="pt-6 px-[22px]">
           <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">From your listening</span>
           <div className="pt-2.5 flex flex-col gap-2">
             {auto.map(a => (
-              <button key={a.id} onClick={() => onPlaySequence?.(a.tracks, 0, a.name)}
+              <button key={a.id} onClick={() => onOpenAuto?.(a)}
                 className="aura-lib-pl-card aura-pl-auto-card flex items-center gap-3.5 w-full">
                 {a.coverImageUrl
                   ? <img src={a.coverImageUrl} alt="" className="aura-lib-pl-cover" loading="lazy"/>
@@ -109,7 +109,11 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onPlaySequence }) {
                   <div className="aura-pl-row-name truncate">{a.name}</div>
                   <div className="aura-pl-row-count truncate">{a.description}</div>
                 </div>
-                <span className="aura-pl-auto-play" aria-hidden="true">
+                <span
+                  role="button" tabIndex={0} aria-label={`play ${a.name}`}
+                  onClick={(e) => { e.stopPropagation(); onPlaySequence?.(a.tracks, 0, a.name); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onPlaySequence?.(a.tracks, 0, a.name); } }}
+                  className="aura-pl-auto-play">
                   <svg width="13" height="13" viewBox="0 0 13 13"><path d="M3 2 L11 6.5 L3 11 Z" fill="currentColor"/></svg>
                 </span>
               </button>

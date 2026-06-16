@@ -15,15 +15,18 @@ import { setMeta } from '../../lib/meta';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
-// Read-only editorial playlist from the catalog at desktop. Same shape as
-// DesktopPlaylistDetail but no remove (it's not a user-owned list).
-export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
-  const [hit, setHit]       = useState({ data: null, error: null });
+// Read-only playlist detail at desktop. Same shape as DesktopPlaylistDetail but
+// no remove (it's not a user-owned list). Used for catalog/editorial playlists
+// (fetched by id) AND for auto "from your listening" sets, which already carry
+// their full tracks in memory — pass them via `initialData` to skip the fetch.
+export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
+  const [hit, setHit]       = useState({ data: initialData, error: null });
   const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`catalog:${playlistId}`, { ready: status === 'ok' });
 
   useEffect(() => {
+    if (initialData) return;   // pre-loaded (e.g. an auto playlist) — no fetch
     const ctl = new AbortController();
     getCatalogPlaylist(playlistId, { signal: ctl.signal })
       .then(data => setHit({ data, error: null }))
@@ -32,7 +35,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, onClose, onPlaySequen
         setHit({ data: null, error: err.message });
       });
     return () => ctl.abort();
-  }, [playlistId]);
+  }, [playlistId, initialData]);
 
   const tracks = hit.data?.tracks ?? [];
 

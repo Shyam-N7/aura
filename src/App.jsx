@@ -74,6 +74,7 @@ const SCREEN_LABELS = {
   playlists:               'Loading playlists',
   'playlist-detail':       'Loading playlist',
   'catalog-playlist-detail': 'Loading playlist',
+  'auto-playlist-detail':  'Loading playlist',
   journal:                 'Loading journal',
   dna:                     'Building your sonic DNA',
   bridges:                 'Loading bridges',
@@ -203,6 +204,12 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [detailReturn,      setDetailReturn]     = useState('playlists');
   const [catalogReturn,       setCatalogReturn]      = useState('home');
   const [albumReturn,       setAlbumReturn]      = useState('home');
+  // Auto "from your listening" sets are personal + ephemeral (computed per
+  // request, no per-id endpoint), so we hold the whole object in memory and open
+  // a read-only detail from it rather than routing by id. Not deep-linked: on a
+  // hard refresh the URL falls back to home (buildPath maps unknown screens → '/').
+  const [autoPlaylist,      setAutoPlaylist]     = useState(null);
+  const [autoReturn,        setAutoReturn]       = useState('playlists');
   const [artistKey,         setArtistKey]        = useState(initialFromPath?.artistKey ?? null);
   const [artistReturn,      setArtistReturn]     = useState('home');
   // Same back-stack pattern for player + queue so tapping back from the
@@ -291,6 +298,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       playlists: 'playlists · AURA',
       'playlist-detail': 'playlist · AURA',
       'catalog-playlist-detail': 'playlist · AURA',
+      'auto-playlist-detail': 'playlist · AURA',
       'album-detail': 'album · AURA',
       artist: 'artist · AURA',
       journal: 'journal · AURA',
@@ -406,14 +414,13 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     const haveTitles = new Set(cur.tracks.map(t => titleKey(t.title)));
     const fresh = auto.candidates.filter(t => !haveIds.has(t.id) && !haveTitles.has(titleKey(t.title)));
     if (!fresh.length) return null;
-    const seedArtist = (seed.artist ?? '').toLowerCase();
     // Append the whole batch and play from `offset` within it (0 = the first
     // pick; a queue-page row click can start further down the batch).
     const jump = Math.min(Math.max(0, offset), fresh.length - 1);
     return {
       tracks: [...cur.tracks, ...fresh],
       idx: cur.idx + 1 + jump,
-      source: seedArtist ? `more like ${seedArtist}` : 'auto radio',
+      source: 'more like this',
     };
   };
 
@@ -431,11 +438,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     const haveTitles = new Set(q.tracks.map(t => titleKey(t.title)));
     const fresh = candidates.filter(t => !haveIds.has(t.id) && !haveTitles.has(titleKey(t.title)));
     if (!fresh.length) return q;
-    const seedArtist = (seedNow.artist ?? '').toLowerCase();
     return {
       tracks: [...q.tracks, ...fresh],
       idx: q.idx + 1,
-      source: seedArtist ? `more like ${seedArtist}` : 'auto radio',
+      source: 'more like this',
     };
   });
 
@@ -622,6 +628,16 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     setPlaying(false);
     toast(reason === 'end-of-set' ? 'set ended · sleeping.' : 'sleep timer · paused.');
   }), []);
+
+  // Clear any in-flight close/morph animation timers on unmount — sign-out drops
+  // <Root> entirely (main.jsx renders it only while authed), so a pending
+  // setTimeout would otherwise fire setState on an unmounted tree.
+  useEffect(() => () => {
+    clearTimeout(morphTimer.current);
+    clearTimeout(closingPlayerTimer.current);
+    clearTimeout(closingLyricsTimer.current);
+    clearTimeout(closingSearchTimer.current);
+  }, []);
 
   // Persist queue (debounced) on every meaningful change.
   useEffect(() => { saveQueueSoon(queue); }, [queue]);
@@ -1090,6 +1106,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onOpenBridge={() => setScreen('bridges')}
               onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('home'); setScreen('catalog-playlist-detail'); }}
               onOpenPlaylistDetail={(id) => { setDetailPlaylistId(id); setDetailReturn('home'); setScreen('playlist-detail'); }}
+              onOpenAuto={(auto) => { setAutoPlaylist(auto); setAutoReturn('home'); setScreen('auto-playlist-detail'); }}
               onOpenPlaylists={() => setScreen('playlists')}
               onOpenSearch={openSearch}
               onOpenArtist={onOpenArtist}
@@ -1191,6 +1208,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           <div key="playlists" className="absolute inset-0 animate-aura-screen-in">
             <PlaylistsScreen onClose={() => setScreen('library')}
               onPlaySequence={pickLiveSequence}
+              onOpenAuto={(auto) => { setAutoPlaylist(auto); setAutoReturn('playlists'); setScreen('auto-playlist-detail'); }}
               onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('playlists'); setScreen('playlist-detail'); }}/>
           </div>
         )}
@@ -1205,6 +1223,13 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           <div key={`cat-${catalogPlaylistId}`} className="absolute inset-0 animate-aura-screen-in">
             <DesktopCatalogPlaylistDetail playlistId={catalogPlaylistId}
               onClose={() => setScreen(catalogReturn)} onPlaySequence={pickLiveSequence}
+              onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </div>
+        )}
+        {screen === 'auto-playlist-detail' && autoPlaylist && (
+          <div key={`auto-${autoPlaylist.id}`} className="absolute inset-0 animate-aura-screen-in">
+            <DesktopCatalogPlaylistDetail playlistId={autoPlaylist.id} initialData={autoPlaylist}
+              onClose={() => setScreen(autoReturn)} onPlaySequence={pickLiveSequence}
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
           </div>
         )}

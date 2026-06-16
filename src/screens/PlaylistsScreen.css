@@ -296,8 +296,12 @@
   border-radius: 9999px;
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent), transparent 88%);
+  cursor: pointer;
   transition: background 140ms ease;
 }
-.aura-pl-auto-card:hover .aura-pl-auto-play {
-  background: color-mix(in srgb, var(--color-accent), transparent 80%);
+.aura-pl-auto-card:hover .aura-pl-auto-play,
+.aura-pl-auto-play:hover,
+.aura-pl-auto-play:focus-visible {
+  background: color-mix(in srgb, var(--color-accent), transparent 72%);
+  outline: none;
 }

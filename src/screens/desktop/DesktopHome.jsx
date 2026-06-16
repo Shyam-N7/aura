@@ -4,6 +4,7 @@ import { MonoLabel, ICON } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed } from '../../api/stats';
 import { listPlaylists } from '../../api/playlists';
+import { listAutoPlaylists } from '../../api/autoPlaylists';
 import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
@@ -23,7 +24,7 @@ const _cache = {};
 export function DesktopHome({
   tracks, djName,
   onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
-  onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenPlaylists, onOpenSearch,
+  onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenAuto, onOpenPlaylists, onOpenSearch,
   onOpenArtist,
   t, setTweak,
 }) {
@@ -35,6 +36,7 @@ export function DesktopHome({
   const [topArtists,     setTopArtists]     = useState(() => _cache.topArtists     ?? []);
   const [recentlyPlayed, setRecentlyPlayed] = useState(() => _cache.recentlyPlayed ?? []);
   const [yourPlaylists,  setYourPlaylists]  = useState(() => _cache.yourPlaylists  ?? []);
+  const [autoPlaylists,  setAutoPlaylists]  = useState(() => _cache.autoPlaylists  ?? []);
   // Quick picks come from what you actually listen to — most-played first, then
   // recently-played, then the featured pool only for brand-new accounts.
   const quickPicks = (
@@ -51,6 +53,7 @@ export function DesktopHome({
     if (!_cache.topArtists)     getTopArtists     ({ signal: ctl.signal }).then(d => { _cache.topArtists     = d; setTopArtists(d);     }).catch(() => {});
     if (!_cache.recentlyPlayed) getRecentlyPlayed ({ signal: ctl.signal }).then(d => { _cache.recentlyPlayed = d; setRecentlyPlayed(d); }).catch(() => {});
     if (!_cache.yourPlaylists)  listPlaylists     ({ signal: ctl.signal }).then(d => { _cache.yourPlaylists  = d; setYourPlaylists(d);  }).catch(() => {});
+    if (!_cache.autoPlaylists)  listAutoPlaylists ({ signal: ctl.signal }).then(d => { _cache.autoPlaylists  = d; setAutoPlaylists(d);  }).catch(() => {});
     if (!_cache.discover)       getDiscoverHome   ({ signal: ctl.signal }).then(d => { _cache.discover       = d; setDiscover(d);       }).catch(() => {});
     return () => ctl.abort();
   }, []);
@@ -99,33 +102,6 @@ export function DesktopHome({
             <div className="aura-dh__memory-grid">
               {recentlyPlayed.slice(0, 3).map(t => (
                 <MemoryTile key={t.id} track={t} onPick={() => onPickLive?.(t)}/>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
-      {mostPlayed.length > 0 && (
-        <>
-          <SectionHeader title="On repeat" sub="Your most-played this month" large/>
-          <div className="aura-dh__most-played-wrap">
-            <div className="aura-dh__most-played">
-              {mostPlayed.slice(0, 12).map(t => (
-                <button key={t.id} onClick={() => onPickLive?.(t)} onContextMenu={ctxOpen(t)} className="aura-dh__pick">
-                  <span className="aura-dh__pick-art">
-                    <AlbumArt track={t} radius={6}
-                      style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
-                    <span className="aura-dh__pick-play">
-                      <svg width="10" height="12" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
-                    </span>
-                  </span>
-                  <div>
-                    <div className="aura-dh__pick-title">{cleanTitle(t.title)}</div>
-                    <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
-                      {(t.artist ?? '').toLowerCase()}{typeof t.playCount === 'number' ? ` · ${t.playCount} plays` : ''}
-                    </MonoLabel>
-                  </div>
-                </button>
               ))}
             </div>
           </div>
@@ -189,6 +165,27 @@ export function DesktopHome({
                   <div className="aura-dh__playlist-name">{p.name}</div>
                   <MonoLabel className="text-ink-soft mt-1 block" size={9}>
                     {p.trackCount} {p.trackCount === 1 ? 'track' : 'tracks'}
+                  </MonoLabel>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {autoPlaylists.length > 0 && (
+        <>
+          <SectionHeader title="From your listening" sub="Smart sets built from your plays" onMore={onOpenPlaylists} large/>
+          <div className="aura-dh__playlists-grid">
+            {autoPlaylists.map(a => (
+              <button key={a.id} onClick={() => onOpenAuto?.(a)} className="aura-dh__playlist">
+                {a.coverImageUrl
+                  ? <img src={a.coverImageUrl} alt="" loading="lazy" className="aura-dh__playlist-cover"/>
+                  : <span className="aura-dh__playlist-cover aura-dh__playlist-cover--fallback">♫</span>}
+                <div>
+                  <div className="aura-dh__playlist-name">{a.name}</div>
+                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
+                    {a.description}
                   </MonoLabel>
                 </div>
               </button>
