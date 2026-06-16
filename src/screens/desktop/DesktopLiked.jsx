@@ -98,7 +98,7 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
         {status === 'ok' && liked.length > 0 && (
           <div className="aura-dpd__list">
             <div className="aura-dpd__count">
-              <span>{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span>
+              <span>{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span>-
               <span>{fmtRuntime(liked.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {liked.map((t, i) => (

@@ -3,7 +3,7 @@ import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getCatalogPlaylist } from '../../api/discover';
-import { fmtTime } from '../../utils/fmtTime';
+import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
@@ -101,6 +101,10 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
       <div className="aura-dpd__scroll">
         {status === 'ok' && tracks.length > 0 && (
           <div className="aura-dpd__list">
+            <div className="aura-dpd__count">
+              <span>{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>-
+              <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
+            </div>
             {tracks.map((t, i) => (
               <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
