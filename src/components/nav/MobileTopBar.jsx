@@ -47,13 +47,22 @@ export function MobileTopBar({
         '.aura-mobile-top button, .aura-mobile-top input, .aura-dse button, .aura-dse a, .aura-dse input',
       );
     };
-    const onUp = () => { surfaceTapRef.current = false; };
+    // Reset a tick AFTER the press, not synchronously on pointerup. The input's
+    // blur can fire either side of pointerup, so a synchronous reset raced it —
+    // a tapped recent/trending chip read as "tapped inert area" and the bar
+    // collapsed to the previous screen before the chip's query landed. Deferring
+    // the reset to a macrotask means the blur in THIS gesture still sees the
+    // press (stays open), while a later standalone keyboard-dismiss blur — which
+    // has no preceding press — correctly sees false and collapses an empty field.
+    const onUp = () => { setTimeout(() => { surfaceTapRef.current = false; }, 0); };
     document.addEventListener('pointerdown', onDown, true);
     document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('pointercancel', onUp, true);
     return () => {
       offFocus();
       document.removeEventListener('pointerdown', onDown, true);
       document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', onUp, true);
     };
   }, [onOpenSearch]);
 
@@ -79,7 +88,10 @@ export function MobileTopBar({
   // with an empty field collapses back to the normal bar; typed text survives.
   const onInputBlur = () => {
     if (surfaceTapRef.current) return;
-    if (getSearchQuery().trim() === '') onCloseSearch?.();
+    // Defer one tick: a tapped chip/result fires its click (which sets the
+    // shared query) right after this blur. Re-checking on the next tick means we
+    // only collapse on a genuine empty-field dismiss — never racing the query.
+    setTimeout(() => { if (getSearchQuery().trim() === '') onCloseSearch?.(); }, 0);
   };
 
   // preventDefault on press keeps the input focused (no blur flicker) while the
