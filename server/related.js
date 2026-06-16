@@ -1,6 +1,7 @@
-// Related-tracks lookup. The catalog's related endpoint returns a mix of same-artist
-// and genre-similar songs for a given pid. We fall back to an artist+language
-// search if reco comes back empty (some catalogue tracks have no reco entries).
+// Related-tracks lookup. Uses the catalog's song-seeded reco endpoint — a mix of
+// similar-vibe and some same-artist songs for a given pid. We keep it song-similar:
+// no same-artist boost, capped to a couple of tracks per artist for diversity, and
+// when reco is empty we fall back to a same-language radio (never the seed artist).
 
 import { searchSongs, decodeEntities, decryptMediaUrl, pickImageUrl } from './catalog.js';
 import { cacheTracks, getTrackById } from './tracks.js';
@@ -11,8 +12,9 @@ import { CATALOG_API_BASE, CATALOG_USER_AGENT, CATALOG_CTX, CATALOG_API_VERSION,
 // song's original vs. a cover/alt-credit recording of it — collapse together.
 function normalizeTitle(s) {
   return (s ?? '')
-    .replace(/\s*\(from\s+["“”'][^"“”']*["“”']\)\s*$/iu, '')
-    .replace(/\s*\(from\s+[^)]*\)\s*$/iu, '')
+    .replace(/\(from\s+[^)]*\)/giu, ' ')                                            // "(From "Movie")" anywhere
+    .replace(/\s*[-–—]\s*(telugu|tamil|hindi|malayalam|kannada|english)\s*$/iu, '') // trailing " - <language>"
+    .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
 }
@@ -31,6 +33,24 @@ function dedupeByTitle(tracks, seedTitle) {
     const k = normalizeTitle(t.title);
     if (!k || seen.has(k)) continue;
     seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
+// Keep the radio diverse: allow at most `max` tracks from any single artist (incl.
+// the seed artist), preserving order. Without this a reco list can collapse into one
+// artist's catalogue and feel like "their greatest hits".
+function capPerArtist(tracks, max = 2) {
+  const counts = new Map();
+  const out = [];
+  for (const t of tracks) {
+    const a = (t.artist || '').toLowerCase().trim();
+    if (a) {
+      const n = counts.get(a) ?? 0;
+      if (n >= max) continue;
+      counts.set(a, n + 1);
+    }
     out.push(t);
   }
   return out;
@@ -62,7 +82,7 @@ function cacheGet(k) {
   return v;
 }
 function cacheSet(k, v) {
-  cache.set(k, v);
+  cache.delete(k); cache.set(k, v);   // delete-first so a re-set bumps to MRU
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
@@ -108,34 +128,38 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
   const seedLang = (lang || seed?.language || '').toLowerCase();
   const seedArtist = (seed?.artist || '').toLowerCase().trim();
   const COVER_RE = /\b(karaoke|cover|instrumental|tribute|remix|reprise|unplugged)\b/i;
+  // Keep reco's own similarity order; only sink other-language + explicit covers. We
+  // deliberately DON'T bias toward the seed artist — that bias was what made the radio
+  // feel like the artist's greatest hits. Per-artist diversity is handled by
+  // capPerArtist below.
   const refine = (list) => {
-    let out = list;
-    if (seedLang || seedArtist) {
-      const score = (t) => {
-        const tl = (t.language || '').toLowerCase();
-        const ta = (t.artist || '').toLowerCase().trim();
-        let s = 0;                                   // lower floats to the top
-        if (seedLang && tl !== seedLang) s += 10;
-        if (seedArtist && ta !== seedArtist) s += 1;
-        if (COVER_RE.test(t.title || '')) s += 5;    // sink explicit cover/karaoke variants
-        return s;
-      };
-      out = out.map((t, i) => ({ t, i, s: score(t) })).sort((a, b) => a.s - b.s || a.i - b.i).map(x => x.t);
-    }
+    const score = (t) => {
+      const tl = (t.language || '').toLowerCase();
+      let s = 0;                                   // lower floats to the top
+      if (seedLang && tl !== seedLang) s += 10;
+      if (COVER_RE.test(t.title || '')) s += 5;    // sink explicit cover/karaoke variants
+      return s;
+    };
+    const out = list
+      .map((t, i) => ({ t, i, s: score(t) }))
+      .sort((a, b) => a.s - b.s || a.i - b.i)
+      .map(x => x.t);
     return dedupeByTitle(out, seedTitle);
   };
 
-  tracks = refine(tracks);
+  tracks = capPerArtist(refine(tracks));
 
-  // Fallback: artist-anchored search when reco returns nothing OR collapses to
-  // nothing after dedup (e.g. a reco list that's entirely covers of the seed).
-  if (tracks.length === 0 && seed?.artist) {
+  // Fallback: a same-language radio (NEVER the seed artist) when reco returns nothing
+  // or collapses to nothing after dedup. We never fall back to the artist's catalogue.
+  if (tracks.length === 0 && (seed?.language || lang)) {
     try {
-      const radio = await searchSongs(`${seed.artist} ${seed.language ?? ''}`.trim(), {
-        lang: lang || seed.language || undefined,
+      const radio = await searchSongs(`${seed?.language ?? lang} songs`, {
+        lang: lang || seed?.language || undefined,
         limit: Math.max(10, want),
       });
-      tracks = refine(radio);
+      tracks = capPerArtist(
+        refine(radio).filter(t => (t.artist || '').toLowerCase().trim() !== seedArtist),
+      );
     } catch { /* leave empty */ }
   }
 

@@ -404,20 +404,20 @@ app.post('/api/llm/talk', requireAuth, async (req, res) => {
           limit,
         });
         // Auto-extend: a single-song pick stops cold when it ends. Pull 3 more
-        // tracks anchored on the same artist so playback flows naturally.
+        // song-similar (reco) tracks so playback flows naturally — not the artist's hits.
         if (tracks.length === 1 && tracks[0].artist) {
           try {
-            const radio = await searchSongs(`${tracks[0].artist} ${tracks[0].language ?? ''}`.trim(), {
+            const radio = await getRelatedTracks(tracks[0].id, {
               lang:  result.action.language || tracks[0].language || undefined,
               limit: 4,
             });
-            // Filter out the seed track + dedup; keep up to 3 extras.
+            // Filter out the seed track; keep up to 3 extras.
             const extras = radio
               .filter(t => t.id !== tracks[0].id)
               .slice(0, 3);
             tracks = [...tracks, ...extras];
           } catch (radioErr) {
-            console.warn('[talk] artist radio failed:', radioErr.message);
+            console.warn('[talk] song radio failed:', radioErr.message);
           }
         }
         cacheTracks(tracks);
@@ -564,6 +564,13 @@ app.post('/api/events', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'invalid track_id or kind' });
   }
   try {
+    // The track must already be in our catalog cache (it's upserted whenever a
+    // track is loaded/played). Check LOCALLY only — never getTrackById here: a
+    // DB miss there falls through to an upstream provider call, so phantom ids
+    // would become an amplification vector. Unknown id → reject, don't pollute
+    // listening_events (it feeds mood/language affinity).
+    const known = await pool.query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
+    if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
     await pool.query(
       `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,

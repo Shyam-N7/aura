@@ -25,6 +25,8 @@ if (MEDIA_KEY.sigBytes !== 8) {
   throw new Error(`CATALOG_MEDIA_KEY must be exactly 8 bytes for DES-ECB (got ${MEDIA_KEY.sigBytes})`);
 }
 
+let warnedSrcQuality = false;   // one-shot guard for the bitrate-token drift warning
+
 export function decryptMediaUrl(encrypted, bitrate = CATALOG_BITRATE) {
   if (!encrypted) return null;
   try {
@@ -43,6 +45,14 @@ export function decryptMediaUrl(encrypted, bitrate = CATALOG_BITRATE) {
     // node cipher threw → null. Normalize so the contract is unchanged and no
     // track ever carries streamUrl:"".
     if (!url) return null;
+    // The bitrate is rewritten by swapping CATALOG_AUDIO_SRC_QUALITY's token. If
+    // the decrypted URL doesn't carry it (upstream changed its CDN path shape),
+    // the swap is a silent no-op and every listener gets the upstream bitrate
+    // instead of CATALOG_BITRATE. Warn once so that drift is visible, not silent.
+    if (!warnedSrcQuality && !url.includes(CATALOG_AUDIO_SRC_QUALITY)) {
+      warnedSrcQuality = true;
+      console.warn('[catalog] decrypted media URL missing the expected bitrate token — quality swap is a no-op. Check CATALOG_AUDIO_SRC_QUALITY.');
+    }
     return url.replace(CATALOG_AUDIO_SRC_QUALITY, `_${bitrate}.mp4`);
   } catch {
     return null;
@@ -234,7 +244,7 @@ function makeLru(max = 80) {
   const c = new Map();
   return {
     get(k) { if (!c.has(k)) return null; const v = c.get(k); c.delete(k); c.set(k, v); return v; },
-    set(k, v) { c.set(k, v); if (c.size > max) c.delete(c.keys().next().value); },
+    set(k, v) { c.delete(k); c.set(k, v); if (c.size > max) c.delete(c.keys().next().value); },   // delete-first so a re-set bumps to MRU
   };
 }
 const suggestCache = makeLru(80);

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
 import { signToken, requireAuth } from './middleware/auth.js';
@@ -332,7 +333,14 @@ router.patch('/me/preferences', requireAuth, async (req, res) => {
 // ── GDPR: export all of my data ──────────────────────────────────────
 // Returns one JSON bundle of everything we hold for this user. Account row is
 // run through sanitizeUser so the password hash never leaves the server.
-router.get('/me/export', requireAuth, async (req, res) => {
+// A full export is a heavy 7-table read, so cap it tighter than the broad auth
+// limiter (per IP, a few per hour) — it can't be driven for DB load.
+const exportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, limit: 10,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too many export requests — try again in a little while.' },
+});
+router.get('/me/export', exportLimiter, requireAuth, async (req, res) => {
   const uid = req.userId;
   try {
     const [user, events, likes, playlists, playlistTracks, moods, journal] = await Promise.all([
