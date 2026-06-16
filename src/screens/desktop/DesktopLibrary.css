@@ -412,8 +412,8 @@
   .aura-dlib__avatar { width: 32px; height: 32px; font-size: 13px; }
   .aura-dlib__who-name { font-size: 14px; }
   .aura-dlib__scroll { padding-bottom: 0; }
-  /* 150px floor keeps the last expanded shelf clear of the bottom pill AND
-     the floating identity chip. */
+  /* Bottom floor clears the nav pill + the now-playing mini-bar. (The id chip
+     is hidden for now, so it needs no extra room.) */
   .aura-dlib__shelves { padding: 14px 22px 150px; gap: 12px; }
   .aura-dlib__shelf { border-radius: 18px; }
   .aura-dlib__shelf-head { padding: 14px 16px; }
@@ -429,3 +429,6 @@
   .aura-dlib__cover--fallback.aura-dlib__peek-cover { width: 24px; height: 24px; font-size: 11px; }
   .aura-dlib__more { opacity: 0.6; }
 }
+
+/* Hidden for now — the profile pill feels unnecessary; revisit later. */
+.aura-dlib__id-chip { display: none; }

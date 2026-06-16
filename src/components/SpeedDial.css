@@ -13,6 +13,8 @@
   pointer-events: none;   /* only the FAB + open items take pointers */
   transition: opacity 240ms ease, transform 240ms cubic-bezier(.2,.7,.2,1);
 }
+/* Hidden in the library for now — feels unnecessary there; revisit later. */
+.aura-responsive-shell:has(.aura-dlib) .aura-sd { display: none; }
 /* While a library shelf is expanded, the dial bows out so the shelf's last
    rows (settings' delete account, etc.) are never blocked. Returns when the
    shelf closes. */
