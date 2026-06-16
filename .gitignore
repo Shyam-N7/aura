@@ -11,3 +11,4 @@ dist
 # Superseded standalone landing/auth export (links to an old prototype, uses
 # retired fonts/vocab). Kept locally as reference; never published.
 aura-export/
+docs/
