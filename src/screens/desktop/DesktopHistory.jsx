@@ -12,6 +12,7 @@ import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import '../PlaylistsScreen.css';        // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';   // reuse the .aura-dpd detail layout + rows
 import './DesktopHistory.css';
@@ -211,6 +212,7 @@ export function DesktopHistory({ onClose, onPickLive, onPlayNext, onAddToQueue }
           </div>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

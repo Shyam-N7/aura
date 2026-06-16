@@ -12,6 +12,7 @@ import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
 import { getSearchResult, setSearchResult, getSearchLang, setSearchLang } from '../../lib/searchCache';
 import { getSeedSignals } from '../../lib/onboarding';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
@@ -302,6 +303,7 @@ export function DesktopSearch({
           if (headerless) requestSearchFocus(); else inputRef.current?.focus();
         }}/>
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

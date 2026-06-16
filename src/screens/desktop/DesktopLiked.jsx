@@ -12,6 +12,7 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import '../PlaylistsScreen.css';
 import './DesktopPlaylistDetail.css';
 
@@ -141,6 +142,7 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
           </div>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

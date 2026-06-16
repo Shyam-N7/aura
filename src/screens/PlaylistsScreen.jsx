@@ -5,6 +5,7 @@ import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
 import { AnchoredMenu } from '../components/AnchoredMenu';
 import { useScrollMemory } from '../hooks/useScrollMemory';
+import { BackToTop } from '../components/BackToTop';
 import './PlaylistsScreen.css';
 
 export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySequence }) {
@@ -218,6 +219,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
           </div>
         ))}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

@@ -1,0 +1,9 @@
+/* The goo filter holder must never affect layout or catch pointer events — it
+   only carries the <filter> def referenced elsewhere. */
+.aura-goo-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}

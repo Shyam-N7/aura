@@ -9,6 +9,7 @@ import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import { TopStrip } from './TopStrip';
 import { QuickPicksOrbit } from './QuickPicksOrbit';
 import { SectionHeader } from './SectionHeader';
@@ -282,6 +283,7 @@ export function DesktopHome({
           </div>
         </>
       )}
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { SettingsPanel } from '../../components/SettingsPanel';
 import { toast } from '../../lib/toast';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import '../PlaylistsScreen.css';
 import './DesktopLibrary.css';
 
@@ -279,6 +280,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
           </Shelf>
         </div>
         )}
+        <BackToTop scrollRef={scrollRef}/>
       </div>
 
       {/* Identity chip — you sign the corner of your own screen. Floats

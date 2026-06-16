@@ -7,6 +7,7 @@ import { cleanTitle } from '../../utils/title';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import './DesktopLanguageHub.css';
 
 export function DesktopLanguageHub({ lang, onClose, onPickLive, onOpenCatalogPlaylist }) {
@@ -112,6 +113,7 @@ export function DesktopLanguageHub({ lang, onClose, onPickLive, onOpenCatalogPla
           </div>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

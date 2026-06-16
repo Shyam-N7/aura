@@ -12,6 +12,7 @@ import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import { setMeta } from '../../lib/meta';
 import '../PlaylistsScreen.css';
 import './DesktopPlaylistDetail.css';
@@ -200,6 +201,7 @@ export function DesktopArtist({
           </>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

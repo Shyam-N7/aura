@@ -12,6 +12,7 @@ import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
@@ -160,6 +161,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
           </div>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

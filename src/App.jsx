@@ -16,6 +16,8 @@ import { CrowdScreen } from './screens/overlays/CrowdScreen';
 import { MorphLayer } from './components/player/MorphLayer';
 import { MobileBottomBar } from './components/nav/MobileBottomBar';
 import { MobileTopBar } from './components/nav/MobileTopBar';
+import { GooFilter } from './components/GooFilter';
+import { useActiveScroll } from './hooks/useActiveScroll';
 import { TalkAura } from './components/chat/TalkAura';
 import { Toast } from './components/Toast';
 import { PlayerDrawer } from './components/player/PlayerDrawer';
@@ -159,6 +161,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const isMobile          = breakpoint === 'mobile';
   const isTabletLandscape = breakpoint === 'tablet-landscape';
   const isTabletPortrait  = breakpoint === 'tablet-portrait';
+  // Drives the mobile bottom bar's liquid back-to-top morph: true while the
+  // active screen is scrolled, with `scrollActiveUp` to send it back to the top.
+  const { scrolled: barScrolled, toTop: scrollActiveUp } = useActiveScroll();
   const {
     navCollapsed = false, toggleNav = () => {},
     railCollapsed = false, toggleRail = () => {},
@@ -1322,7 +1327,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           track={track} playing={playing}
           onTogglePlay={() => setPlaying(p => !p)}
           onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}
-          active={screen} onNav={onNav} onTalk={() => setTalkOpen(true)}/>}
+          active={screen} onNav={onNav} onTalk={() => setTalkOpen(true)}
+          mode={barScrolled ? 'backtotop' : 'bar'} onBackToTop={scrollActiveUp}/>}
         {/* Tablet-portrait chrome: TopNavStrip top + BottomMiniBar bottom.
             NavRail + DesktopRail are desktop-only. */}
         {isTabletPortrait && <TopNavStrip djName={t.djName} active={screen} onNav={onNav}
@@ -1362,6 +1368,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           t={t} setTweak={setTweak}/>}
         <Toast/>
         <AddToPlaylistSheet/>
+        <GooFilter/>
         <ConfirmDialog/>
         <PromptDialog/>
         <ShortcutsOverlay/>

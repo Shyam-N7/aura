@@ -11,6 +11,7 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { BackToTop } from '../../components/BackToTop';
 import { setMeta } from '../../lib/meta';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
@@ -141,6 +142,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
           </div>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }
