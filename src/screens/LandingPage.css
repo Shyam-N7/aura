@@ -324,6 +324,29 @@
   background: none;
   padding: 0;
 }
+
+/* Wordmark + a small tagline beneath it, so the nav says what AURA is. */
+.aura-landing nav.lp-top .brand-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1;
+}
+.aura-landing nav.lp-top .brand-tagline {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 500;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+/* Keep the pill compact once the links collapse. */
+@media (max-width: 820px) {
+  .aura-landing nav.lp-top .brand-tagline { display: none; }
+}
 .aura-landing nav.lp-top .links {
   display: flex;
   gap: 22px;

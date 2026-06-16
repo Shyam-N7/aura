@@ -189,7 +189,10 @@ function TopNav({ onNavigateAuth, theme, onToggleTheme }) {
       <div className="bar">
         <button className="brand" type="button" onClick={scrollTo('top')}>
           <AuraMark size={20} />
-          <span style={{ marginBottom: "4px" }}>aura</span>
+          <span className="brand-id">
+            <span className="brand-name">aura</span>
+            <span className="brand-tagline">AI radio that reads your mood</span>
+          </span>
         </button>
         <div className="links">
           <a href="#how" onClick={scrollTo('how')}>How it works</a>
