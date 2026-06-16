@@ -28,15 +28,6 @@ const LINES_SCHEMA = {
   propertyOrdering: ['lines'],
 };
 
-const TEXT_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    text: { type: Type.STRING },
-  },
-  required: ['text'],
-  propertyOrdering: ['text'],
-};
-
 // Heuristic: anything outside basic Latin + Latin-1 Supplement triggers
 // romanization. Punctuation/spaces/numbers are all inside that range.
 const NON_LATIN = /[^\x00-\x7F -ɏ]/;
@@ -65,23 +56,4 @@ export async function romanizeLines(lines, language) {
   const result = Array.isArray(out?.lines) ? out.lines : [];
   if (result.length === lines.length) return result;
   return lines.map((l, i) => result[i] ?? l);
-}
-
-export async function romanizePlain(text, language) {
-  if (!text) return '';
-  const prompt = [
-    `Source language: ${language ?? 'unknown'}`,
-    `Text:`,
-    text,
-    ``,
-    `Return JSON { "text": "..." } with the romanized version, preserving line breaks.`,
-  ].join('\n');
-  const out = await generateJson({
-    model: 'gemini-2.5-flash',
-    system: SYSTEM,
-    prompt,
-    schema: TEXT_SCHEMA,
-    temperature: 0.2,
-  });
-  return typeof out?.text === 'string' ? out.text : text;
 }

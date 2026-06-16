@@ -5,6 +5,13 @@ import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
 import { getFeatured } from './featured.js';
 import { getLyricsForTrack } from './lyrics.js';
+import {
+  generationEnabled, saveLyrics, enqueueLyricJob, dispatchJob,
+  completeFromPrediction, processQueue,
+} from './lyricsJobs.js';
+import { recordLyricsMetric, getLyricsStats } from './lyricsMetrics.js';
+import { LYRICS_WEBHOOK_SECRET, REPLICATE_WEBHOOK_SIGNING_SECRET, CRON_SECRET } from './config.js';
+import { verifyWebhookSignature } from './replicateWebhook.js';
 import { generateWhy } from './prompts/why.js';
 import { getJournalEntries } from './journal.js';
 import { getSonicDna } from './sonicDna.js';
@@ -37,6 +44,10 @@ const app = express();
 // bodies, reading the stream again would hang or return empty — so if a parsed
 // object is already present, use it as-is.
 app.use((req, res, next) => {
+  // The Replicate webhook posts a large prediction payload (the full WhisperX
+  // output) — it has its own higher-limit parser on the route, so skip the
+  // 64kb guard here for that path only.
+  if (req.path === '/api/lyrics-jobs/webhook') return next();
   if (req.body && typeof req.body === 'object') return next();
   express.json({ limit: '64kb' })(req, res, next);
 });
@@ -201,6 +212,15 @@ const LYRICS_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
 
 app.get('/api/lyrics/:track_id', async (req, res) => {
   const { track_id } = req.params;
+  const t0 = Date.now();
+  // Send the response AND record one timing row. The metric write is
+  // fire-and-forget so its DB latency never delays the lyrics response and a
+  // failure can never break it — errors are logged, not surfaced or awaited.
+  const respond = (body, { cacheHit, source, synced, ok = true, status = 200 }) => {
+    recordLyricsMetric({ trackId: track_id, ms: Date.now() - t0, cacheHit, source, synced, ok })
+      .catch(e => console.warn('[lyrics] metric write failed:', e.message));
+    res.status(status).json(body);
+  };
   try {
     const cached = await pool.query(
       `SELECT source, synced, payload, fetched_at FROM lyrics WHERE track_id = $1`,
@@ -208,39 +228,112 @@ app.get('/api/lyrics/:track_id', async (req, res) => {
     );
     if (cached.rowCount && Date.now() - Number(cached.rows[0].fetched_at) < LYRICS_TTL_MS) {
       const row = cached.rows[0];
-      return res.json({
-        available: row.source !== 'none',
-        synced: row.synced,
-        source: row.source,
-        ...(row.payload ?? {}),
-      });
+      // A 'pending' row means audio generation is in flight — keep polling.
+      if (row.source === 'pending') {
+        return respond({ available: false, synced: false, pending: true },
+          { cacheHit: true, source: 'pending', synced: false });
+      }
+      return respond(
+        { available: row.source !== 'none', synced: row.synced, source: row.source, ...(row.payload ?? {}) },
+        { cacheHit: true, source: row.source, synced: row.synced },
+      );
     }
+
     const track = await getTrackById(track_id);
     const result = await getLyricsForTrack({
-      id: track.id,
       title: track.title,
       artist: track.artist,
       durationSec: track.durationSec,
       language: track.language,
     });
-    const payload = {
-      ...(result.lines ? { lines: result.lines } : {}),
-      ...(result.plain ? { plain: result.plain } : {}),
-      ...(result.plain_en ? { plain_en: result.plain_en } : {}),
-      has_english: !!result.has_english,
-    };
-    await pool.query(
-      `INSERT INTO lyrics (track_id, source, synced, payload, fetched_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (track_id) DO UPDATE SET
-         source = EXCLUDED.source, synced = EXCLUDED.synced,
-         payload = EXCLUDED.payload, fetched_at = EXCLUDED.fetched_at`,
-      [track_id, result.source ?? 'none', !!result.synced, JSON.stringify(payload), Date.now()],
-    );
-    res.json(result);
+
+    if (result.synced) {
+      await saveLyrics(track_id, {
+        source: result.source,
+        synced: true,
+        payload: { lines: result.lines, has_english: !!result.has_english },
+      });
+      return respond(result, { cacheHit: false, source: result.source, synced: true });
+    }
+
+    // No synced lyrics in any provider. If audio generation is configured, queue
+    // a job and tell the client to poll; otherwise it's simply unavailable —
+    // strictly synced-only, we never fall back to plain text.
+    if (generationEnabled()) {
+      await saveLyrics(track_id, { source: 'pending', synced: false, payload: {} });
+      const job = await enqueueLyricJob(track_id);
+      if (job.status === 'queued') {
+        try { await dispatchJob(track_id); }
+        catch (err) { console.warn('[lyrics] dispatch failed; reaper will retry:', err.message); }
+      }
+      return respond({ available: false, synced: false, pending: true },
+        { cacheHit: false, source: 'pending', synced: false });
+    }
+
+    await saveLyrics(track_id, { source: 'none', synced: false, payload: {} });
+    return respond({ available: false, synced: false },
+      { cacheHit: false, source: 'none', synced: false });
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ error: err.message });
+    await respond({ error: err.message },
+      { cacheHit: false, source: 'error', synced: false, ok: false, status });
+  }
+});
+
+// Replicate calls this when a WhisperX prediction completes. Guarded by a shared
+// identified by ?track_id. Exempt from the 64kb body cap (see the parser above)
+// and from costLimiter (path is not under /api/lyrics). Returns 500 on transient
+// failure so Replicate retries the hook. The verify callback captures the raw
+// body so HMAC signature verification can run over the exact bytes.
+app.post('/api/lyrics-jobs/webhook',
+  express.json({ limit: '4mb', verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); } }),
+  async (req, res) => {
+    // Authenticate Replicate's callback. Prefer HMAC signature verification (no
+    // secret in the URL, which Replicate logs); else require the shared token.
+    // If NEITHER is configured, reject — an open webhook lets anyone forge lyrics
+    // into the cache, so it must never run unauthenticated.
+    const authed = REPLICATE_WEBHOOK_SIGNING_SECRET
+      ? verifyWebhookSignature(req.rawBody, req.headers, REPLICATE_WEBHOOK_SIGNING_SECRET)
+      : (!!LYRICS_WEBHOOK_SECRET && req.query.token === LYRICS_WEBHOOK_SECRET);
+    if (!authed) return res.status(401).json({ error: 'unauthorized' });
+    const trackId = String(req.query.track_id ?? '');
+    if (!trackId) return res.status(400).json({ error: 'missing track_id' });
+    try {
+      await completeFromPrediction(req.body, trackId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.warn('[lyrics] webhook handling failed:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+// Cron reaper (Vercel Cron → GET). Recovers stuck jobs and dispatches the queue.
+// Authorized ONLY by Vercel's `Authorization: Bearer ${CRON_SECRET}` — never the
+// webhook secret (which is logged by Replicate), so a webhook-secret leak can't
+// drive the dispatcher. Unreachable until CRON_SECRET is set (i.e. in prod).
+app.get('/api/lyrics-jobs/process', async (req, res) => {
+  const bearer = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const authed = !!CRON_SECRET && bearer === CRON_SECRET;
+  if (!authed) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    res.json(await processQueue());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lyrics fetch-time analytics summary (cold p50/p95/avg, cache-hit rate, per
+// source). Open in local dev; once CRON_SECRET is configured (prod) it requires
+// that same bearer. e.g. GET /api/lyrics-jobs/stats?hours=24
+app.get('/api/lyrics-jobs/stats', async (req, res) => {
+  const bearer = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const authed = !CRON_SECRET || bearer === CRON_SECRET;
+  if (!authed) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 24 * 30);
+    res.json(await getLyricsStats({ hours }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

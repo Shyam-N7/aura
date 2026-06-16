@@ -257,6 +257,46 @@ const migrations = [
     // Song-grounded one-liner explaining the inferred mood (the "reading you" read).
     await client.query(`ALTER TABLE mood_snapshots ADD COLUMN reason TEXT`);
   },
+  async function v9_lyric_jobs(client) {
+    // Queue for generating synced lyrics from audio when no provider has the song.
+    // track_id PK = one job per track (natural dedupe; re-enqueue is an UPSERT).
+    // The lyrics table's `source` column has no CHECK constraint, so the new
+    // values 'pending'/'generated' it will carry need no schema change there.
+    await client.query(`
+      CREATE TABLE lyric_jobs (
+        track_id    TEXT PRIMARY KEY,
+        status      TEXT NOT NULL DEFAULT 'queued'
+                      CHECK (status IN ('queued','processing','done','failed')),
+        method      TEXT,            -- 'align' | 'asr'
+        external_id TEXT,            -- Replicate prediction id
+        attempts    INT  NOT NULL DEFAULT 0,
+        confidence  REAL,
+        error       TEXT,
+        created_at  BIGINT NOT NULL,
+        updated_at  BIGINT NOT NULL
+      );
+      CREATE INDEX idx_lyric_jobs_status ON lyric_jobs(status, updated_at);
+    `);
+  },
+  async function v10_lyrics_metrics(client) {
+    // One row per /api/lyrics request: how long it took, whether it was a cache
+    // hit, which provider answered, and whether it ended up synced. Lets us track
+    // true fetch cost (cold p50/p95) and the cache-hit rate over time — the real
+    // measure of whether prefetch is working.
+    await client.query(`
+      CREATE TABLE lyrics_metrics (
+        id        BIGSERIAL PRIMARY KEY,
+        track_id  TEXT NOT NULL,
+        ts        BIGINT NOT NULL,
+        ms        INTEGER NOT NULL,
+        cache_hit BOOLEAN NOT NULL,
+        source    TEXT,
+        synced    BOOLEAN NOT NULL,
+        ok        BOOLEAN NOT NULL DEFAULT TRUE
+      );
+      CREATE INDEX idx_lyrics_metrics_ts ON lyrics_metrics(ts DESC);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

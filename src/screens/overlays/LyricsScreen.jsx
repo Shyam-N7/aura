@@ -36,6 +36,19 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
     return () => ctl.abort();
   }, [track.id]);
 
+  // While the server is generating synced lyrics for this track, poll so the
+  // finished lyrics replace the "syncing…" state without reopening the overlay.
+  useEffect(() => {
+    if (status !== 'ok' || !hit.data?.pending) return;
+    const ctl = new AbortController();
+    const id = setInterval(() => {
+      getLyrics(track.id, { signal: ctl.signal })
+        .then(data => setHit({ trackId: track.id, data, error: null }))
+        .catch(() => {});   // transient — keep polling
+    }, 25000);
+    return () => { ctl.abort(); clearInterval(id); };
+  }, [status, hit.data?.pending, track.id]);
+
   const hasEnglish = !!hit.data?.has_english;
   // If the server didn't produce a romanization (already-Latin track), keep
   // the toggle hidden and pin view to 'orig'.
@@ -118,7 +131,16 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
         </div>
       )}
 
-      {status === 'ok' && !hit.data.available && (
+      {status === 'ok' && hit.data.pending && (
+        <div className="flex-1 p-7 flex flex-col items-center justify-center gap-5 text-center">
+          <LyricsGapMark/>
+          <div className="font-sans text-[16px] text-ink-soft text-pretty">
+            Syncing the lyrics…<br/>Lining the words up to the music — check back in a moment.
+          </div>
+        </div>
+      )}
+
+      {status === 'ok' && !hit.data.available && !hit.data.pending && (
         <div className="flex-1 p-7 flex items-center justify-center">
           <div className="font-sans text-[18px] text-ink-soft text-center text-pretty">
             Lyrics aren’t available<br/>for this track.
@@ -136,17 +158,6 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
           playing={playing}
           cinematic={cinematic}
         />
-      )}
-
-      {status === 'ok' && hit.data.available && !hit.data.synced && (
-        <div className="flex-1 p-7 overflow-auto">
-          <div className="font-sans text-[12px] text-ink-faint mb-3">
-            Synced lyrics aren&rsquo;t available &mdash; showing plain text.
-          </div>
-          <div className="aura-lyrics-plain text-[20px] leading-[1.5] text-ink whitespace-pre-wrap text-pretty">
-            {cleanLyric(effectiveView === 'en' && hit.data.plain_en ? hit.data.plain_en : hit.data.plain)}
-          </div>
-        </div>
       )}
       </div>
       </div>

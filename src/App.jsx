@@ -97,6 +97,7 @@ import { loadQueue, saveQueueSoon } from './lib/persistentQueue';
 import { savePosition, flush as flushPosition, loadPosition, clearPosition } from './lib/persistPosition';
 import { getTrack } from './api/catalog';
 import { getRelated } from './api/related';
+import { prefetchLyrics } from './api/lyrics';
 import { titleKey, cleanTitle } from './utils/title';
 import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
@@ -670,6 +671,19 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     // playing/screen captured in .then() — reconciled by the play/pause effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player, track?.id, track?.streamUrl]);
+
+  // Warm the lyrics cache for the current + next track shortly after a track
+  // settles, so opening the Lyrics overlay is instant instead of a cold fetch
+  // (provider call + Gemini romanization). The 1.2s debounce means rapid skips
+  // don't fire prefetches for tracks the user blows past.
+  useEffect(() => {
+    if (!track?.id) return;
+    const id = setTimeout(() => {
+      prefetchLyrics(track.id);
+      if (next?.id) prefetchLyrics(next.id);
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [track?.id, next?.id]);
 
   // Lazy stream-URL refetch for any track that loses its URL (cold-start
   // hydration didn't cover it, or it's track 3+ becoming current). Merges

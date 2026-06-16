@@ -34,6 +34,19 @@ export function DesktopPlayer({
     return () => ctl.abort();
   }, [track.id]);
 
+  // While synced lyrics are being generated, poll so they replace the "syncing…"
+  // message in place once ready.
+  useEffect(() => {
+    if (status !== 'ok' || !hit.data?.pending) return;
+    const ctl = new AbortController();
+    const id = setInterval(() => {
+      getLyrics(track.id, { signal: ctl.signal })
+        .then(data => setHit({ trackId: track.id, data, error: null }))
+        .catch(() => {});
+    }, 25000);
+    return () => { ctl.abort(); clearInterval(id); };
+  }, [status, hit.data?.pending, track.id]);
+
   const hasEnglish = !!hit.data?.has_english;
   const effectiveView = hasEnglish ? view : 'orig';
 
@@ -87,7 +100,9 @@ export function DesktopPlayer({
 
         <div className="aura-dp__right">
           <MonoLabel className="text-ink-faint" size={9}>
-            Lyrics{status === 'ok' && hit.data?.synced ? ' · Syncing' : status === 'ok' ? ' · Plain' : ''}
+            Lyrics{status === 'ok' && hit.data?.synced ? ' · Synced'
+              : status === 'ok' && hit.data?.pending ? ' · Syncing'
+              : ''}
           </MonoLabel>
 
           {status === 'loading' && (
@@ -102,7 +117,13 @@ export function DesktopPlayer({
             </div>
           )}
 
-          {status === 'ok' && !hit.data.available && (
+          {status === 'ok' && hit.data.pending && (
+            <div className="aura-dp__lyrics-message aura-dp__lyrics-message--lg">
+              Syncing the lyrics — lining the words up to the music. Check back in a moment.
+            </div>
+          )}
+
+          {status === 'ok' && !hit.data.available && !hit.data.pending && (
             <div className="aura-dp__lyrics-message aura-dp__lyrics-message--lg">
               Lyrics aren’t available for this track.
             </div>
@@ -112,17 +133,6 @@ export function DesktopPlayer({
             <SyncedLyrics lines={hit.data.lines} view={effectiveView}
               audioTime={audioTime}
               onSeekToTime={(sec) => { const d = player.getDurationSec(); if (d > 0) onSeek(sec / d); }}/>
-          )}
-
-          {status === 'ok' && hit.data.available && !hit.data.synced && (
-            <div className="mt-7">
-              <MonoLabel className="text-ink-faint block mb-3" size={9}>
-                Synced lyrics aren’t available — showing plain text.
-              </MonoLabel>
-              <div className="font-serif text-[22px] leading-[1.5] text-ink whitespace-pre-wrap text-pretty max-w-[680px]">
-                {cleanLyric(effectiveView === 'en' && hit.data.plain_en ? hit.data.plain_en : hit.data.plain)}
-              </div>
-            </div>
           )}
         </div>
       </div>

@@ -22,6 +22,20 @@ function requiredInt(name) {
   return n;
 }
 
+// Opt-in vars: blank/unset is fine (the feature stays off), so these never
+// fail-fast at boot — they fall back to the given default instead.
+function optional(name, fallback = '') {
+  const value = process.env[name];
+  return (value === undefined || value === '') ? fallback : value;
+}
+
+function optionalInt(name, fallback) {
+  const value = process.env[name];
+  if (value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // ── Catalog provider: endpoint, media decryption, request shape ──
 export const CATALOG_API_BASE    = required('CATALOG_API_BASE');
 export const CATALOG_MEDIA_KEY   = required('CATALOG_MEDIA_KEY');
@@ -47,7 +61,31 @@ export const CATALOG_M_ARTIST   = required('CATALOG_M_ARTIST');
 export const CATALOG_M_ALBUM    = required('CATALOG_M_ALBUM');
 export const CATALOG_M_SUGGEST  = required('CATALOG_M_SUGGEST');   // autocomplete.get — multi-entity search
 
-// ── Synced-lyrics provider ──
+// ── Synced-lyrics provider (LRCLIB) ──
 export const LYRICS_API_BASE   = required('LYRICS_API_BASE');
 export const LYRICS_USER_AGENT = required('LYRICS_USER_AGENT');
 export const LYRICS_TIMEOUT_MS = requiredInt('LYRICS_TIMEOUT_MS');
+
+// ── Additional synced-lyrics providers (opt-in) ──
+// Musixmatch via the community usertoken (best Indian-regional coverage). Leave
+// MUSIXMATCH_USERTOKEN blank to skip the provider. NetEase needs a self-hosted
+// NeteaseCloudMusicApi base URL. See .env.example for the ToS caveat.
+export const MUSIXMATCH_USERTOKEN  = optional('MUSIXMATCH_USERTOKEN');
+export const MUSIXMATCH_API_BASE   = optional('MUSIXMATCH_API_BASE', 'https://apic-desktop.musixmatch.com/ws/1.1/');
+export const MUSIXMATCH_TIMEOUT_MS = optionalInt('MUSIXMATCH_TIMEOUT_MS', LYRICS_TIMEOUT_MS);
+export const NETEASE_API_BASE      = optional('NETEASE_API_BASE');
+
+// ── Lyrics generation worker (Replicate WhisperX) — opt-in ──
+// When REPLICATE_API_TOKEN + PUBLIC_BASE_URL are set, songs with no synced match
+// in any provider are queued and transcribed-and-aligned from their audio. Left
+// blank, generation is disabled and those songs simply read "not available".
+export const REPLICATE_API_TOKEN     = optional('REPLICATE_API_TOKEN');
+export const REPLICATE_WHISPER_MODEL = optional('REPLICATE_WHISPER_MODEL', 'victor-upmeet/whisperx');
+export const PUBLIC_BASE_URL         = optional('PUBLIC_BASE_URL');      // e.g. https://aurafm.live (for the Replicate webhook callback)
+export const LYRICS_WEBHOOK_SECRET   = optional('LYRICS_WEBHOOK_SECRET'); // shared secret guarding the webhook (fallback when no signing secret)
+// Replicate's webhook signing secret (whsec_…, from GET /v1/webhooks/default/secret).
+// When set, the webhook is authenticated by HMAC signature instead of a URL token,
+// so no secret travels in the callback URL (which Replicate logs). See replicateWebhook.js.
+export const REPLICATE_WEBHOOK_SIGNING_SECRET = optional('REPLICATE_WEBHOOK_SIGNING_SECRET');
+export const CRON_SECRET             = optional('CRON_SECRET');           // Vercel Cron bearer token authorizing /api/lyrics-jobs/process
+export const LYRICS_GEN_DAILY_CAP    = optionalInt('LYRICS_GEN_DAILY_CAP', 500); // max generation jobs dispatched per day (spend guard)
