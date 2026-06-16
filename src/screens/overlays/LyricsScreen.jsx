@@ -159,6 +159,10 @@ export function LyricsScreen({ track, audioTime, playing, ended = false, onClose
           cinematic={cinematic}
         />
       )}
+
+      {status === 'ok' && hit.data.available && !hit.data.synced && !hit.data.pending && (
+        <PlainView lines={hit.data.lines} view={effectiveView}/>
+      )}
       </div>
       </div>
     </>
@@ -189,6 +193,28 @@ function LyricsGapMark() {
             style={{ '--h': '80%',  '--d': '290ms' }}/>
       <span style={{ '--h': '100%', '--d': '410ms' }}/>
       <span style={{ '--h': '65%',  '--d': '560ms' }}/>
+    </div>
+  );
+}
+
+// Plain (untimed) lyrics — the catalog's own text, shown when no synced provider
+// had the song. No timestamps, so no active highlight, tap-to-seek, or gap marks:
+// just a readable column that still honours the English ⇄ original toggle. A quiet
+// caption sets the expectation that it won't scroll with the music.
+function PlainView({ lines, view }) {
+  const lineFor = (l) => cleanLyric((view === 'en' && l.line_en) ? l.line_en : l.line);
+  return (
+    <div className="flex-1 p-7 overflow-auto scroll-smooth">
+      <div className="flex flex-col gap-[18px]">
+        {lines.filter(l => l.line).map((l, i) => (
+          <div key={i} className="aura-lyrics-line text-[22px] leading-[1.3] tracking-[-0.01em] text-ink-soft text-pretty">
+            {lineFor(l)}
+          </div>
+        ))}
+      </div>
+      <div className="mt-8 font-sans text-[12px] text-ink-faint">
+        These lyrics aren’t synced to the music.
+      </div>
     </div>
   );
 }

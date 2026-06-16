@@ -1,8 +1,9 @@
 import { fetchAuthed } from '../lib/auth';
-// Lyrics fetcher (client). Returns the same shape as the server (synced-only):
+// Lyrics fetcher (client). Returns the same shape as the server:
 //   { available: true,  synced: true,  lines: [{t, line, line_en?}], has_english, source }
+//   { available: true,  synced: false, lines: [{line, line_en?}],    has_english, source } // plain, untimed
 //   { available: false, synced: false, pending: true }   // being generated — poll again
-//   { available: false, synced: false }                  // no synced lyrics exist
+//   { available: false, synced: false }                  // no lyrics anywhere
 //
 // First-fetch of a song is slow server-side (provider call + Gemini romanization),
 // then cached in Postgres for 7 days. To hide that latency we (a) prefetch the

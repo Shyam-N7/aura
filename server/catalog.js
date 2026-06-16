@@ -9,6 +9,7 @@ import {
   CATALOG_CTX, CATALOG_CTX_HOME, CATALOG_API_VERSION,
   CATALOG_AUDIO_SRC_QUALITY, CATALOG_IMG_SRC_SIZE, CATALOG_IMG_DEST_SIZE,
   CATALOG_M_SEARCH, CATALOG_M_SONG, CATALOG_M_HOME, CATALOG_M_PLAYLIST, CATALOG_M_SUGGEST,
+  CATALOG_M_LYRICS,
 } from './config.js';
 
 const HTML_ENTITIES = { amp: '&', quot: '"', '#039': "'", apos: "'", lt: '<', gt: '>' };
@@ -111,6 +112,51 @@ export async function getSongDetails(ids) {
     ? body.songs
     : (body && typeof body === 'object' ? Object.values(body) : []);
   return songs.filter(s => s && s.id).map(mapSong);
+}
+
+// The provider serves plain (untimed) lyrics for many of its own songs via the
+// lyrics method. They arrive as one HTML blob with `<br>` line breaks, often
+// prefixed by a metadata header ("Movie - X", "Song - Y") before a blank line.
+// Strip that leading header and split into display lines. Returns null on
+// anything unusable so the caller can fall through to "no lyrics".
+const LYRIC_META = /\b(movie|film|song|album|singers?|music|lyrics?|composer|cast|starring|director|label)\b\s*[-:]/i;
+export function parsePlainLyrics(html) {
+  if (!html || typeof html !== 'string') return null;
+  // Lines are separated by <br> OR by raw line breaks — including the Unicode
+  // line/paragraph separators (U+2028/U+2029) the provider uses *inside* verses,
+  // which is the actual per-line break for many songs (without splitting on
+  // them, a whole verse collapses into one run-on blob).
+  const raw = html.split(/<br\s*\/?>|[\r\n\u2028\u2029]/i).map(s => decodeEntities(s).trim());
+  // Drop the leading header block: consecutive empty/metadata lines at the very
+  // top, up to a small cap so a freak match can never eat the whole song.
+  let i = 0;
+  while (i < raw.length && i < 8 && (raw[i] === '' || LYRIC_META.test(raw[i]))) i++;
+  const lines = raw.slice(i).filter(l => l !== '').map(line => ({ line }));
+  return lines.length ? lines : null;
+}
+
+// Plain-lyrics fallback: the catalog's own untimed lyrics for a track, used only
+// when no synced provider has it. Best-effort — any failure yields null and the
+// lyrics endpoint moves on. `source: 'jiosaavn'` tags where the text came from.
+export async function getPlainLyrics(trackId) {
+  if (!trackId) return null;
+  try {
+    const url = new URL(CATALOG_API_BASE);
+    url.searchParams.set('__call',      CATALOG_M_LYRICS);
+    url.searchParams.set('_format',     'json');
+    url.searchParams.set('_marker',     '0');
+    url.searchParams.set('api_version', CATALOG_API_VERSION);
+    url.searchParams.set('ctx',         CATALOG_CTX);
+    url.searchParams.set('lyrics_id',   trackId);
+
+    const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => null);
+    const lines = parsePlainLyrics(body?.lyrics);
+    return lines ? { lines, source: 'jiosaavn' } : null;
+  } catch {
+    return null;
+  }
 }
 
 // The provider returns the same song under multiple IDs (single, OST album,

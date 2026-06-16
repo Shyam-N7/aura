@@ -241,6 +241,7 @@ app.get('/api/lyrics/:track_id', async (req, res) => {
 
     const track = await getTrackById(track_id);
     const result = await getLyricsForTrack({
+      trackId: track_id,
       title: track.title,
       artist: track.artist,
       durationSec: track.durationSec,
@@ -256,9 +257,20 @@ app.get('/api/lyrics/:track_id', async (req, res) => {
       return respond(result, { cacheHit: false, source: result.source, synced: true });
     }
 
-    // No synced lyrics in any provider. If audio generation is configured, queue
-    // a job and tell the client to poll; otherwise it's simply unavailable —
-    // strictly synced-only, we never fall back to plain text.
+    // Synced missed, but the catalog had plain (untimed) lyrics. Show them rather
+    // than nothing — cached like any terminal result so we replay it next time.
+    if (result.available) {
+      await saveLyrics(track_id, {
+        source: result.source,
+        synced: false,
+        payload: { lines: result.lines, has_english: !!result.has_english },
+      });
+      return respond(result, { cacheHit: false, source: result.source, synced: false });
+    }
+
+    // No lyrics anywhere — not synced, not even plain. If audio generation is
+    // configured, queue a job and tell the client to poll; otherwise it's simply
+    // unavailable.
     if (generationEnabled()) {
       await saveLyrics(track_id, { source: 'pending', synced: false, payload: {} });
       const job = await enqueueLyricJob(track_id);
