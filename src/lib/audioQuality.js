@@ -44,16 +44,24 @@ const STANDARD = [320, 160, 96, 48];
 // Rewrite the bitrate suffix. Anchored to the `.mp4` filename extension (end of
 // path or right before `?query`) so query strings and any other digits in the
 // path are left alone. Returns the url unchanged when there's no token to swap.
+const BITRATE_TOKEN = /_\d+\.mp4(?=\?|$)/;
+let warnedNoToken = false;
 export function swapBitrate(url, bitrate) {
   if (!url) return url;
-  return url.replace(/_\d+\.mp4(?=\?|$)/, `_${bitrate}.mp4`);
+  // No swappable token → the chosen quality can't be applied and the url plays
+  // at whatever bitrate the server baked in. Warn once so the drift is visible.
+  if (!warnedNoToken && !BITRATE_TOKEN.test(url)) {
+    warnedNoToken = true;
+    console.warn('[audioQuality] stream URL has no bitrate token — quality swap is a no-op:', url);
+  }
+  return url.replace(BITRATE_TOKEN, `_${bitrate}.mp4`);
 }
 
 // Ordered urls to try for a chosen bitrate: the choice first, then descending
 // fallbacks (never above the choice — respects "low" as a data-saver). A url
 // with no swappable token can't be re-quality'd, so it's tried as-is.
 export function qualityLadder(url, bitrate) {
-  if (!url || !/_\d+\.mp4(?=\?|$)/.test(url)) return url ? [url] : [];
+  if (!url || !BITRATE_TOKEN.test(url)) return url ? [url] : [];
   const tiers = STANDARD.filter(b => b <= bitrate);
   const seen = new Set();
   const out = [];

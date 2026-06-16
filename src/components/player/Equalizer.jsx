@@ -5,6 +5,12 @@ import { VolumeSlider } from './VolumeSlider';
 import { EQ_FREQS, EQ_LABELS, EQ_RANGE_DB, EQ_PRESETS, gainsMatch } from '../../audio/eqConfig';
 import { QUALITIES } from '../../lib/audioQuality';
 import { useAudioQuality } from '../../hooks/useAudioQuality';
+import { useEqUserPresets } from '../../hooks/useEqUserPresets';
+import { saveEqUserPreset, deleteEqUserPreset, MAX_PRESETS } from '../../lib/eqPresets';
+import { prompt } from '../../lib/prompt';
+import { confirm } from '../../lib/confirm';
+import { toast } from '../../lib/toast';
+import { isIOS } from '../../lib/platform';
 import './Equalizer.css';
 
 // Geometry for the curve-fader area (a fixed-size canvas inside the popup, so
@@ -94,6 +100,7 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   const panelRef = useRef(null);
   const dragRef = useRef(null);            // band index currently dragged (or null)
   const [quality, setQuality] = useAudioQuality();
+  const userPresets = useEqUserPresets();
   const [gains, setGains] = useState(() => player.getEqGains());
   const [activeBand, setActiveBand] = useState(null);
   const [volumeActive, setVolumeActive] = useState(false);
@@ -115,6 +122,18 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   // Initial value comes from the useState initializer above; this only listens
   // for later changes (incl. another EQ instance).
   useEffect(() => player.on('eq', (g) => setGains(g.slice())), [player]);
+
+  // iOS heads-up (once): tapping the EQ commits the Web Audio tap, which iOS
+  // forfeits lock-screen / background playback for. Tell the user before they
+  // touch a slider so it isn't a silent surprise. See HtmlAudioPlayer.play().
+  useEffect(() => {
+    if (!isIOS()) return;
+    try {
+      if (localStorage.getItem('aura.eq.iosWarned') === '1') return;
+      localStorage.setItem('aura.eq.iosWarned', '1');
+    } catch { /* localStorage disabled — show it anyway */ }
+    toast('on iphone, using the equalizer pauses lock-screen playback for this session.');
+  }, []);
 
   // Centered modal — close on outside pointer / Esc. (The trigger is excluded so
   // a re-tap toggles via EqualizerControl instead of double-firing a close.)
@@ -155,8 +174,30 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
     player.setEqBand(i, next);
   };
 
+  // Save the live curve as a named preset. Only offered when it's "Custom" (the
+  // curve matches no existing preset). Reuses the shared prompt/toast buses.
+  const savePreset = async () => {
+    const name = await prompt({ title: 'name this preset', placeholder: 'e.g. late night', submitLabel: 'save' });
+    if (!name) return;   // prompt returns the trimmed value, or null on cancel/empty
+    if (userPresets.length >= MAX_PRESETS) { toast(`preset limit reached (${MAX_PRESETS}).`); return; }
+    if (userPresets.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      toast('you already have a preset with that name.'); return;
+    }
+    saveEqUserPreset(name, player.getEqGains());
+    toast('preset saved.');
+  };
+  const removePreset = async (preset) => {
+    if (await confirm({ title: `delete "${preset.name}"?`, danger: true, confirmLabel: 'delete' })) {
+      deleteEqUserPreset(preset.id);
+      toast('preset deleted.');
+    }
+  };
+
   const points = gains.map((g, i) => ({ x: bandX(i), y: gainToY(g) }));
-  const activePreset = EQ_PRESETS.find(p => gainsMatch(p.gains, gains));
+  // The active chip can be a built-in mood preset OR one of the user's saved
+  // ones — check both so a saved curve highlights when it's the current sound.
+  const activePreset = EQ_PRESETS.find(p => gainsMatch(p.gains, gains))
+    ?? userPresets.find(p => gainsMatch(p.gains, gains));
   const readout = activeBand != null ? `${EQ_LABELS[activeBand]} · ${fmtDb(gains[activeBand])}` : 'Equalizer';
 
   const target = document.querySelector('.aura-responsive-shell') ?? document.body;
@@ -188,9 +229,28 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
             {p.name}
           </button>
         ))}
-        {/* Appears + activates automatically once the curve no longer matches a
-            named preset (i.e. the user dialled their own). */}
+        {/* The user's own saved curves — load on tap, delete via the × . */}
+        {userPresets.map(p => (
+          <span key={p.id} className={`aura-eq__chip aura-eq__chip--user ${activePreset?.id === p.id ? 'is-on' : ''}`}>
+            <button type="button" className="aura-eq__chip-load" onClick={() => player.setEqGains(p.gains)}>
+              {p.name}
+            </button>
+            <button type="button" className="aura-eq__chip-del" aria-label={`delete ${p.name}`}
+              onClick={() => removePreset(p)}>
+              <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </span>
+        ))}
+        {/* Custom: appears once the curve matches no preset (user dialled their
+            own). Sits next to a save action so they can keep it. */}
         {!activePreset && <span className="aura-eq__chip aura-eq__chip--custom is-on">Custom</span>}
+        {!activePreset && userPresets.length < MAX_PRESETS && (
+          <button type="button" className="aura-eq__chip aura-eq__chip--save" onClick={savePreset}>
+            + Save
+          </button>
+        )}
       </div>
 
       {/* Bands gray + blur out while the volume control is being used, so the two

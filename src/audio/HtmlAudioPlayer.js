@@ -41,7 +41,14 @@ export class HtmlAudioPlayer {
     this._onEnded     = () => { this._stopTick(); this._emit('ended'); };
     this._onPlay      = () => { this._startTick(); this._emit('play'); };
     this._onPause     = () => { this._stopTick(); this._emit('pause'); };
-    this._onError     = (e) => { this._stopTick(); this._emit('error', e); };
+    // While a quality-ladder probe is in flight, a candidate that doesn't exist
+    // (e.g. a track with no 320 variant) fires this 'error' too — but that's an
+    // expected "this bitrate is missing, try the next" signal, NOT a playback
+    // failure. Swallow it: _loadUrl handles the descent and emits a real 'error'
+    // only if EVERY candidate fails. Surfacing probe misses here used to trip
+    // App's expired-URL recovery, which refetched + reloaded the track mid-
+    // descent and made playback stutter/restart/skip.
+    this._onError     = (e) => { if (this._probing) return; this._stopTick(); this._emit('error', e); };
     // Native `seeked` fires after the audio element finishes seeking. Emitting
     // here covers the case where a seek happens during a rAF-throttled window
     // (e.g., tab backgrounded) so the UI bar snaps to the new position.
@@ -78,6 +85,12 @@ export class HtmlAudioPlayer {
       const eq = JSON.parse(localStorage.getItem('aura.eq.gains') ?? 'null');
       if (Array.isArray(eq)) this._eqGains = sanitizeGains(eq);
     } catch { /* localStorage disabled / corrupt — leave flat defaults */ }
+    // True while _loadUrl is walking the bitrate ladder (see _onError above).
+    this._probing = false;
+    // Monotonic load token: every load()/_setBitrate() bumps it so an older,
+    // still-in-flight descent can detect it was superseded and bail instead of
+    // racing a newer one over the same <audio> element.
+    this._loadSeq = 0;
     // Audio quality: bitrate is a swappable suffix in the stream url (see
     // lib/audioQuality). Resolve the chosen bitrate now and react to later
     // changes by hot-reloading the current track at the new quality.
@@ -201,6 +214,7 @@ export class HtmlAudioPlayer {
 
   async load(track) {
     const url = track?.streamUrl;
+    const seq = ++this._loadSeq;   // supersede any in-flight load
     this._baseUrl = url ?? null;
     this._silent = !url;
     this._el.pause();
@@ -211,24 +225,38 @@ export class HtmlAudioPlayer {
       this._el.removeAttribute('src');
       return;
     }
-    await this._loadUrl(url);
+    await this._loadUrl(url, seq);
   }
 
   // Try the chosen bitrate, then descending fallbacks (qualityLadder), so
   // "highest by default" never breaks a track that lacks a 320 variant. Resolves
-  // on the first source that can play; rejects only when every candidate errors.
-  async _loadUrl(baseUrl) {
+  // on the first source that can play. Candidate misses are swallowed (via the
+  // _probing guard the 'error' handler checks); a real 'error' is emitted ONLY
+  // when every candidate fails — a genuinely dead/expired URL — so App's
+  // expired-URL recovery still fires for that, but not for a routine downgrade.
+  async _loadUrl(baseUrl, seq = this._loadSeq) {
     const candidates = qualityLadder(baseUrl, this._bitrate);
     let lastErr;
-    for (const candidate of candidates) {
-      try {
-        await this._setSrc(candidate);
-        return;
-      } catch (e) {
-        lastErr = e;
+    this._probing = true;
+    try {
+      for (const candidate of candidates) {
+        if (seq !== this._loadSeq) return;   // a newer load superseded this one
+        try {
+          await this._setSrc(candidate);
+          return;                            // first playable candidate wins
+        } catch (e) {
+          lastErr = e;
+        }
       }
+    } finally {
+      // Only the CURRENT load clears the probe guard — an older, superseded load
+      // finishing must not unmask the newer load's in-flight probes (rapid skip).
+      if (seq === this._loadSeq) this._probing = false;
     }
-    throw lastErr ?? new Error('no playable source');
+    if (seq !== this._loadSeq) return;        // superseded — let the newer load own the error
+    const err = lastErr ?? new Error('no playable source');
+    this._emit('error', err);                 // every candidate failed: real load error
+    throw err;
   }
 
   _setSrc(url) {
@@ -254,8 +282,10 @@ export class HtmlAudioPlayer {
     if (this._silent || !this._baseUrl) return;
     const at = this._el.currentTime;
     const wasPlaying = !this._el.paused;
+    const seq = ++this._loadSeq;
     try {
-      await this._loadUrl(this._baseUrl);
+      await this._loadUrl(this._baseUrl, seq);
+      if (seq !== this._loadSeq) return;   // a track change superseded this re-quality
       if (Number.isFinite(at)) this._el.currentTime = at;
       if (wasPlaying) await this._el.play();
     } catch { /* keep playing whatever was loaded before */ }

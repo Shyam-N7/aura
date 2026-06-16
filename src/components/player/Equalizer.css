@@ -131,6 +131,35 @@
 /* Read-only indicator (auto-shown when the curve matches no named preset). */
 .aura-eq__chip--custom { cursor: default; }
 
+/* User-saved presets: a chip pairing a "load" button with a delete affordance.
+   The chip itself is a flex container; its children carry the padding. */
+.aura-eq__chip--user { display: inline-flex; align-items: center; padding: 0; overflow: hidden; }
+.aura-eq__chip-load {
+  font: inherit;
+  padding: 4px 4px 4px 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.aura-eq__chip-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px 4px 4px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+.aura-eq__chip-del:hover { opacity: 1; }
+.aura-eq__chip--user.is-on .aura-eq__chip-del { opacity: 0.85; }
+
+/* "+ Save" the live custom curve as a named preset. Dashed to read as an action. */
+.aura-eq__chip--save { border-style: dashed; }
+
 /* ── Quality row (sound) — label + bitrate pills, separated like volume. ── */
 .aura-eq__quality {
   display: flex;
