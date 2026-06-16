@@ -64,9 +64,6 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
-          <MonoLabel className="text-ink-faint" size={10}>
-            {hit.data ? `${tracks.length} ${tracks.length === 1 ? 'track' : 'tracks'}` : 'playlist'}
-          </MonoLabel>
         </div>
 
         {status === 'loading' && (
