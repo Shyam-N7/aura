@@ -102,7 +102,30 @@ git push -u origin main
    GOOGLE_CLIENT_ID      → Google sign-in (server-side verify)
    RESEND_API_KEY        → real signup/reset emails
    MAIL_FROM             → e.g. AURA <noreply@aurafm.live>
+   MUSIXMATCH_USERTOKEN  → extra synced-lyrics coverage, FREE (best for Indian
+                           regional film music, which LRCLIB largely lacks). Mint
+                           one from the desktop token endpoint:
+                           GET apic-desktop.musixmatch.com/ws/1.1/token.get
+                               ?app_id=web-desktop-app-v1.0&format=json
+                           (desktop User-Agent + `Cookie: x-mxm-token-guid=`) →
+                           message.body.user_token. ToS gray area; the token can
+                           be rate-limited/revoked — re-mint and update this var.
    ```
+
+   **Lyrics generation (Replicate WhisperX) — OPTIONAL & PAID.** Only the long tail
+   that no provider (LRCLIB → Musixmatch → NetEase) has anywhere is generated from
+   audio. Pay-per-use (~1–4¢/song, charged once then cached forever) and needs a
+   billing-enabled Replicate account. Leave the whole group blank to keep it off.
+   To enable, set `REPLICATE_API_TOKEN`, `PUBLIC_BASE_URL` (`https://aurafm.live`),
+   `REPLICATE_WEBHOOK_SIGNING_SECRET` (`whsec_…` from Replicate's
+   `GET /v1/webhooks/default/secret`), `CRON_SECRET` (random string; authorizes the
+   daily reaper cron in `vercel.json`), and optionally `LYRICS_GEN_DAILY_CAP` (spend
+   guard, default 500/day). The pipeline (HMAC-verified webhook, atomic daily cap)
+   is already built — see `.env.example` for the full notes.
+
+   > After adding `MUSIXMATCH_USERTOKEN`, clear cached misses so already-viewed
+   > songs re-check through the richer chain (misses are cached `'none'` for 7 days):
+   > `DELETE FROM lyrics WHERE source IN ('none','pending');`
 
    **Build-time (browser bundle) — add under env too:**
    ```
