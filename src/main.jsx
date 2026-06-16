@@ -44,6 +44,9 @@ const TermsPage   = lazy(() => import('./screens/TermsPage').then(m => ({ defaul
 // match the theme during the page's own scroll/reflow.
 const THEME_BG = { dusk: '#e9dfd1', midnight: '#1a1612', bloom: '#f3e8e4' };
 
+// Theme cycle shared with the in-app toggle: light → dark → pink → light.
+const NEXT_THEME = { dusk: 'midnight', midnight: 'bloom', bloom: 'dusk' };
+
 function readTheme() {
   try { return localStorage.getItem('aura.theme') || 'dusk'; }
   catch { return 'dusk'; }
@@ -129,7 +132,7 @@ function AppRoot() {
   const [, bumpTheme] = useState(0);
   const theme = readTheme();
   const toggleTheme = useCallback(() => {
-    const next = readTheme() === 'midnight' ? 'dusk' : 'midnight';
+    const next = NEXT_THEME[readTheme()] || 'midnight';
     try { localStorage.setItem('aura.theme', next); } catch { /* ignore */ }
     bumpTheme((n) => n + 1);
   }, []);

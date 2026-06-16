@@ -1,5 +1,6 @@
 /* Sits inline next to the search affordance at every breakpoint. */
 .aura-theme-toggle {
+  --bloom-pink: #e0689b;
   width: 32px;
   height: 32px;
   display: inline-flex;
@@ -39,35 +40,75 @@
   overflow: visible;
 }
 
-/* Sun fades + rotates out when going dark; moon fades + rotates in. The shared
-   transform-origin keeps both spinning around the same point so the swap reads
-   as one motion. */
+/* Sun (dusk), moon (midnight) and blossom (bloom) share one transform-origin
+   so each swap reads as a single spin: the outgoing glyph rotates + shrinks
+   away while the incoming one rotates + grows in. */
 .aura-theme-toggle__sun,
-.aura-theme-toggle__moon {
+.aura-theme-toggle__moon,
+.aura-theme-toggle__bloom {
   transform-origin: 12px 12px;
   transition:
     transform 380ms cubic-bezier(.4, .14, .3, 1),
     opacity 260ms ease;
 }
 
+/* dusk = default: sun shown, the other two parked off-stage. */
 .aura-theme-toggle__sun {
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
 
-.aura-theme-toggle__moon {
+.aura-theme-toggle__moon,
+.aura-theme-toggle__bloom {
   opacity: 0;
   transform: rotate(-90deg) scale(0);
-  fill: currentColor;
-  stroke: none;
 }
 
-.aura-theme-toggle.is-dark .aura-theme-toggle__sun {
+/* The blossom is an outline (sketch) in a fixed pink in every palette, so the
+   control always reads as "the pink theme" and matches the line-art sun/moon. */
+.aura-theme-toggle__bloom {
+  fill: none;
+  stroke: var(--bloom-pink);
+}
+
+/* midnight: moon in, sun out. */
+.aura-theme-toggle--midnight .aura-theme-toggle__sun {
   opacity: 0;
   transform: rotate(90deg) scale(0);
 }
-
-.aura-theme-toggle.is-dark .aura-theme-toggle__moon {
+.aura-theme-toggle--midnight .aura-theme-toggle__moon {
   opacity: 1;
   transform: rotate(0deg) scale(1);
+}
+
+/* bloom: blossom in, sun out. */
+.aura-theme-toggle--bloom .aura-theme-toggle__sun {
+  opacity: 0;
+  transform: rotate(90deg) scale(0);
+}
+.aura-theme-toggle--bloom .aura-theme-toggle__bloom {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+/* Pink theme active: tint the whole switch so the on-state is unmistakable. */
+.aura-theme-toggle--bloom {
+  color: var(--bloom-pink);
+  border-color: color-mix(in srgb, var(--bloom-pink), transparent 45%);
+  background: color-mix(in srgb, var(--bloom-pink), transparent 88%);
+}
+.aura-theme-toggle--bloom:hover {
+  color: var(--bloom-pink);
+  border-color: color-mix(in srgb, var(--bloom-pink), transparent 28%);
+  background: color-mix(in srgb, var(--bloom-pink), transparent 80%);
+}
+
+/* Honour reduced-motion: swap the glyph instantly, no spin/fade. */
+@media (prefers-reduced-motion: reduce) {
+  .aura-theme-toggle,
+  .aura-theme-toggle__sun,
+  .aura-theme-toggle__moon,
+  .aura-theme-toggle__bloom {
+    transition: none;
+  }
 }
