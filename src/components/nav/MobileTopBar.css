@@ -32,11 +32,13 @@
     inset 0 1px 0 rgb(255 255 255 / 0.12);
 }
 
-/* ── Morph layers ─────────────────────────────────────────────────────────
-   Two absolutely-stacked layers fill the pill; `.is-searching` cross-fades
-   between them. Only opacity + transform animate (composite, no reflow → the
-   blurred pill is never re-rasterised) and the pill never resizes. Opacity
-   (220ms) settles before transform (320ms) for a readable hand-off. */
+/* ── Liquid-glass search morph ────────────────────────────────────────────
+   Two absolutely-stacked layers fill the frosted pill; `.is-searching` hands
+   off between them. The whole thing stays GLASS (the backdrop-filter lives on
+   the pill, never on a child) — the "gooey" reads as a liquid bloom: the search
+   field swells OUT of the search-icon corner while the bar contents collapse
+   back INTO it, on a springy (slightly over-shooting) curve. No SVG goo here —
+   the metaball merge only works on solid fills, which would kill the glass. */
 .aura-mobile-top__bar-content,
 .aura-mobile-top__searchfield {
   position: absolute;
@@ -45,31 +47,37 @@
   align-items: center;
   padding: 0 14px;
   border-radius: inherit;
-  transition: opacity 220ms cubic-bezier(.2, .7, .2, 1),
-              transform 320ms cubic-bezier(.2, .7, .2, 1);
+  transform-origin: right center;   /* both pivot on the ⌕ icon's corner */
+  transition: opacity 200ms cubic-bezier(.3, .7, .3, 1),
+              transform 380ms cubic-bezier(.34, 1.32, .5, 1);   /* spring/overshoot = liquid */
   will-change: opacity, transform;
 }
 .aura-mobile-top__bar-content { justify-content: space-between; }
 .aura-mobile-top__searchfield {
   gap: 8px;
   opacity: 0;
-  transform: translateX(28px);
+  transform: scale(0.78);          /* swell out from the icon corner */
   pointer-events: none;
 }
 .aura-mobile-top.is-searching .aura-mobile-top__bar-content {
   opacity: 0;
-  transform: translateX(-10px);
+  transform: scale(0.88);          /* collapse back into the icon */
   pointer-events: none;
 }
 .aura-mobile-top.is-searching .aura-mobile-top__searchfield {
   opacity: 1;
-  transform: translateX(0);
+  transform: scale(1);
   pointer-events: auto;
-  transition-delay: 40ms, 0ms;   /* opacity waits so the trio clears before the field paints */
+  transition-delay: 60ms, 0ms;     /* opacity waits so the trio clears before the field blooms */
 }
 @media (prefers-reduced-motion: reduce) {
   .aura-mobile-top__bar-content,
-  .aura-mobile-top__searchfield { transition: none; }
+  .aura-mobile-top__searchfield {
+    transition: opacity 160ms ease;
+    transform: none;
+  }
+  .aura-mobile-top.is-searching .aura-mobile-top__bar-content,
+  .aura-mobile-top.is-searching .aura-mobile-top__searchfield { transform: none; }
 }
 
 .aura-mobile-top__brand {
