@@ -147,7 +147,7 @@ const PLAYER_ART_RADIUS = 6;
 const DEFAULT_TWEAKS = /*EDITMODE-BEGIN*/{
   "djName": "AURA",
   "theme": "dusk",
-  "mood": "ready",
+  "mood": "calm",
   "skipSensing": false
 }/*EDITMODE-END*/;
 

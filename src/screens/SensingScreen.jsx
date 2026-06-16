@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MonoLabel, BreathingDot } from '../components/primitives';
 import { formatLongStamp, partOfDay } from '../hooks/useNow';
+import { getCurrentMood } from '../api/mood';
 import './SensingScreen.css';
 
 export function SensingScreen({ mood, onReady }) {
@@ -19,6 +20,16 @@ export function SensingScreen({ mood, onReady }) {
   ];
   const [shown, setShown] = useState(0);
   const [reveal, setReveal] = useState(false);
+  // Reflect the actually-sensed mood when we have a confident read (same source
+  // NavRail uses); fall back to the provided default for new accounts with no
+  // listening history yet — so this never shows a non-mood placeholder.
+  const [snapshot, setSnapshot] = useState(null);
+  useEffect(() => {
+    const ctl = new AbortController();
+    getCurrentMood({ signal: ctl.signal }).then(setSnapshot).catch(() => {});
+    return () => ctl.abort();
+  }, []);
+  const liveMood = (snapshot?.mood && snapshot.confidence >= 0.5) ? snapshot.mood : mood;
   useEffect(() => {
     const tt = lines.map((l, i) => setTimeout(() => setShown(i + 1), l.t));
     const r = setTimeout(() => setReveal(true), 3700);
@@ -54,7 +65,7 @@ export function SensingScreen({ mood, onReady }) {
         <MonoLabel className="text-ink-faint" size={9}>Your mood</MonoLabel>
         <div
           className={`aura-sensing-mood ${reveal ? 'aura-sensing-mood--revealed' : ''} font-serif italic text-[68px] leading-none tracking-[-0.02em] mt-1.5 text-ink`}
-        >{mood}.</div>
+        >{liveMood}.</div>
         <div
           className={`aura-sensing-tagline ${reveal ? 'aura-sensing-tagline--revealed' : ''} mt-3.5 font-sans text-[13px] text-ink-faint`}
         >Setting up your home…</div>
