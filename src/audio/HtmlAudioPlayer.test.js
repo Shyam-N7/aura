@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HtmlAudioPlayer } from './HtmlAudioPlayer';
+import { dbToGain } from './eqConfig';
 
 // jsdom can't actually load media (no canplay/error from real network), so these
 // cover the parts of the contract that DON'T need a real stream: the probe-error
@@ -35,6 +36,41 @@ describe('HtmlAudioPlayer — quality-ladder probe error suppression', () => {
     // A silent load (no streamUrl) returns immediately without touching media.
     await p.load({ id: 'x', streamUrl: null });
     expect(p._loadSeq).toBe(before + 1);
+    p.destroy();
+  });
+});
+
+// The makeup gain is the EQ's anti-clip headroom: boosts get pre-attenuated so a
+// hot master can't overflow ctx.destination (the crackle bug). jsdom has no Web
+// Audio, so the graph never builds — but _makeupGain() is pure math over the
+// stored gains, which is exactly the contract worth pinning.
+describe('HtmlAudioPlayer — EQ makeup gain (clipping headroom)', () => {
+  it('is unity (1.0) when flat — nothing boosted, nothing to clip', () => {
+    const p = new HtmlAudioPlayer();
+    p._eqGains = [0, 0, 0, 0, 0, 0, 0, 0];
+    expect(p._makeupGain()).toBe(1);
+    p.destroy();
+  });
+
+  it('stays unity for cuts-only — attenuation can never overflow', () => {
+    const p = new HtmlAudioPlayer();
+    p._eqGains = [-2, -1, 0, -3, 0, -1, -2, -4];
+    expect(p._makeupGain()).toBe(1);
+    p.destroy();
+  });
+
+  it('attenuates by the loudest positive band + 3 dB margin (Upbeat preset)', () => {
+    const p = new HtmlAudioPlayer();
+    p._eqGains = [3, 2, 0, -1, 0, 2, 3, 3];                  // peak boost = +3 dB
+    expect(p._makeupGain()).toBeCloseTo(dbToGain(-6), 10);   // -(3 + 3)
+    expect(p._makeupGain()).toBeLessThan(1);
+    p.destroy();
+  });
+
+  it('keys off the single loudest band regardless of cuts elsewhere', () => {
+    const p = new HtmlAudioPlayer();
+    p._eqGains = [-6, -6, 12, -6, -6, -6, -6, -6];           // one +12 spike
+    expect(p._makeupGain()).toBeCloseTo(dbToGain(-15), 10);  // -(12 + 3)
     p.destroy();
   });
 });

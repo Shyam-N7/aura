@@ -49,3 +49,7 @@ export function sanitizeGains(arr) {
   });
   return out;
 }
+
+// Decibels → linear amplitude gain. Shared by the audio engine's makeup/headroom
+// stage (HtmlAudioPlayer) so dB math lives with the rest of the EQ config.
+export function dbToGain(db) { return Math.pow(10, db / 20); }

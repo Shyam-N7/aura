@@ -1,6 +1,17 @@
-import { EQ_FREQS, EQ_FLAT, sanitizeGains } from './eqConfig.js';
+import { EQ_FREQS, EQ_FLAT, sanitizeGains, dbToGain } from './eqConfig.js';
 import { getAudioQuality, subscribeAudioQuality, bitrateFor, qualityLadder } from '../lib/audioQuality.js';
 import { isIOS } from '../lib/platform.js';
+
+// EQ boosts add level the source (loud-mastered AAC near 0 dBFS) has no room
+// for, so the graph hard-clips at ctx.destination — crackle. Two stages give it
+// headroom: a makeup GainNode pre-attenuates by the peak boost, and a brick-wall
+// limiter sits right at the 0 dBFS clip ceiling. The makeup keeps flat/cuts and
+// every realistic boost at or below full scale (verified: presets land ≥2 dB
+// under), so the limiter is inert there — fully transparent — and engages only
+// on pathological multi-band overshoot (e.g. several bands slammed to +12) that
+// would otherwise hard-clip.
+const EQ_HEADROOM_MARGIN_DB = 3.0;  // covers typical adjacent-peak crossover sum
+const EQ_GAIN_RAMP_TC = 0.02;       // setTargetAtTime time-constant (~60 ms to track)
 
 // Real audio via HTMLAudioElement. Plays track.streamUrl (catalog CDN mp4).
 // Tracks without a streamUrl (e.g. the mock demo catalog) become no-ops:
@@ -25,6 +36,8 @@ export class HtmlAudioPlayer {
     this._ctx = null;
     this._src = null;
     this._bands = null;
+    this._makeup = null;   // pre-EQ attenuation for boost headroom
+    this._limiter = null;  // brick-wall safety for residual crossover overshoot
     this._eqGains = EQ_FLAT.slice();
     // Tracks user/app intent to be playing, independent of the element's actual
     // paused state — iOS can pause the element on screen-lock without us asking,
@@ -133,17 +146,34 @@ export class HtmlAudioPlayer {
         f.gain.value = this._eqGains[i] ?? 0;
         return f;
       });
-      // source → b0 → b1 → … → bN → destination
+      // Headroom stage: makeup pre-attenuates boosts; limiter is the no-clip
+      // ceiling. Set makeup synchronously from the current gains so the very
+      // first audio already has room (later changes ramp — see _rampParam).
+      const makeup = ctx.createGain();
+      makeup.gain.value = this._makeupGain();
+      // Threshold at 0 dBFS (not below): the makeup already holds flat/cuts and
+      // realistic boosts ≤ full scale, so a ceiling exactly at the clip point
+      // stays transparent for in-range audio and only acts on true overshoot —
+      // a lower threshold would squash hot masters even when the EQ is flat.
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = 0; limiter.knee.value = 0; limiter.ratio.value = 20;
+      limiter.attack.value = 0.003; limiter.release.value = 0.25;
+      // source → b0 → b1 → … → bN → makeup → limiter → destination
       let node = src;
       for (const b of bands) { node.connect(b); node = b; }
-      node.connect(ctx.destination);
+      node.connect(makeup); makeup.connect(limiter); limiter.connect(ctx.destination);
       this._bands = bands;
+      this._makeup = makeup;
+      this._limiter = limiter;
     } catch {
       // Band chain failed AFTER the tap — keep audio alive (un-EQ'd) by routing
-      // the tapped source straight to the speakers.
+      // the tapped source straight to the speakers. No EQ gain here, so no clip
+      // to guard against — and nothing in this path may throw.
       try { src.disconnect(); } catch { /* ignore */ }
       try { src.connect(ctx.destination); } catch { /* ignore */ }
       this._bands = null;
+      this._makeup = null;
+      this._limiter = null;
     }
   }
 
@@ -152,16 +182,29 @@ export class HtmlAudioPlayer {
     if (!Number.isFinite(v) || i < 0 || i >= this._eqGains.length) return;
     this._eqGains[i] = v;
     this._enableEq();
-    if (this._bands?.[i]) this._bands[i].gain.value = v;
+    if (this._bands?.[i]) this._rampParam(this._bands[i].gain, v);
+    if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
   }
   setEqGains(arr) {
     this._eqGains = sanitizeGains(arr);
     this._enableEq();
-    if (this._bands) this._bands.forEach((b, i) => { b.gain.value = this._eqGains[i] ?? 0; });
+    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, this._eqGains[i] ?? 0));
+    if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
+  }
+  // Boost headroom: attenuate by the loudest positive band (+ margin) so the EQ
+  // re-balances tone instead of overflowing. Cuts-only / flat → unity (1.0).
+  _makeupGain() {
+    const maxPos = Math.max(0, ...this._eqGains);
+    return maxPos > 0 ? dbToGain(-(maxPos + EQ_HEADROOM_MARGIN_DB)) : 1;
+  }
+  // Ramp an AudioParam to a new value instead of snapping it — kills zipper
+  // noise when the UI streams setEqBand on every pointermove during a drag.
+  _rampParam(param, value) {
+    param.setTargetAtTime(value, this._ctx.currentTime, EQ_GAIN_RAMP_TC);
   }
   getEqGains() { return this._eqGains.slice(); }
   // First EQ touch builds the Web Audio tap. A slider/preset interaction is a
@@ -341,7 +384,7 @@ export class HtmlAudioPlayer {
     this._el.removeEventListener('seeked', this._onSeeked);
     document.removeEventListener('visibilitychange', this._onVisible);
     if (this._ctx) { try { this._ctx.close(); } catch { /* ignore */ } }
-    this._ctx = null; this._src = null; this._bands = null;
+    this._ctx = null; this._src = null; this._bands = null; this._makeup = null; this._limiter = null;
     this._listeners.clear();
   }
 
