@@ -92,12 +92,17 @@ git push -u origin main
    CATALOG_CTX  CATALOG_CTX_HOME  CATALOG_API_VERSION
    CATALOG_AUDIO_SRC_QUALITY  CATALOG_IMG_SRC_SIZE  CATALOG_IMG_DEST_SIZE
    CATALOG_M_SEARCH  CATALOG_M_SONG  CATALOG_M_HOME  CATALOG_M_PLAYLIST
-   CATALOG_M_RECO  CATALOG_M_LYRICS  CATALOG_M_ARTIST  CATALOG_M_ALBUM
+   CATALOG_M_LYRICS  CATALOG_M_ARTIST  CATALOG_M_ALBUM
    LYRICS_API_BASE  LYRICS_USER_AGENT  LYRICS_TIMEOUT_MS
    ```
 
    **Optional (features degrade gracefully if absent):**
    ```
+   CATALOG_M_STATION_CREATE  CATALOG_M_STATION_SONGS  CATALOG_CTX_STATION
+                         → "related / up next" radio. CATALOG_CTX_STATION must be
+                           the catalog's app context (the web context returns an
+                           empty station); without these, related-tracks falls
+                           back to an artist-seeded search.
    GEMINI_API_KEY        → AI features (why / talk / journal / DNA / greeting)
    GOOGLE_CLIENT_ID      → Google sign-in (server-side verify)
    RESEND_API_KEY        → real signup/reset emails

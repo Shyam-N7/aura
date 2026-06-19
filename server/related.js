@@ -1,11 +1,14 @@
-// Related-tracks lookup. Uses the catalog's song-seeded reco endpoint — a mix of
-// similar-vibe and some same-artist songs for a given pid. We keep it song-similar:
+// Related-tracks lookup. Builds a per-song station off the catalog's webradio
+// endpoints — a mix of similar-vibe songs for a given pid. We keep it song-similar:
 // no same-artist boost, capped to a couple of tracks per artist for diversity, and
-// when reco is empty we fall back to a same-language radio (never the seed artist).
+// when the station is empty we fall back to an artist-seeded same-language search.
 
 import { searchSongs, decodeEntities, decryptMediaUrl, pickImageUrl } from './catalog.js';
 import { cacheTracks, getTrackById } from './tracks.js';
-import { CATALOG_API_BASE, CATALOG_USER_AGENT, CATALOG_CTX, CATALOG_API_VERSION, CATALOG_M_RECO } from './config.js';
+import {
+  CATALOG_API_BASE, CATALOG_USER_AGENT, CATALOG_API_VERSION,
+  CATALOG_M_STATION_CREATE, CATALOG_M_STATION_SONGS, CATALOG_CTX_STATION,
+} from './config.js';
 
 // Strip "(From "Movie Name")" / "(From X)" suffix and normalize a title for
 // dedup so "Aura 10/10" and "Aura 10/10 (From "Meesaya Murukku 2")" — and a
@@ -71,6 +74,45 @@ function mapRecoSong(r) {
   };
 }
 
+// JioSaavn's per-song "station" — its own song-radio, and the source of genuinely
+// similar tracks. Two steps: create a station seeded by the track, then pull its
+// songs. It only works on ctx=android (the app's web6dot0/wap6dot0 contexts return
+// an empty station), so this path uses its own ctx. The songs come back in the same
+// shape search/detail return, so mapRecoSong normalises them. Returns [] on any
+// miss — the caller then drops to the artist-seeded fallback.
+async function fetchStationSongs(pid, count) {
+  if (!CATALOG_M_STATION_CREATE || !CATALOG_M_STATION_SONGS || !CATALOG_CTX_STATION) return [];
+  const call = (method, extra) => {
+    const url = new URL(CATALOG_API_BASE);
+    url.searchParams.set('__call',      method);
+    url.searchParams.set('_format',     'json');
+    url.searchParams.set('_marker',     '0');
+    url.searchParams.set('api_version', CATALOG_API_VERSION);
+    url.searchParams.set('ctx',         CATALOG_CTX_STATION);
+    for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v);
+    return fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  };
+  try {
+    const cres = await call(CATALOG_M_STATION_CREATE, { entity_id: JSON.stringify([pid]), entity_type: 'queue' });
+    if (!cres.ok) return [];
+    const stationid = (await cres.json())?.stationid;
+    if (!stationid) return [];
+    const sres = await call(CATALOG_M_STATION_SONGS, { stationid, k: String(count), next: '1' });
+    if (!sres.ok) return [];
+    const body = await sres.json();
+    // getSong returns { "0": {song}, "1": {song}, …, stationid } — take the numeric
+    // slots only (skip the stationid key), unwrap .song, then normalise.
+    return Object.keys(body)
+      .filter(k => /^\d+$/.test(k))
+      .map(k => body[k]?.song ?? body[k])
+      .filter(Boolean)
+      .map(mapRecoSong)
+      .filter(t => t.id && t.streamUrl);
+  } catch {
+    return [];
+  }
+}
+
 // Tiny LRU keyed by pid|lang. Tracks change as users listen, so 100 entries is
 // plenty and cheap.
 const cache = new Map();
@@ -102,23 +144,10 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
   const seed = await getTrackById(pid).catch(() => null);
   const seedTitle = seed ? normalizeTitle(seed.title) : '';
 
-  let tracks = [];
-  try {
-    const url = new URL(CATALOG_API_BASE);
-    url.searchParams.set('__call',      CATALOG_M_RECO);
-    url.searchParams.set('_format',     'json');
-    url.searchParams.set('_marker',     '0');
-    url.searchParams.set('api_version', CATALOG_API_VERSION);
-    url.searchParams.set('ctx',         CATALOG_CTX);
-    url.searchParams.set('pid',         pid);
-    if (lang) url.searchParams.set('language', lang);
-    const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
-    if (res.ok) {
-      const body = await res.json();
-      const arr = Array.isArray(body) ? body : (body?.songs ?? body?.list ?? []);
-      tracks = arr.filter(r => r?.id).map(mapRecoSong).filter(t => t.id && t.streamUrl);
-    }
-  } catch { /* fall through to artist search */ }
+  // Ask the station for a bit more than the caller wants so refine/dedupe/cap below
+  // have room to trim. The station is seeded purely by the song, so its results are
+  // already same-language — no language param needed.
+  let tracks = await fetchStationSongs(pid, Math.max(15, want));
 
   // Relevance + dedup, applied to whichever source we use. Prefer same-language
   // and same-artist matches and sink explicit covers BEFORE the by-title dedup so
@@ -126,12 +155,11 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
   // artist/language) is the keeper; then collapse cover/alt-credit duplicates and
   // the seed itself by title.
   const seedLang = (lang || seed?.language || '').toLowerCase();
-  const seedArtist = (seed?.artist || '').toLowerCase().trim();
   const COVER_RE = /\b(karaoke|cover|instrumental|tribute|remix|reprise|unplugged)\b/i;
-  // Keep reco's own similarity order; only sink other-language + explicit covers. We
-  // deliberately DON'T bias toward the seed artist — that bias was what made the radio
-  // feel like the artist's greatest hits. Per-artist diversity is handled by
-  // capPerArtist below.
+  // Keep the station's own similarity order; only sink other-language + explicit
+  // covers. We deliberately DON'T bias toward the seed artist — that bias was what
+  // made the radio feel like the artist's greatest hits. Per-artist diversity is
+  // handled by capPerArtist below.
   const refine = (list) => {
     const score = (t) => {
       const tl = (t.language || '').toLowerCase();
@@ -149,18 +177,19 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
 
   tracks = capPerArtist(refine(tracks));
 
-  // Fallback: a same-language radio (NEVER the seed artist) when reco returns nothing
-  // or collapses to nothing after dedup. We never fall back to the artist's catalogue.
-  if (tracks.length === 0 && (seed?.language || lang)) {
-    try {
-      const radio = await searchSongs(`${seed?.language ?? lang} songs`, {
-        lang: lang || seed?.language || undefined,
-        limit: Math.max(10, want),
-      });
-      tracks = capPerArtist(
-        refine(radio).filter(t => (t.artist || '').toLowerCase().trim() !== seedArtist),
-      );
-    } catch { /* leave empty */ }
+  // Fallback (rare — only if the station is empty or collapses after dedup): seed a
+  // same-language search off the seed's primary artist so the radio stays in the
+  // song's neighbourhood instead of going generic. capPerArtist(2) keeps the seed
+  // artist from dominating; with no known artist, fall back to a language radio.
+  if (tracks.length === 0) {
+    const fallbackLang = lang || seed?.language || undefined;
+    const q = (seed?.artist || '').trim() || (fallbackLang ? `${fallbackLang} songs` : '');
+    if (q) {
+      try {
+        const radio = await searchSongs(q, { lang: fallbackLang, limit: Math.max(10, want) });
+        tracks = capPerArtist(refine(radio));
+      } catch { /* leave empty */ }
+    }
   }
 
   tracks = tracks.slice(0, 20);   // keep up to the max; callers slice to their limit

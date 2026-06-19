@@ -43,6 +43,10 @@ export const CATALOG_BITRATE     = requiredInt('CATALOG_BITRATE');
 export const CATALOG_USER_AGENT  = required('CATALOG_USER_AGENT');
 export const CATALOG_CTX         = required('CATALOG_CTX');
 export const CATALOG_CTX_HOME    = required('CATALOG_CTX_HOME');
+// The song-station endpoints only return results on this ctx — the app's default
+// CATALOG_CTX returns an empty station. Optional: blank disables the station path,
+// degrading related-tracks to the artist-seeded fallback rather than failing boot.
+export const CATALOG_CTX_STATION = optional('CATALOG_CTX_STATION');
 export const CATALOG_API_VERSION = required('CATALOG_API_VERSION');
 
 // CDN URL rewrite patterns (audio quality + image size live in the URL path).
@@ -55,7 +59,11 @@ export const CATALOG_M_SEARCH   = required('CATALOG_M_SEARCH');
 export const CATALOG_M_SONG     = required('CATALOG_M_SONG');
 export const CATALOG_M_HOME     = required('CATALOG_M_HOME');
 export const CATALOG_M_PLAYLIST = required('CATALOG_M_PLAYLIST');
-export const CATALOG_M_RECO     = required('CATALOG_M_RECO');
+// Per-song station (createEntityStation + getSong) — the source of "related / up
+// next" tracks. Optional so a missing prod env degrades to the fallback (see
+// CATALOG_CTX_STATION) rather than failing boot.
+export const CATALOG_M_STATION_CREATE = optional('CATALOG_M_STATION_CREATE');
+export const CATALOG_M_STATION_SONGS  = optional('CATALOG_M_STATION_SONGS');
 export const CATALOG_M_LYRICS   = required('CATALOG_M_LYRICS');
 export const CATALOG_M_ARTIST   = required('CATALOG_M_ARTIST');
 export const CATALOG_M_ALBUM    = required('CATALOG_M_ALBUM');
