@@ -1,0 +1,160 @@
+/* Quick Picks fidget-spinner — phone only (desktop keeps QuickPicksOrbit). The
+   wheel rotates by --spin (set once per frame from JS); each disc counter-rotates
+   by -spin so the art + label stay upright while orbiting. */
+.aura-qps {
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px 26px;
+}
+.aura-qps__ring {
+  position: relative;
+  width: min(330px, 84vw);
+  aspect-ratio: 1;
+  /* pan-y keeps vertical swipes for PAGE SCROLL (a mostly-vertical drag fires
+     pointercancel → the spin aborts); horizontal / rotational flicks still spin
+     the wheel. Avoids trapping the user's scroll on the spinner. */
+  touch-action: pan-y;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.aura-qps__ring:active { cursor: grabbing; }
+
+.aura-qps__wheel {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--spin, 0deg));
+  will-change: transform;
+}
+
+.aura-qps__card {
+  position: absolute;
+  width: 24%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--spin, 0deg)));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  z-index: 1;
+  /* opacity-only pop so the counter-rotate transform above is preserved */
+  opacity: 0;
+  animation: aura-qps-pop 460ms ease forwards;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+@keyframes aura-qps-pop { to { opacity: 1; } }
+
+.aura-qps__art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.22);
+  transition: box-shadow 240ms ease, transform 260ms cubic-bezier(.2, .8, .2, 1);
+}
+.aura-qps__art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+  pointer-events: none;
+}
+.aura-qps__card--playing { z-index: 3; }
+.aura-qps__card--playing .aura-qps__art {
+  transform: scale(1.16);
+  box-shadow:
+    0 16px 30px rgb(0 0 0 / 0.30),
+    0 0 0 3px color-mix(in srgb, var(--color-accent), transparent 42%);
+}
+
+/* aura wave — accent rings emanating from the playing disc */
+.aura-qps__aura { position: absolute; inset: 0; pointer-events: none; }
+.aura-qps__aura i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-accent);
+  opacity: 0;
+  animation: aura-qps-pulse 2.6s ease-out infinite;
+}
+.aura-qps__aura i:nth-child(2) { animation-delay: .87s; }
+.aura-qps__aura i:nth-child(3) { animation-delay: 1.74s; }
+@keyframes aura-qps-pulse {
+  0%   { opacity: .5; transform: scale(1); }
+  100% { opacity: 0;  transform: scale(1.45); }
+}
+
+.aura-qps__name {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150%;
+  max-width: 100px;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.aura-qps__card--playing .aura-qps__name { color: var(--color-accent); }
+
+/* centre hub — decorative; pointer-events:none so the centre is grabbable too */
+.aura-qps__hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 30%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.aura-qps__hub-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 60%);
+  animation: aura-qps-breathe 3.4s ease-in-out infinite;
+}
+.aura-qps__hub-ring--a { inset: 16%; opacity: .5; }
+.aura-qps__hub-ring--b { inset: 2%;  opacity: .3; animation-delay: .45s; }
+@keyframes aura-qps-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.aura-qps__hub-dot {
+  width: 24%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color-accent);
+  opacity: .9;
+}
+.aura-qps__hub-hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  animation: aura-qps-hint 1s ease 5s forwards;   /* fade out after a few seconds */
+}
+@keyframes aura-qps-hint { to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-qps__card { animation: none; opacity: 1; }
+  .aura-qps__aura i { animation: none; opacity: .4; }
+  .aura-qps__hub-ring { animation: none; }
+  .aura-qps__hub-hint { animation: none; }
+}

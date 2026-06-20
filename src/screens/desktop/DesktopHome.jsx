@@ -12,6 +12,7 @@ import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
 import { TopStrip } from './TopStrip';
 import { QuickPicksOrbit } from './QuickPicksOrbit';
+import { QuickPicksSpinner } from './QuickPicksSpinner';
 import { SectionHeader } from './SectionHeader';
 import { HeroBand } from './HeroBand';
 import { BridgeCard } from './BridgeCard';
@@ -23,7 +24,7 @@ import './DesktopHome.css';
 const _cache = {};
 
 export function DesktopHome({
-  tracks, djName,
+  tracks, djName, currentTrackId,
   onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenAuto, onOpenPlaylists, onOpenSearch,
   onOpenArtist,
@@ -71,17 +72,28 @@ export function DesktopHome({
       {quickPicks.length > 0 && (
         <section className="aura-dh__qp">
           <SectionHeader title="Quick picks" sub="jump back into what you love" large/>
-          <QuickPicksOrbit
-            tracks={quickPicks}
-            onPlay={(t) => onPickLive?.(t)}
-            onShuffle={() => {
-              const s = [...quickPicks];
-              for (let i = s.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [s[i], s[j]] = [s[j], s[i]];
-              }
-              onPlaySequence?.(s, 0, 'quick picks');
-            }}/>
+          {/* Desktop = auto-orbit; phone = spinnable fidget wheel. Both render;
+              the `dh` container query shows one and hides the other (display:none
+              halts the hidden one's animations). */}
+          <div className="aura-dh__qp-orbit">
+            <QuickPicksOrbit
+              tracks={quickPicks}
+              onPlay={(t) => onPickLive?.(t)}
+              onShuffle={() => {
+                const s = [...quickPicks];
+                for (let i = s.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [s[i], s[j]] = [s[j], s[i]];
+                }
+                onPlaySequence?.(s, 0, 'quick picks');
+              }}/>
+          </div>
+          <div className="aura-dh__qp-spinner">
+            <QuickPicksSpinner
+              tracks={quickPicks}
+              currentTrackId={currentTrackId}
+              onPlay={(t, el) => onPickLive?.(t, el)}/>
+          </div>
         </section>
       )}
 

@@ -162,6 +162,9 @@
 .aura-dh__qp {
   padding: 26px 0 0;
 }
+/* Desktop shows the orbit; the phone spinner is hidden until the dh container
+   narrows to the mobile breakpoint (see the 600px container query below). */
+.aura-dh__qp-spinner { display: none; }
 
 /* ── Hero banner — now a simple tagline (the brand lives in the top bar) ─── */
 .aura-dh__greeting {
@@ -739,6 +742,9 @@
   .aura-dh__greeting { padding: 26px 22px 0; }
   .aura-dh__mood-hero { font-size: 30px; }
   .aura-dh__qp { padding: 22px 0 0; }
+  /* Phone: swap the auto-orbit for the spinnable fidget wheel. */
+  .aura-dh__qp-orbit { display: none; }
+  .aura-dh__qp-spinner { display: block; }
   .aura-dh-section-header { padding: 0 22px 12px; margin-top: 32px; }
   .aura-dh-section-header--large { margin-top: 36px; }
   .aura-dh-section-header__title { font-size: 22px; }

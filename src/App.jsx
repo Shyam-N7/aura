@@ -798,28 +798,37 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // every "open the player" path so the entrance is consistent.
   const morphInto = (target, srcEl, arrive) => {
     const fromRect = srcEl && getRect(srcEl);
-    if (fromRect && fromRect.width > 0) {
-      const toRect = { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS };
-      setMorph({ track: target, fromRect, toRect, kind: 'open' });
-      clearTimeout(morphTimer.current);
-      if (isMobile) {
-        // Open the player NOW (drawer fades in place, no slide) so the rise IS
-        // the cover morph — both run together as one motion. instantPlayer is
-        // cleared when the morph settles, restoring vaul's normal drag/close.
-        setInstantPlayer(true);
-        arrive();
+    if (!(fromRect && fromRect.width > 0)) { arrive(); return; }
+    clearTimeout(morphTimer.current);
+    if (isMobile) {
+      // Open the player NOW (drawer fades in place, no slide) so the rise IS the
+      // cover morph — both run together as one motion. Because the drawer is in
+      // place (not sliding), #player-art is already at its FINAL size, so we wait
+      // a frame for it to mount and morph to its real rect — landing exactly on
+      // the banner instead of the oversized pre-mount fallback. instantPlayer is
+      // cleared when the morph settles, restoring vaul's normal drag/close.
+      setInstantPlayer(true);
+      arrive();
+      const begin = (attempt = 0) => {
+        const el = document.getElementById('player-art');
+        if (!el && attempt < 6) { requestAnimationFrame(() => begin(attempt + 1)); return; }
+        const toRect = el
+          ? { ...getRect(el), radius: 10 }                       // exact banner frame
+          : { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS }; // fallback (rare)
+        setMorph({ track: target, fromRect, toRect, kind: 'open' });
         morphTimer.current = setTimeout(() => {
           requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
           setInstantPlayer(false);
         }, 470);
-      } else {
-        morphTimer.current = setTimeout(() => {
-          arrive();
-          requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
-        }, 470);
-      }
+      };
+      requestAnimationFrame(() => begin());
     } else {
-      arrive();
+      const toRect = { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS };
+      setMorph({ track: target, fromRect, toRect, kind: 'open' });
+      morphTimer.current = setTimeout(() => {
+        arrive();
+        requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
+      }, 470);
     }
   };
 
@@ -1129,7 +1138,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               loading={featured.status === 'loading'}
               error={featured.error}
               onRetry={featured.refetch}
-              djName={t.djName} mood={t.mood}
+              djName={t.djName} mood={t.mood} currentTrackId={track?.id}
               onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
               onOpenJournal={() => { setJournalReturn('home'); setScreen('journal'); }}
               onOpenDna={() => { setDnaReturn('home'); setScreen('dna'); }}
