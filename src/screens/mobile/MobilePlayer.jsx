@@ -9,6 +9,8 @@ import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { openSleepTimer } from '../../lib/sleepTimerSheet';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
+import { useLikes } from '../../hooks/useLikes';
+import { useHeroGestures } from './useHeroGestures';
 import '../PlaylistsScreen.css';   // .aura-pl-menu / .aura-pl-menu-item — the ⋯ menu
 import './MobilePlayer.css';
 
@@ -16,7 +18,8 @@ import './MobilePlayer.css';
 // serves tablet-portrait and up). A single full-viewport surface, no scrolling and
 // no related-songs feed: an art-derived blurred backdrop, the cover as the hero, and
 // the transport anchored in the thumb zone. Up-next / more-like-this live in the
-// Queue screen now (the queue icon opens it). Lyrics open full-screen on art tap.
+// Queue screen now (the Up next strip opens it). The cover owns a unified gesture:
+// swipe up = next, swipe down = close, double-tap = like; lyrics open from the ⋯ menu.
 export function MobilePlayer({
   track, progress, playing, nextTrack, nextLoading, player, djName = 'AURA',
   onTogglePlay, onPrev, onNext, onSeek,
@@ -28,6 +31,16 @@ export function MobilePlayer({
   const elapsed = fmtTime(progress * track.durationSec);
   const remaining = fmtTime(track.durationSec * (1 - progress));
 
+  // Double-tap the cover to like — always LIKES (Instagram-style, never unlikes) and
+  // fires a centred heart burst (keyed so each tap restarts the animation).
+  const { like } = useLikes();
+  const [burst, setBurst] = useState(0);
+  const heroGestures = useHeroGestures({
+    onNext,
+    onClose: onBack,
+    onLike: () => { like(track.id).catch(() => {}); setBurst((b) => b + 1); },
+  });
+
   return (
     <div className="aura-mp" onClick={closeMenu}>
       {/* Art-derived backdrop: the cover, scaled up and blurred, under a theme-aware
@@ -38,11 +51,6 @@ export function MobilePlayer({
       <div className="aura-mp__scrim" aria-hidden="true"/>
 
       <div className="aura-mp__content">
-        {player && (
-          <div className="aura-mp__vol" data-vaul-no-drag onClick={(e) => e.stopPropagation()}>
-            <EqualizerControl player={player}/>
-          </div>
-        )}
         <div className="aura-mp__top">
           <button onClick={onBack} aria-label="back" className="aura-mp__chip">
             <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style={{ transform: 'translateX(-1px)' }}>
@@ -74,11 +82,32 @@ export function MobilePlayer({
           </div>
         </div>
 
-        <div className="aura-mp__hero">
-          <div id="player-art" className="aura-mp__cover">
-            <MorphingAlbumArt track={track} size={360} radius={10}/>
+        <div className="aura-mp__hero" data-vaul-no-drag {...heroGestures}>
+          <div className="aura-mp__cover">
+            <div id="player-art" className="aura-mp__cover-art">
+              <MorphingAlbumArt track={track} size={360} radius={10}/>
+            </div>
+            {/* Like pinned to the cover's top-right — OUTSIDE #player-art so the
+                shared-element morph never carries it. Its own pointerdown is stopped
+                so a tap on the heart doesn't reach the cover gesture handler. */}
+            <span className="aura-mp__like-pin" onPointerDown={(e) => e.stopPropagation()}>
+              <HeartButton trackId={track.id} size={22}/>
+            </span>
+            {burst > 0 && (
+              <span key={burst} className="aura-mp__likeburst" aria-hidden="true">
+                <svg width="92" height="92" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              </span>
+            )}
           </div>
         </div>
+
+        {player && (
+          <div className="aura-mp__eq" data-vaul-no-drag onClick={(e) => e.stopPropagation()}>
+            <EqualizerControl player={player} compact/>
+          </div>
+        )}
 
         <div key={track.id} className="aura-mp__meta aura-track-text">
           <div className="aura-mp__title">{cleanTitle(track.title)}</div>
@@ -96,16 +125,16 @@ export function MobilePlayer({
 
         <div className="aura-mp__transport" data-vaul-no-drag>
           <button onClick={onPrev} aria-label="previous" className="aura-mp__nav">
-            <svg width="22" height="16" viewBox="0 0 14 10" aria-hidden="true"><path d="M14 0 L5 5 L14 10 Z M3 0 H1 V10 H3 Z" fill="currentColor"/></svg>
+            <svg width="26" height="19" viewBox="0 0 14 10" aria-hidden="true"><path d="M14 0 L5 5 L14 10 Z M3 0 H1 V10 H3 Z" fill="currentColor"/></svg>
           </button>
           <button onClick={onTogglePlay} aria-label={playing ? 'pause' : 'play'}
             className={`aura-mp__play ${playing ? 'aura-mp__play--playing' : ''}`}>
             {playing
-              ? <svg width="20" height="22" viewBox="0 0 12 14" aria-hidden="true"><rect x="0" width="4" height="14" fill="currentColor"/><rect x="8" width="4" height="14" fill="currentColor"/></svg>
-              : <svg width="20" height="22" viewBox="0 0 12 14" aria-hidden="true" style={{ transform: 'translateX(2px)' }}><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>}
+              ? <svg width="24" height="26" viewBox="0 0 12 14" aria-hidden="true"><rect x="0" width="4" height="14" fill="currentColor"/><rect x="8" width="4" height="14" fill="currentColor"/></svg>
+              : <svg width="24" height="26" viewBox="0 0 12 14" aria-hidden="true" style={{ transform: 'translateX(2px)' }}><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>}
           </button>
           <button onClick={onNext} aria-label="next" className="aura-mp__nav">
-            <svg width="22" height="16" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 0 L9 5 L0 10 Z M11 0 H13 V10 H11 Z" fill="currentColor"/></svg>
+            <svg width="26" height="19" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 0 L9 5 L0 10 Z M11 0 H13 V10 H11 Z" fill="currentColor"/></svg>
           </button>
         </div>
 
@@ -137,7 +166,6 @@ export function MobilePlayer({
               <ShuffleIcon/>
             </button>
           )}
-          <span className="aura-mp__act"><HeartButton trackId={track.id} size={24}/></span>
           <button onClick={() => openAddToPlaylist(track)} aria-label="add to playlist" className="aura-mp__act">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M3 6 H13 M3 10 H10 M3 14 H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
@@ -151,12 +179,6 @@ export function MobilePlayer({
               <RepeatIcon mode={repeatMode}/>
             </button>
           )}
-          <button onClick={openQueue} aria-label="up next" className="aura-mp__act">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M3 5 H17 M3 10 H17 M3 15 H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M14 12.5 L18 15.25 L14 18 Z" fill="currentColor"/>
-            </svg>
-          </button>
         </div>
       </div>
     </div>
