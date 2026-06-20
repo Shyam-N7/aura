@@ -61,17 +61,23 @@ export function DesktopQueue({
     return () => document.removeEventListener('touchmove', block);
   }, [drag]);
 
-  // On open, bring the now-playing track into view near the top so it's visible
-  // and focused immediately instead of buried under the played history. Mount-
-  // only (before paint, no jump) — we don't re-snap on every auto-advance while
-  // the user is browsing the list.
+  // On open, bring the now-playing track into focus so it's visible immediately
+  // instead of buried under the played history. Mount-only (before paint, no
+  // jump) — we don't re-snap on every auto-advance while the user is browsing.
+  // Compact (phone) chrome floats a top bar over the scroller's top edge, so
+  // pinning the row near the top tucks it under that bar; centre it in the
+  // viewport there so it reads as the focused row. Desktop keeps the near-top
+  // anchor (no overlapping bar). Width ≤600 mirrors the dq compact container query.
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const row = scroller?.querySelector(`[data-idx="${currentIdx}"]`);
     if (!scroller || !row) return;
     const sRect = scroller.getBoundingClientRect();
     const rRect = row.getBoundingClientRect();
-    scroller.scrollTop = Math.max(0, scroller.scrollTop + (rRect.top - sRect.top) - 16);
+    const offset = scroller.clientWidth <= 600
+      ? Math.max(16, (sRect.height - rRect.height) / 2)   // centre in the viewport
+      : 16;                                               // near the top
+    scroller.scrollTop = Math.max(0, scroller.scrollTop + (rRect.top - sRect.top) - offset);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
