@@ -19,7 +19,7 @@
   animation: aura-lyrics-backdrop-out 200ms cubic-bezier(.4, 0, .8, .4) both;
 }
 
-/* Glass panel — same recipe as the MobileTopBar / MobileNavBar pills:
+/* Glass panel — same recipe as the MobileTopBar / MobileDock pills:
    transparent gradient + 40 px backdrop blur + soft inset top highlight. */
 .aura-lyrics-panel {
   position: fixed;

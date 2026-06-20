@@ -4,7 +4,11 @@
 .aura-sd {
   position: fixed;
   right: 16px;
-  bottom: 96px;   /* clears the bottom mini/nav pill */
+  /* Sit clear above the bottom chrome. --aura-bottom-chrome is set by App from
+     the live MobileDock height (taller with a track) and inherits down the DOM
+     even though this is position:fixed; the fallback covers tablet-portrait
+     (BottomMiniBar) where the var isn't set. */
+  bottom: calc(var(--aura-bottom-chrome, 84px) + 14px);
   z-index: 34;    /* above chrome (30), below sheets/toasts (40+) */
   display: flex;
   flex-direction: column;

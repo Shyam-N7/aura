@@ -12,7 +12,7 @@
 }
 
 /* The mobile shell adds ::before/::after spacers to every screen root to clear
-   the floating MobileTopBar / MobileNavBar pills (responsive.css). Those bars are
+   the floating MobileTopBar / MobileDock pills (responsive.css). Those bars are
    hidden on the player screen, so zero the spacers here — otherwise the 74px top
    spacer shoves the column down and overflow:hidden clips the bottom actions
    row (shuffle/like/add/repeat/queue). The player floats edge to edge instead. */
