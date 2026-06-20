@@ -1,7 +1,9 @@
 /* Unified mobile bottom dock — ONE glass pill carrying the now-playing lip + the
    nav row. Same glass recipe as MobileTopBar so the floating pills read as a set.
    border-radius:26 reads as a pill when short (nav-only idle, ~52px) and as a
-   soft rounded-rect when the now-playing lip is present (~92px). */
+   soft rounded-rect when the now-playing lip is present (~92px). While the active
+   screen is scrolled the whole pill liquid-contracts to a centered "Take me back
+   up" pill (lip collapses, nav crossfades). */
 
 .aura-dock {
   position: fixed;
@@ -19,6 +21,10 @@
     inset 0 1px 0 rgb(255 255 255 / 0.25);
   color: var(--color-ink);
   overflow: hidden;
+  /* Horizontal contraction into the centered back-to-top pill. */
+  transition:
+    left  420ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    right 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .theme-midnight .aura-dock {
   background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015));
@@ -28,7 +34,20 @@
     inset 0 1px 0 rgb(255 255 255 / 0.12);
 }
 
+.aura-dock__inner { position: relative; }
+
 /* ── Now-playing lip ─────────────────────────────────────────────────────── */
+/* Wrapped in a grid that animates 1fr→0fr so the lip collapses smoothly into
+   the back-to-top pill (no fixed-height guess; handles any content). */
+.aura-dock__lip-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 360ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 220ms ease;
+}
+.aura-dock__lip-inner {
+  overflow: hidden;
+  min-height: 0;
+}
 .aura-dock__np {
   position: relative;
   display: flex;
@@ -57,6 +76,7 @@
   min-width: 0;
 }
 .aura-dock__np-art {
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
 }
@@ -66,6 +86,36 @@
   height: 34px !important;
   border-radius: 8px !important;
   overflow: hidden;
+}
+/* Now-playing equalizer — three bars dancing in the art's corner while playing
+   (mounted only when playing; frozen under reduced motion). */
+.aura-dock__eq {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  padding: 2px 2.5px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.aura-dock__eq i {
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  transform-origin: bottom;
+  animation: aura-dock-eq 900ms ease-in-out infinite;
+}
+.aura-dock__eq i:nth-child(1) { animation-delay: -200ms; }
+.aura-dock__eq i:nth-child(2) { animation-delay: -600ms; }
+.aura-dock__eq i:nth-child(3) { animation-delay: -400ms; }
+@keyframes aura-dock-eq {
+  0%, 100% { transform: scaleY(0.35); }
+  50%      { transform: scaleY(1); }
 }
 .aura-dock__np-meta {
   display: flex;
@@ -106,7 +156,9 @@
   justify-content: center;
   flex-shrink: 0;
   padding-left: 1px;
+  transition: transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+.aura-dock__np-play:active { transform: scale(0.9); }
 .theme-midnight .aura-dock__np-play {
   background: var(--color-ink);
   color: var(--color-bg);
@@ -130,27 +182,91 @@
   position: relative;
   height: 50px;
 }
+
+/* Gooey liquid layer — solid blobs that gather to centre and metaball-merge
+   under #aura-goo, only for the morph window (the goo + layer opacity ride this
+   layer, never the glass, so backdrop-filter isn't fought). Blobs are full-alpha
+   var(--color-ink) so the goo threshold merges them cleanly; the layer's low
+   opacity is what keeps the effect a soft liquid sheen on top of the glass. */
+.aura-dock__liquid {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+.aura-dock__liquid b {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  transform: translate(var(--bx), 0) scale(0.5);
+}
+.aura-dock__liquid b:nth-child(1) { --bx: -84px; }
+.aura-dock__liquid b:nth-child(2) { --bx: 0px; }
+.aura-dock__liquid b:nth-child(3) { --bx: 84px; }
+.aura-dock--morphing .aura-dock__liquid {
+  opacity: 0.22;
+  filter: url(#aura-goo);
+}
+.aura-dock--morphing .aura-dock__liquid b {
+  animation: aura-dock-gather 460ms ease-in-out;
+}
+/* Spread → converge (merge) → spread, so the toggle reads as a gooey gather in
+   either direction. */
+@keyframes aura-dock-gather {
+  0%   { transform: translate(var(--bx), 0) scale(0.5); }
+  45%  { transform: translate(0, 0) scale(1.05); }
+  55%  { transform: translate(0, 0) scale(1.05); }
+  100% { transform: translate(var(--bx), 0) scale(0.5); }
+}
 .aura-dock__nav-items {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: space-around;
   height: 100%;
-  padding: 0 6px;
+  padding: 0 4px;
   transition: opacity 200ms ease, transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+/* Equal-width items so the four tabs are evenly spaced edge-to-edge (label
+   widths differ — space-around left a lopsided gap). Content stays centred. */
 .aura-dock__item {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   background: transparent;
   border: 0;
   cursor: pointer;
-  padding: 6px 14px;
+  padding: 6px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
   color: var(--color-ink-faint);
-  transition: color 140ms ease;
+  transition: color 160ms ease, transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+.aura-dock__item:active { transform: scale(0.9); }
 .aura-dock__item--on { color: var(--color-accent); }
+/* Active-tab dot — fades/scales in under the active item, no layout shift. */
+.aura-dock__item::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  transform: translateX(-50%) scale(0);
+  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.aura-dock__item--on::after { transform: translateX(-50%) scale(1); }
 .aura-dock__label {
   font-family: var(--font-sans);
   font-weight: 500;
@@ -158,12 +274,12 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.aura-dock__item--talk { padding: 6px 12px; }
 
-/* ── Back-to-top liquid morph (in place — the nav crossfades) ─────────────── */
+/* ── Back-to-top liquid morph (contract to a centered pill) ───────────────── */
 .aura-dock__btt {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,6 +300,16 @@
 }
 .aura-dock__btt svg { flex-shrink: 0; }
 
+/* Contracted back-to-top state: pill narrows to a centered 200px, the lip
+   collapses, the nav items melt out and the label fuses in. */
+.aura-dock--btt {
+  left: calc(50% - 100px);
+  right: calc(50% - 100px);
+}
+.aura-dock--btt .aura-dock__lip-wrap {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
 .aura-dock--btt .aura-dock__nav-items {
   opacity: 0;
   transform: scale(0.86);
@@ -196,16 +322,18 @@
   transition-delay: 80ms;   /* let the nav items clear before the label lands */
 }
 
-/* Goo fuse — applied to the nav only, for the morph's duration. */
-.aura-dock--morphing .aura-dock__nav {
-  filter: url(#aura-goo);
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .aura-dock { transition: none; }
+  .aura-dock--btt { left: 14px; right: 14px; }   /* no contraction */
   .aura-dock__np { animation: none; }
+  .aura-dock__lip-wrap { transition: opacity 140ms ease; }
   .aura-dock__nav-items,
   .aura-dock__btt { transition: opacity 140ms ease; transform: none; }
   .aura-dock--btt .aura-dock__nav-items,
   .aura-dock--btt .aura-dock__btt { transform: none; }
-  .aura-dock--morphing .aura-dock__nav { filter: none; }
+  .aura-dock__item:active,
+  .aura-dock__np-play:active { transform: none; }
+  .aura-dock__eq i { animation: none; transform: scaleY(0.8); }
+  .aura-dock--morphing .aura-dock__liquid { opacity: 0; filter: none; }
+  .aura-dock__liquid b { animation: none; }
 }

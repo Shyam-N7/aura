@@ -14,9 +14,10 @@ import './MobileDock.css';
 //
 // Tapping the now-playing lip morphs the cover up into the full player (App
 // routes the tapped art element through morphInto); the play disc stops
-// propagation. While the active screen is scrolled, the nav row liquid-morphs in
-// place into a "Take me back up" control (goo rides the nav for the morph window
-// only) — the lip stays put so playback control is always in reach.
+// propagation. While the active screen is scrolled (`mode==='backtotop'`) the
+// whole dock liquid-morphs into a centered "Take me back up" pill — the lip
+// collapses, the nav items melt out and the label fuses in (goo rides the inner
+// content for the morph window only).
 
 // Speech-bubble glyph with three conversation dots — matches the NavRail's
 // "ask aura" icon so the talk affordance reads the same across mobile + desktop.
@@ -50,7 +51,7 @@ export function MobileDock({
   const artRef = useRef(null);
 
   // Apply the goo filter only for the back-to-top morph's duration — at rest it
-  // would just blur the nav. Skip the first render so it doesn't morph on mount.
+  // would just blur the content. Skip the first render so it doesn't morph on mount.
   const [morphing, setMorphing] = useState(false);
   const first = useRef(true);
   useEffect(() => {
@@ -62,63 +63,78 @@ export function MobileDock({
 
   return (
     <div className={`aura-dock${track ? ' aura-dock--np' : ''}${btt ? ' aura-dock--btt' : ''}${morphing ? ' aura-dock--morphing' : ''}`}>
-      {track && (
-        <div className="aura-dock__np">
-          <button type="button" className="aura-dock__np-open" data-tour="mnav-np"
-            tabIndex={btt ? -1 : 0} onClick={() => onOpenPlayer?.(artRef.current)}>
-            <span ref={artRef} className="aura-dock__np-art">
-              <AlbumArt track={track} size={34} radius={8}/>
-            </span>
-            <span className="aura-dock__np-meta">
-              <span className="aura-dock__np-title">{cleanTitle(track.title)}</span>
-              <span className="aura-dock__np-artist">{(track.artist ?? '').toLowerCase()}</span>
-            </span>
-          </button>
-          <button type="button" aria-label={playing ? 'pause' : 'play'}
-            className="aura-dock__np-play" tabIndex={btt ? -1 : 0}
-            onClick={(e) => { e.stopPropagation(); onTogglePlay?.(); }}>
-            {playing
-              ? <svg width="10" height="12" viewBox="0 0 12 14"><rect x="0" width="4" height="14" fill="currentColor"/><rect x="8" width="4" height="14" fill="currentColor"/></svg>
-              : <svg width="10" height="12" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>}
-          </button>
-          {/* Progress hairline at the seam — accent line scaled by progress. */}
-          <span className="aura-dock__progress" aria-hidden="true"
-            style={{ '--np-progress': Math.max(0, Math.min(1, progress)) }}/>
+      <div className="aura-dock__inner">
+        {/* Now-playing lip — collapses (grid 0fr) during the back-to-top morph. */}
+        <div className="aura-dock__lip-wrap">
+          <div className="aura-dock__lip-inner">
+            {track && (
+              <div className="aura-dock__np">
+                <button type="button" className="aura-dock__np-open" data-tour="mnav-np"
+                  tabIndex={btt ? -1 : 0} onClick={() => onOpenPlayer?.(artRef.current)}>
+                  <span ref={artRef} className="aura-dock__np-art">
+                    <AlbumArt track={track} size={34} radius={8}/>
+                    {playing && (
+                      <span className="aura-dock__eq" aria-hidden="true"><i/><i/><i/></span>
+                    )}
+                  </span>
+                  <span className="aura-dock__np-meta">
+                    <span className="aura-dock__np-title">{cleanTitle(track.title)}</span>
+                    <span className="aura-dock__np-artist">{(track.artist ?? '').toLowerCase()}</span>
+                  </span>
+                </button>
+                <button type="button" aria-label={playing ? 'pause' : 'play'}
+                  className="aura-dock__np-play" tabIndex={btt ? -1 : 0}
+                  onClick={(e) => { e.stopPropagation(); onTogglePlay?.(); }}>
+                  {playing
+                    ? <svg width="10" height="12" viewBox="0 0 12 14"><rect x="0" width="4" height="14" fill="currentColor"/><rect x="8" width="4" height="14" fill="currentColor"/></svg>
+                    : <svg width="10" height="12" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>}
+                </button>
+                {/* Progress hairline at the seam — accent line scaled by progress. */}
+                <span className="aura-dock__progress" aria-hidden="true"
+                  style={{ '--np-progress': Math.max(0, Math.min(1, progress)) }}/>
+              </div>
+            )}
+          </div>
         </div>
-      )}
 
-      <div className="aura-dock__nav">
-        <div className="aura-dock__nav-items" aria-hidden={btt}>
-          {NAV_ITEMS.map(it => {
-            if (it.talk) {
+        {/* Nav row — crossfades with the centered back-to-top label. */}
+        <div className="aura-dock__nav">
+          {/* Gooey liquid: solid blobs behind the crisp icons that gather to
+              centre and metaball-merge under #aura-goo for the morph window only
+              (the icons/label stay sharp on top). */}
+          <span className="aura-dock__liquid" aria-hidden="true"><b/><b/><b/></span>
+          <div className="aura-dock__nav-items" aria-hidden={btt}>
+            {NAV_ITEMS.map(it => {
+              if (it.talk) {
+                return (
+                  <button key="talk" type="button" onClick={onTalk}
+                    aria-label="talk" data-tour="mnav-talk" tabIndex={btt ? -1 : 0}
+                    className="aura-dock__item aura-dock__item--talk">
+                    {it.icon}
+                    <span className="aura-dock__label">talk</span>
+                  </button>
+                );
+              }
+              const on = active === it.id || (it.id === 'home' && HOME_STACK.has(active));
               return (
-                <button key="talk" type="button" onClick={onTalk}
-                  aria-label="talk" data-tour="mnav-talk" tabIndex={btt ? -1 : 0}
-                  className="aura-dock__item aura-dock__item--talk">
+                <button key={it.id} type="button" onClick={() => onNav(it.id)} data-tour={`mnav-${it.id}`}
+                  tabIndex={btt ? -1 : 0}
+                  className={`aura-dock__item ${on ? 'aura-dock__item--on' : ''}`}>
                   {it.icon}
-                  <span className="aura-dock__label">talk</span>
+                  <span className="aura-dock__label">{it.label}</span>
                 </button>
               );
-            }
-            const on = active === it.id || (it.id === 'home' && HOME_STACK.has(active));
-            return (
-              <button key={it.id} type="button" onClick={() => onNav(it.id)} data-tour={`mnav-${it.id}`}
-                tabIndex={btt ? -1 : 0}
-                className={`aura-dock__item ${on ? 'aura-dock__item--on' : ''}`}>
-                {it.icon}
-                <span className="aura-dock__label">{it.label}</span>
-              </button>
-            );
-          })}
-        </div>
+            })}
+          </div>
 
-        <button type="button" className="aura-dock__btt"
-          onClick={onBackToTop} tabIndex={btt ? 0 : -1} aria-hidden={!btt} aria-label="Back to top">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M7 11.5 V3 M3 7 L7 3 L11 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <span>Take me back up</span>
-        </button>
+          <button type="button" className="aura-dock__btt"
+            onClick={onBackToTop} tabIndex={btt ? 0 : -1} aria-hidden={!btt} aria-label="Back to top">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M7 11.5 V3 M3 7 L7 3 L11 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>Take me back up</span>
+          </button>
+        </div>
       </div>
     </div>
   );
