@@ -6,11 +6,14 @@ import './MorphLayer.css';
 // Rendered above all screens so source/target are covered cleanly during transition.
 // Rect coords + transition duration flow in as CSS vars; styling lives in MorphLayer.css.
 export function MorphLayer({ track, fromRect, toRect, kind, durationMs = 460 }) {
-  const [rect, setRect] = useState({ ...fromRect, radius: fromRect.radius ?? 12 });
+  // `blur` rides the same one-shot transition: an opening cover starts soft and
+  // resolves to sharp as it seats into the destination frame (a "develops into
+  // focus" landing); closes stay sharp.
+  const [rect, setRect] = useState({ ...fromRect, radius: fromRect.radius ?? 12, blur: kind === 'open' ? 8 : 0 });
   useEffect(() => {
     // Two RAFs to ensure the initial style commits before the transition starts.
     const id = requestAnimationFrame(() => requestAnimationFrame(() =>
-      setRect({ ...toRect, radius: toRect.radius ?? 12 })));
+      setRect({ ...toRect, radius: toRect.radius ?? 12, blur: 0 })));
     return () => cancelAnimationFrame(id);
     // One-shot kicker on mount — toRect is captured from props at mount and stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -28,6 +31,7 @@ export function MorphLayer({ track, fromRect, toRect, kind, durationMs = 460 }) 
         '--morph-width':    `${rect.width}px`,
         '--morph-height':   `${rect.height}px`,
         '--morph-radius':   `${rect.radius}px`,
+        '--morph-blur':     `${rect.blur}px`,
         '--morph-duration': `${durationMs}ms`,
       }}
     >
