@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
 import { signToken, requireAuth } from './middleware/auth.js';
 import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
+import { adminBlocked } from './adminGate.js';
 
 const router = Router();
 
@@ -17,6 +18,9 @@ function genId() {
 }
 
 const norm = (email) => String(email).toLowerCase().trim();
+
+// Dev/staging admin gate response (see adminGate.js). Inert when ADMIN_ONLY is off.
+const ADMIN_ONLY_RESPONSE = { error: 'this is a private dev environment — only the admin can sign in.', code: 'admin_only' };
 
 function sanitizeUser(row) {
   return {
@@ -52,6 +56,7 @@ router.post('/signup', async (req, res) => {
     if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
 
     const e = norm(email);
+    if (adminBlocked(e)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
     sweepExpired();
 
     const existing = await pool.query('SELECT id, email_verified FROM users WHERE email = $1', [e]);
@@ -87,6 +92,7 @@ router.post('/signup', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  if (adminBlocked(email)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
 
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
   if (!rows.length) return res.status(401).json({ error: 'invalid credentials' });
@@ -131,6 +137,7 @@ router.post('/google', async (req, res) => {
   try {
     const payload = await verifyGoogleToken(idToken);
     const { sub, email, name } = payload;
+    if (adminBlocked(email)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
 
     const existing = await pool.query('SELECT * FROM users WHERE google_sub = $1', [sub]);
     let user;
@@ -175,6 +182,7 @@ router.post('/verify-otp', async (req, res) => {
     if (!/^\d{6}$/.test(String(code))) return res.status(400).json({ error: 'enter the 6-digit code', code: 'bad_format' });
 
     const e = norm(email);
+    if (adminBlocked(e)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
     const result = await verifyOtp(e, code, { purpose: 'signup' });
     if (!result.ok) return otpFail(res, result);
 

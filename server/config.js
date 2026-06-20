@@ -69,6 +69,14 @@ export const CATALOG_M_ARTIST   = required('CATALOG_M_ARTIST');
 export const CATALOG_M_ALBUM    = required('CATALOG_M_ALBUM');
 export const CATALOG_M_SUGGEST  = required('CATALOG_M_SUGGEST');   // autocomplete.get — multi-entity search
 
+// ── Admin-only gate (dev/staging) ──
+// When ADMIN_ONLY=1, only ADMIN_EMAILS may sign up / sign in (enforced in
+// adminGate.js). Blank — the prod default — leaves auth open to everyone, so this
+// is inert in production and safe to merge to main.
+export const ADMIN_ONLY   = optional('ADMIN_ONLY') === '1';
+export const ADMIN_EMAILS = optional('ADMIN_EMAILS')
+  .split(',').map((s) => s.toLowerCase().trim()).filter(Boolean);
+
 // ── Synced-lyrics provider (LRCLIB) ──
 export const LYRICS_API_BASE   = required('LYRICS_API_BASE');
 export const LYRICS_USER_AGENT = required('LYRICS_USER_AGENT');
