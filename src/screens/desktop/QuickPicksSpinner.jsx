@@ -26,6 +26,8 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
   const ctrl   = useRef(null);           // AbortController for the active drag's window listeners
   const center = useRef({ x: 0, y: 0 });
   const last   = useRef({ a: 0, t: 0 });
+  const start  = useRef({ x: 0, y: 0 }); // pointer-down point, for intent detection
+  const intent = useRef('none');         // 'none' | 'spin' | 'scroll' — locked on first move
   const moved  = useRef(0);
   const dragging = useRef(false);
   const dragged  = useRef(false);        // true once a drag passed TAP_SLOP — suppresses the disc's click
@@ -35,7 +37,7 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     Math.atan2(e.clientY - center.current.y, e.clientX - center.current.x) * 180 / Math.PI;
 
   const onMove = useCallback((e) => {
-    if (!dragging.current) return;
+    if (!dragging.current || intent.current === 'scroll') return;
     const a = angleOf(e);
     let d = a - last.current.a;
     while (d > 180) d -= 360;
@@ -72,6 +74,8 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     dragged.current = false;
     moved.current = 0;
     vel.current = 0;
+    start.current = { x: e.clientX, y: e.clientY };
+    intent.current = 'none';
     last.current = { a: angleOf(e), t: e.timeStamp };
     ctrl.current?.abort();
     ctrl.current = new AbortController();
@@ -80,6 +84,30 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     window.addEventListener('pointerup', onUp, { signal });
     window.addEventListener('pointercancel', onUp, { signal });
   };
+
+  // Intent gate (touch): on the first ~8px, lock the gesture to either the wheel
+  // (horizontal/rotational flick → spin, hold it so page scroll can't steal it)
+  // or the page (vertical drag → release for a perfect native scroll). Native +
+  // non-passive so we can preventDefault once we've claimed a spin.
+  useEffect(() => {
+    const ring = ringRef.current;
+    if (!ring) return undefined;
+    const onTouchMove = (e) => {
+      if (!dragging.current) return;
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - start.current.x;
+      const dy = t.clientY - start.current.y;
+      if (intent.current === 'none' && Math.hypot(dx, dy) > 8) {
+        intent.current = Math.abs(dx) > Math.abs(dy) ? 'spin' : 'scroll';
+        if (intent.current === 'scroll') { dragging.current = false; ctrl.current?.abort(); }
+        else last.current = { a: Math.atan2(t.clientY - center.current.y, t.clientX - center.current.x) * 180 / Math.PI, t: e.timeStamp };
+      }
+      if (intent.current === 'spin') e.preventDefault();   // we own this gesture — page won't scroll
+    };
+    ring.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => ring.removeEventListener('touchmove', onTouchMove);
+  }, []);
 
   useEffect(() => () => {
     cancelAnimationFrame(raf.current);
