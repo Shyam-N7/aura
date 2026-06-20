@@ -183,48 +183,6 @@
   height: 50px;
 }
 
-/* Gooey liquid layer — solid blobs that gather to centre and metaball-merge
-   under #aura-goo, only for the morph window (the goo + layer opacity ride this
-   layer, never the glass, so backdrop-filter isn't fought). Blobs are full-alpha
-   var(--color-ink) so the goo threshold merges them cleanly; the layer's low
-   opacity is what keeps the effect a soft liquid sheen on top of the glass. */
-.aura-dock__liquid {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 220ms ease;
-}
-.aura-dock__liquid b {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 46px;
-  height: 46px;
-  margin: -23px 0 0 -23px;
-  border-radius: 9999px;
-  background: var(--color-ink);
-  transform: translate(var(--bx), 0) scale(0.5);
-}
-.aura-dock__liquid b:nth-child(1) { --bx: -84px; }
-.aura-dock__liquid b:nth-child(2) { --bx: 0px; }
-.aura-dock__liquid b:nth-child(3) { --bx: 84px; }
-.aura-dock--morphing .aura-dock__liquid {
-  opacity: 0.22;
-  filter: url(#aura-goo);
-}
-.aura-dock--morphing .aura-dock__liquid b {
-  animation: aura-dock-gather 460ms ease-in-out;
-}
-/* Spread → converge (merge) → spread, so the toggle reads as a gooey gather in
-   either direction. */
-@keyframes aura-dock-gather {
-  0%   { transform: translate(var(--bx), 0) scale(0.5); }
-  45%  { transform: translate(0, 0) scale(1.05); }
-  55%  { transform: translate(0, 0) scale(1.05); }
-  100% { transform: translate(var(--bx), 0) scale(0.5); }
-}
 .aura-dock__nav-items {
   position: relative;
   z-index: 2;
@@ -249,9 +207,8 @@
   align-items: center;
   gap: 3px;
   color: var(--color-ink-faint);
-  transition: color 160ms ease, transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: color 160ms ease, transform 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.aura-dock__item:active { transform: scale(0.9); }
 .aura-dock__item--on { color: var(--color-accent); }
 /* Active-tab dot — fades/scales in under the active item, no layout shift. */
 .aura-dock__item::after {
@@ -274,6 +231,26 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* Gooey merge — during the morph each real nav item gets a solid blob backing
+   (mass for the goo), and the items converge to centre so #aura-goo metaball-
+   fuses them as the dock collapses into the pill. The goo rides the actual nav
+   items (not decorative shapes); icons/labels melt with their blobs. */
+.aura-dock--morphing .aura-dock__nav-items {
+  filter: url(#aura-goo);
+}
+.aura-dock--morphing .aura-dock__item::before {
+  content: "";
+  position: absolute;
+  inset: 4px 6px;
+  z-index: -1;
+  border-radius: 9999px;
+  background: var(--color-accent);
+}
+.aura-dock--btt .aura-dock__item:nth-child(1) { transform: translateX(150%); }
+.aura-dock--btt .aura-dock__item:nth-child(2) { transform: translateX(50%); }
+.aura-dock--btt .aura-dock__item:nth-child(3) { transform: translateX(-50%); }
+.aura-dock--btt .aura-dock__item:nth-child(4) { transform: translateX(-150%); }
 
 /* ── Back-to-top liquid morph (contract to a centered pill) ───────────────── */
 .aura-dock__btt {
@@ -331,9 +308,12 @@
   .aura-dock__btt { transition: opacity 140ms ease; transform: none; }
   .aura-dock--btt .aura-dock__nav-items,
   .aura-dock--btt .aura-dock__btt { transform: none; }
-  .aura-dock__item:active,
+  .aura-dock--btt .aura-dock__item:nth-child(1),
+  .aura-dock--btt .aura-dock__item:nth-child(2),
+  .aura-dock--btt .aura-dock__item:nth-child(3),
+  .aura-dock--btt .aura-dock__item:nth-child(4) { transform: none; }
   .aura-dock__np-play:active { transform: none; }
   .aura-dock__eq i { animation: none; transform: scaleY(0.8); }
-  .aura-dock--morphing .aura-dock__liquid { opacity: 0; filter: none; }
-  .aura-dock__liquid b { animation: none; }
+  .aura-dock--morphing .aura-dock__nav-items { filter: none; }
+  .aura-dock--morphing .aura-dock__item::before { display: none; }
 }

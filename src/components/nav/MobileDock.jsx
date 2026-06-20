@@ -97,12 +97,10 @@ export function MobileDock({
           </div>
         </div>
 
-        {/* Nav row — crossfades with the centered back-to-top label. */}
+        {/* Nav row — crossfades with the centered back-to-top label. During the
+            morph the real nav items converge to centre and metaball-melt together
+            under #aura-goo (goo rides the actual icons, not decorative blobs). */}
         <div className="aura-dock__nav">
-          {/* Gooey liquid: solid blobs behind the crisp icons that gather to
-              centre and metaball-merge under #aura-goo for the morph window only
-              (the icons/label stay sharp on top). */}
-          <span className="aura-dock__liquid" aria-hidden="true"><b/><b/><b/></span>
           <div className="aura-dock__nav-items" aria-hidden={btt}>
             {NAV_ITEMS.map(it => {
               if (it.talk) {
