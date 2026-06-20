@@ -21,7 +21,7 @@ import './MobilePlayer.css';
 // Queue screen now (the Up next strip opens it). The cover owns a unified gesture:
 // swipe up = next, swipe down = close, double-tap = like; lyrics open from the ⋯ menu.
 export function MobilePlayer({
-  track, progress, playing, nextTrack, nextLoading, player, djName = 'AURA',
+  open, track, progress, playing, nextTrack, nextLoading, player, djName = 'AURA',
   onTogglePlay, onPrev, onNext, onSeek,
   repeatMode = 'off', onCycleRepeat, onShuffle, shuffleActive = false,
   onBack, openWhy, openLyrics, openQueue,
@@ -50,7 +50,7 @@ export function MobilePlayer({
       </div>
       <div className="aura-mp__scrim" aria-hidden="true"/>
 
-      <div className="aura-mp__content">
+      <div className="aura-mp__content" data-vaul-no-drag {...heroGestures}>
         <div className="aura-mp__top">
           <button onClick={onBack} aria-label="back" className="aura-mp__chip">
             <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style={{ transform: 'translateX(-1px)' }}>
@@ -82,7 +82,7 @@ export function MobilePlayer({
           </div>
         </div>
 
-        <div className="aura-mp__hero" data-vaul-no-drag {...heroGestures}>
+        <div className="aura-mp__hero">
           <div className="aura-mp__cover">
             <div id="player-art" className="aura-mp__cover-art">
               <MorphingAlbumArt track={track} size={360} radius={10}/>
@@ -100,6 +100,14 @@ export function MobilePlayer({
                 </svg>
               </span>
             )}
+            {open && (
+              <span className="aura-mp__hint" aria-hidden="true">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                double-tap to like
+              </span>
+            )}
           </div>
         </div>
 
@@ -114,7 +122,7 @@ export function MobilePlayer({
           <div className="aura-mp__artist">{track.artist}</div>
         </div>
 
-        <div className="aura-mp__scrub" data-vaul-no-drag>
+        <div className="aura-mp__scrub" data-vaul-no-drag data-no-gesture>
           <ProgressRibbon progress={progress} accent="var(--color-accent)" dim="var(--color-line)"
             playing={playing} seed={track.id} onSeek={onSeek} height={40}/>
           <div className="aura-mp__time">

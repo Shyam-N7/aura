@@ -1128,6 +1128,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {isMobile && track && (
           <PlayerDrawer open={screen === 'player'} onClose={() => leavePlayer(playerReturn)}>
             <MobilePlayer
+              open={screen === 'player'}
               track={track} progress={progress} playing={playing}
               nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidates[0] : null)}
               nextLoading={autoNextLoading}

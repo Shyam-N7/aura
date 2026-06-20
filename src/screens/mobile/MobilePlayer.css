@@ -190,6 +190,43 @@
   .aura-mp__likeburst { animation-duration: 1ms; }
 }
 
+/* "double-tap to like" nudge — fades in then out on each player entry so the
+   gesture is discoverable. pointer-events:none so it never blocks a tap. */
+.aura-mp__hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 3;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-bg), transparent 22%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+          backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in srgb, #fff, transparent 82%);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  opacity: 0;
+  animation: aura-mp-hint 3.2s ease forwards;
+}
+.aura-mp__hint svg { color: var(--color-accent); }
+@keyframes aura-mp-hint {
+  0%   { opacity: 0; transform: translate(-50%, 8px); }
+  14%  { opacity: 1; transform: translate(-50%, 0); }
+  72%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-mp__hint { animation-duration: 2.4s; }
+}
+
 /* EQ trigger, relocated above the title — small centred control. */
 .aura-mp__eq {
   display: flex;

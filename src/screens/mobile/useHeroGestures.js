@@ -11,7 +11,13 @@ export function useHeroGestures({ onNext, onClose, onLike }) {
   const lastTapAt = useRef(0);
 
   return {
-    onPointerDown(e) { start.current = { x: e.clientX, y: e.clientY }; },
+    onPointerDown(e) {
+      // The gesture spans the whole player surface, so ignore presses that begin
+      // on a control — buttons, links, inputs, and the scrubber (data-no-gesture)
+      // own their own interaction. Everything else is gesture.
+      if (e.target?.closest?.('button, a, input, [data-no-gesture]')) { start.current = null; return; }
+      start.current = { x: e.clientX, y: e.clientY };
+    },
     onPointerCancel() { start.current = null; },
     onPointerUp(e) {
       const s = start.current;
