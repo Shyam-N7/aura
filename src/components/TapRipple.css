@@ -1,0 +1,27 @@
+/* Top-level ripple layer — covers the viewport, never intercepts pointers, and
+   sits above tapped chrome so ripples read on top of buttons/cards. */
+.aura-ripple-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* A single ripple: a soft accent disc that blooms from the touch point and fades.
+   Transform/opacity only; self-removes on animationend. */
+.aura-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--color-accent), transparent 52%) 0%,
+    color-mix(in srgb, var(--color-accent), transparent 78%) 45%,
+    transparent 72%);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0.7;
+  will-change: transform, opacity;
+  animation: aura-ripple 520ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+@keyframes aura-ripple {
+  to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}

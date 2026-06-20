@@ -17,6 +17,7 @@ import { MorphLayer } from './components/player/MorphLayer';
 import { MobileDock } from './components/nav/MobileDock';
 import { MobileTopBar } from './components/nav/MobileTopBar';
 import { GooFilter } from './components/GooFilter';
+import { TapRipple } from './components/TapRipple';
 import { useActiveScroll } from './hooks/useActiveScroll';
 import { TalkAura } from './components/chat/TalkAura';
 import { Toast } from './components/Toast';
@@ -1404,6 +1405,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         <Toast/>
         <AddToPlaylistSheet/>
         <GooFilter/>
+        <TapRipple/>
         <ConfirmDialog/>
         <PromptDialog/>
         <ShortcutsOverlay/>
