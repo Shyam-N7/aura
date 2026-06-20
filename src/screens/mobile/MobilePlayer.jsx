@@ -144,6 +144,19 @@ export function MobilePlayer({
           <button onClick={onNext} aria-label="next" className="aura-mp__nav">
             <svg width="26" height="19" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 0 L9 5 L0 10 Z M11 0 H13 V10 H11 Z" fill="currentColor"/></svg>
           </button>
+          {/* "swipe up" cue — rising chevrons in the right margin at the controls'
+              height (off-centre, by the next control: swipe-up advances forward).
+              Keyed on open + track so it re-runs on entry + each switch; starts a
+              beat after the cover's double-tap hint so the two cues don't pop together. */}
+          {open && (
+            <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
+              <span className="aura-mp__swipecue-arrows">
+                <svg viewBox="0 0 16 10" width="14" height="9" fill="none"><path d="M2 8 L8 3 L14 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <svg viewBox="0 0 16 10" width="14" height="9" fill="none"><path d="M2 8 L8 3 L14 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </span>
+              <span className="aura-mp__swipecue-label">next</span>
+            </span>
+          )}
         </div>
 
         {(nextTrack || nextLoading) && (
@@ -189,21 +202,6 @@ export function MobilePlayer({
           )}
         </div>
 
-        {/* Gooey "swipe up for next" cue — bottom-centre overlay, keyed on open +
-            track so it re-runs on entry AND each song switch. The blob is the only
-            thing under #aura-goo (goo melts text); the label is a separate crisp
-            layer. pointer-events:none so it never blocks the swipe it advertises. */}
-        {open && (
-          <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
-            <span className="aura-mp__swipecue-goo" aria-hidden="true">
-              <svg viewBox="0 0 36 48" width="34" height="46">
-                <circle cx="18" cy="34" r="11" fill="currentColor"/>
-                <circle className="aura-mp__swipecue-rise" cx="18" cy="15" r="7" fill="currentColor"/>
-              </svg>
-            </span>
-            <span className="aura-mp__swipecue-text">swipe up for next</span>
-          </span>
-        )}
       </div>
     </div>
   );

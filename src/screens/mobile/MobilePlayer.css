@@ -227,56 +227,54 @@
   .aura-mp__hint { animation-duration: 2.4s; }
 }
 
-/* Gooey "swipe up for next" cue — bottom-centre overlay. A 2-circle metaball
-   under #aura-goo "pumps" upward (the swipe metaphor); the label is a SEPARATE
-   crisp layer (goo melts text). Goo is confined to the tiny blob, so it stays
-   cheap. Shown on player entry + each song switch (keyed), fades itself out. */
+/* "swipe up" cue — a pair of rising chevrons + tiny label, tucked in the right
+   margin at the transport's height (off-centre, by the next control: swipe-up
+   advances forward). Clean chevron animation, no goo. Shown on entry + each
+   switch (keyed), starts ~0.6s after the cover's double-tap hint so the two
+   cues don't pop together, then fades out. transform/opacity only. */
 .aura-mp__swipecue {
   position: absolute;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 5;
   pointer-events: none;
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   opacity: 0;
-  animation: aura-mp-swipecue 2.6s ease forwards;
+  animation: aura-mp-swipecue 2.9s ease 0.6s forwards;
 }
-.aura-mp__swipecue-goo {
+.aura-mp__swipecue-arrows {
   display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0;
   color: var(--color-accent);
-  filter: url(#aura-goo);
 }
-.aura-mp__swipecue-rise {
-  /* Two pumps cover the cue's visible window, then it rests — no infinite loop
-     ticking on the element after it has faded out. */
-  animation: aura-mp-swipe-rise 1.15s cubic-bezier(0.4, 0.7, 0.3, 1) 2;
-}
-.aura-mp__swipecue-text {
+.aura-mp__swipecue-arrows svg:nth-child(1) { animation: aura-mp-chev 1.25s ease-in-out 0.6s 2; }
+.aura-mp__swipecue-arrows svg:nth-child(2) { animation: aura-mp-chev 1.25s ease-in-out 0.78s 2; opacity: 0.45; }
+.aura-mp__swipecue-label {
   font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--color-ink-soft);
-  white-space: nowrap;
 }
 @keyframes aura-mp-swipecue {
-  0%   { opacity: 0; transform: translate(-50%, 8px); }
-  14%  { opacity: 1; transform: translate(-50%, 0); }
-  74%  { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -8px); }
+  0%   { opacity: 0; }
+  16%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
 }
-@keyframes aura-mp-swipe-rise {
-  0%   { transform: translateY(7px); }
-  50%  { transform: translateY(-3px); }
-  100% { transform: translateY(7px); }
+@keyframes aura-mp-chev {
+  0%, 100% { transform: translateY(2px); opacity: 0.35; }
+  50%      { transform: translateY(-2px); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .aura-mp__swipecue { animation-duration: 2.2s; }
-  .aura-mp__swipecue-goo { filter: none; }
-  .aura-mp__swipecue-rise { animation: none; }
+  .aura-mp__swipecue-arrows svg { animation: none; opacity: 1; }
 }
 
 /* EQ trigger, relocated above the title — small centred control. */
@@ -331,6 +329,7 @@
 
 /* ── Primary transport ── */
 .aura-mp__transport {
+  position: relative;   /* anchors the right-margin "swipe up" cue */
   display: flex;
   align-items: center;
   justify-content: center;
