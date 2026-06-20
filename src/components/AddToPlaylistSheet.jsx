@@ -26,7 +26,11 @@ export function AddToPlaylistSheet() {
     : `${tracks.length} tracks`;
 
   return (
-    <Drawer open={open} onOpenChange={(o) => { if (!o) setEvent(null); }}>
+    // repositionInputs={false}: the "new playlist" input lifts the drawer via
+    // vaul's keyboard handling, and on Cancel the input unmounts so that offset
+    // is stranded (sheet stuck at the top). The sheet's fixed height keeps the
+    // input above the keyboard anyway, so the lift isn't needed.
+    <Drawer open={open} repositionInputs={false} onOpenChange={(o) => { if (!o) setEvent(null); }}>
       {data && (
         <DrawerContent className="aura-drawer__content--playlist">
           <div className="aura-sheet-header">

@@ -10,10 +10,10 @@
   position: relative;
   width: min(330px, 84vw);
   aspect-ratio: 1;
-  /* pan-y keeps vertical swipes for PAGE SCROLL (a mostly-vertical drag fires
-     pointercancel → the spin aborts); horizontal / rotational flicks still spin
-     the wheel. Avoids trapping the user's scroll on the spinner. */
-  touch-action: pan-y;
+  /* none = we fully own the gesture, so the angular spin never stutters (the
+     browser can't claim it mid-flick). Page scrolling for vertical drags is
+     handled manually in JS (intent lock → scroll .aura-dh) so both work. */
+  touch-action: none;
   cursor: grab;
   -webkit-user-select: none;
   user-select: none;

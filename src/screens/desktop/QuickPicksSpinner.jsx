@@ -8,11 +8,19 @@ import './QuickPicksSpinner.css';
 // spinner: the drag tracks angular velocity, release coasts with friction decay.
 // The wheel rotates via a single `--spin` CSS var (one write per frame); each
 // disc counter-rotates by -spin so the art + label stay upright while orbiting.
-// A flick spins; a tap plays the disc (morphing the cover up into the player).
-const FRICTION = 0.95;   // velocity retained per frame while coasting
-const MIN_VEL  = 0.12;   // deg/frame below which the coast stops
-const MAX_VEL  = 46;     // deg/frame cap so a hard flick can't go wild
-const TAP_SLOP = 7;      // total deg of travel under which the gesture is a tap
+//
+// The ring is `touch-action: none` so the angular spin is butter-smooth (the
+// browser never claims the gesture mid-flick → no pointercancel stutter). To
+// keep the page scrollable, the gesture's INTENT is locked on the first ~6px:
+// horizontal → spin (angular), vertical → we scroll the page ourselves (the
+// .aura-dh container) with matching fling momentum. A flick spins, a vertical
+// drag scrolls, a tap plays the disc (morphing the cover up into the player).
+const FRICTION   = 0.95;   // velocity retained per frame while coasting/flinging
+const MIN_VEL    = 0.12;   // deg/frame below which the spin coast stops
+const MAX_VEL    = 46;     // deg/frame cap so a hard flick can't go wild
+const TAP_SLOP   = 7;      // total deg of travel under which the gesture is a tap
+const INTENT_PX  = 6;      // px of travel before spin-vs-scroll is decided
+const SCROLL_MAX = 60;     // px/frame cap for the scroll fling
 
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -31,31 +39,68 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
   const moved  = useRef(0);
   const dragging = useRef(false);
   const dragged  = useRef(false);        // true once a drag passed TAP_SLOP — suppresses the disc's click
+  const scroller  = useRef(null);        // the .aura-dh page scroller (vertical-drag target)
+  const scrollVel = useRef(0);           // px/ms while scroll-dragging
+  const scrollLast = useRef({ y: 0, t: 0 });
 
   const apply = (deg) => wheelRef.current?.style.setProperty('--spin', `${deg}deg`);
   const angleOf = (e) =>
     Math.atan2(e.clientY - center.current.y, e.clientX - center.current.x) * 180 / Math.PI;
 
   const onMove = useCallback((e) => {
-    if (!dragging.current || intent.current === 'scroll') return;
-    const a = angleOf(e);
-    let d = a - last.current.a;
-    while (d > 180) d -= 360;
-    while (d < -180) d += 360;
-    const dt = Math.max(1, e.timeStamp - last.current.t);
-    spin.current += d;
-    moved.current += Math.abs(d);
-    vel.current = 0.7 * vel.current + 0.3 * (d / dt);
-    last.current = { a, t: e.timeStamp };
-    if (moved.current > TAP_SLOP) dragged.current = true;
-    apply(spin.current);
+    if (!dragging.current) return;
+    // Lock intent once the finger has clearly committed to a direction.
+    if (intent.current === 'none') {
+      const dx = e.clientX - start.current.x;
+      const dy = e.clientY - start.current.y;
+      if (Math.hypot(dx, dy) <= INTENT_PX) return;
+      intent.current = Math.abs(dx) >= Math.abs(dy) ? 'spin' : 'scroll';
+      last.current = { a: angleOf(e), t: e.timeStamp };          // seed angular delta
+      scrollLast.current = { y: e.clientY, t: e.timeStamp };     // seed scroll delta
+      scrollVel.current = 0;
+    }
+    if (intent.current === 'spin') {
+      const a = angleOf(e);
+      let d = a - last.current.a;
+      while (d > 180) d -= 360;
+      while (d < -180) d += 360;
+      const dt = Math.max(1, e.timeStamp - last.current.t);
+      spin.current += d;
+      moved.current += Math.abs(d);
+      vel.current = 0.7 * vel.current + 0.3 * (d / dt);
+      last.current = { a, t: e.timeStamp };
+      if (moved.current > TAP_SLOP) dragged.current = true;
+      apply(spin.current);
+    } else {
+      const sc = scroller.current;
+      if (!sc) return;
+      const dy = e.clientY - scrollLast.current.y;
+      const dt = Math.max(1, e.timeStamp - scrollLast.current.t);
+      sc.scrollTop -= dy;                                          // 1:1 drag-scroll
+      scrollVel.current = 0.7 * scrollVel.current + 0.3 * (dy / dt);
+      scrollLast.current = { y: e.clientY, t: e.timeStamp };
+      dragged.current = true;                                      // a scroll is never a tap
+    }
   }, []);
 
   const onUp = useCallback(() => {
     if (!dragging.current) return;
     dragging.current = false;
     ctrl.current?.abort();                              // drop this drag's window listeners
-    if (!dragged.current || reducedMotion()) return;   // a tap (or no-motion pref) → let the disc click play it
+    if (reducedMotion()) return;                        // no momentum under reduced-motion
+    if (intent.current === 'scroll') {
+      const sc = scroller.current;
+      if (!sc) return;
+      let v = Math.max(-SCROLL_MAX, Math.min(SCROLL_MAX, scrollVel.current * 16));   // px/frame
+      const fling = () => {
+        sc.scrollTop -= v;
+        v *= FRICTION;
+        if (Math.abs(v) > 0.4) raf.current = requestAnimationFrame(fling);
+      };
+      if (Math.abs(v) > 0.4) raf.current = requestAnimationFrame(fling);
+      return;
+    }
+    if (!dragged.current) return;                       // a tap → let the disc click play it
     let v = Math.max(-MAX_VEL, Math.min(MAX_VEL, vel.current * 16));
     const coast = () => {
       spin.current += v;
@@ -70,6 +115,7 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     cancelAnimationFrame(raf.current);
     const r = ringRef.current.getBoundingClientRect();
     center.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    scroller.current = ringRef.current.closest('.aura-dh');
     dragging.current = true;
     dragged.current = false;
     moved.current = 0;
@@ -84,30 +130,6 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     window.addEventListener('pointerup', onUp, { signal });
     window.addEventListener('pointercancel', onUp, { signal });
   };
-
-  // Intent gate (touch): on the first ~8px, lock the gesture to either the wheel
-  // (horizontal/rotational flick → spin, hold it so page scroll can't steal it)
-  // or the page (vertical drag → release for a perfect native scroll). Native +
-  // non-passive so we can preventDefault once we've claimed a spin.
-  useEffect(() => {
-    const ring = ringRef.current;
-    if (!ring) return undefined;
-    const onTouchMove = (e) => {
-      if (!dragging.current) return;
-      const t = e.touches[0];
-      if (!t) return;
-      const dx = t.clientX - start.current.x;
-      const dy = t.clientY - start.current.y;
-      if (intent.current === 'none' && Math.hypot(dx, dy) > 8) {
-        intent.current = Math.abs(dx) > Math.abs(dy) ? 'spin' : 'scroll';
-        if (intent.current === 'scroll') { dragging.current = false; ctrl.current?.abort(); }
-        else last.current = { a: Math.atan2(t.clientY - center.current.y, t.clientX - center.current.x) * 180 / Math.PI, t: e.timeStamp };
-      }
-      if (intent.current === 'spin') e.preventDefault();   // we own this gesture — page won't scroll
-    };
-    ring.addEventListener('touchmove', onTouchMove, { passive: false });
-    return () => ring.removeEventListener('touchmove', onTouchMove);
-  }, []);
 
   useEffect(() => () => {
     cancelAnimationFrame(raf.current);
