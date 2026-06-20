@@ -6,7 +6,7 @@ import { useSearchQuery, getSearchQuery } from '../../lib/searchQuery';
 import { subscribeSearchFocus } from '../../lib/searchFocus';
 import './MobileTopBar.css';
 
-// Mobile-only top pill — mirrors MobileBottomBar's glass-pill recipe at the
+// Mobile-only top pill — mirrors MobileNavBar's glass-pill recipe at the
 // top of the viewport. Left = identity/status (AuraMark + djName + short stamp);
 // right = an action trio (search · theme · profile). The avatar navigates to
 // the library (profile and library are one identity; account actions live in

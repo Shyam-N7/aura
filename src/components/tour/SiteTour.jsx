@@ -42,8 +42,11 @@ const MOBILE_STEPS = [
     title: 'you', body: 'your likes, playlists, and recents live here.' },
   { id: 'm-study', screen: 'home', selector: '.aura-dh__about-card', scroll: true,
     title: 'study your listening', body: 'journal, sonic dna, and mood bridges — all here on home.' },
-  { id: 'm-np', screen: 'home', selector: "[data-tour='mnav-np']",
-    title: 'now playing', body: 'your music sits here — tap it for the full player.' },
+  // The now-playing strip only mounts once a track is loaded — and the tour
+  // runs for fresh users with nothing playing — so teach it as a centered step
+  // (the strip itself carries data-tour="mnav-np" for any future anchored use).
+  { id: 'm-np', screen: 'home', selector: null,
+    title: 'now playing', body: 'play something and it lands at the bottom — tap it for the full player.' },
   { id: 'm-theme', screen: 'home', selector: '.aura-mobile-top__theme',
     title: 'day & night', body: 'flip the look whenever the light changes.' },
   { id: 'done', screen: 'home', selector: null,

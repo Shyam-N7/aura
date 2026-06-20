@@ -46,9 +46,10 @@ describe('MobilePlayer', () => {
     expect(screen.getByLabelText('add to playlist')).toBeInTheDocument();
   });
 
-  it('opens the queue from the actions row', () => {
-    const h = setup();
-    fireEvent.click(screen.getByLabelText('up next'));
+  it('opens the queue from the up-next banner', () => {
+    const nextTrack = { id: 't2', title: 'Afterglow', artist: 'Veridian', durationSec: 180, cover: 'rings' };
+    const h = setup({ nextTrack });
+    fireEvent.click(screen.getByRole('button', { name: /up next:/i }));
     expect(h.openQueue).toHaveBeenCalledTimes(1);
   });
 });

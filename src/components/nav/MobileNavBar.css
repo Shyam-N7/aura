@@ -1,0 +1,145 @@
+/* Phone nav pill — the bottom-most chrome, pinned at bottom:16 (never moves).
+   Carries home/search/talk/you + the liquid back-to-top morph. The now-playing
+   strip lives in its own pill above this one (MobileNowPlayingBar). Same glass
+   recipe as MobileTopBar so all the floating pills read as a set. */
+
+.aura-nav-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 14px;
+  right: 14px;
+  z-index: 30;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 9999px;
+  /* Faint white-shimmer gradient gives a real glass look even when nothing's
+     scrolling behind the pill (uniform-dark page = backdrop-filter has nothing
+     to blur). Matched to MobileTopBar so the pills read as a pair. */
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.02));
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+  color: var(--color-ink);
+  /* clip the melting contents to the pill as it contracts to the btt pill */
+  overflow: hidden;
+  transition:
+    left  420ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    right 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.theme-midnight .aura-nav-bar {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015));
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.36),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.aura-nav-bar__morph {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.aura-nav-bar__face {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  transition: opacity 200ms ease, transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Nav block — 4 items spread evenly across the pill. */
+.aura-nav-bar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+}
+.aura-nav-bar__item {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-ink-faint);
+  transition: color 140ms ease;
+}
+.aura-nav-bar__item--on { color: var(--color-accent); }
+.aura-nav-bar__label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.aura-nav-bar__item--talk { padding: 6px 12px; }
+
+/* ── Liquid morph: nav ⇄ "Take me back up" ──────────────────────────────────
+   While the active screen is scrolled, the whole glass pill contracts to a
+   centered compact pill: the nav items melt out and the back-to-top label
+   fuses in. The glass (backdrop-filter) stays on the pill; a goo filter rides
+   the inner content layer for the morph's duration only. */
+.aura-nav-bar__btt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.aura-nav-bar__btt svg { flex-shrink: 0; }
+
+/* Contracted "back to top" state */
+.aura-nav-bar--btt {
+  left: calc(50% - 100px);
+  right: calc(50% - 100px);
+}
+.aura-nav-bar--btt .aura-nav-bar__face {
+  opacity: 0;
+  transform: scale(0.86);
+  pointer-events: none;
+}
+.aura-nav-bar--btt .aura-nav-bar__btt {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  transition-delay: 80ms;   /* let the nav items clear before the label lands */
+}
+
+/* Goo fuse — applied only for the morph's duration. */
+.aura-nav-bar--morphing .aura-nav-bar__morph {
+  filter: url(#aura-goo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-nav-bar { transition: none; }
+  .aura-nav-bar--btt { left: 14px; right: 14px; }   /* no contraction */
+  .aura-nav-bar__face,
+  .aura-nav-bar__btt { transition: opacity 140ms ease; transform: none; }
+  .aura-nav-bar--btt .aura-nav-bar__face,
+  .aura-nav-bar--btt .aura-nav-bar__btt { transform: none; }
+  .aura-nav-bar--morphing .aura-nav-bar__morph { filter: none; }
+}

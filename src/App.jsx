@@ -14,7 +14,8 @@ import { LyricsScreen } from './screens/overlays/LyricsScreen';
 import { CrowdScreen } from './screens/overlays/CrowdScreen';
 
 import { MorphLayer } from './components/player/MorphLayer';
-import { MobileBottomBar } from './components/nav/MobileBottomBar';
+import { MobileNavBar } from './components/nav/MobileNavBar';
+import { MobileNowPlayingBar } from './components/nav/MobileNowPlayingBar';
 import { MobileTopBar } from './components/nav/MobileTopBar';
 import { GooFilter } from './components/GooFilter';
 import { useActiveScroll } from './hooks/useActiveScroll';
@@ -1093,9 +1094,15 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     ? `Loading ${hubLang.charAt(0).toUpperCase()}${hubLang.slice(1)}`
     : (SCREEN_LABELS[screen] ?? 'Loading');
 
+  // Bottom-chrome clearance for the mobile spacer (responsive.css ::after).
+  // Two pills stack when a track is loaded (nav + now-playing), one when idle —
+  // so the spacer tracks the real chrome height instead of a fixed guess.
+  const bottomChrome = isMobile ? (track ? '146px' : '84px') : undefined;
+
   return (
     <>
-      <div className="absolute inset-0 bg-bg text-ink overflow-hidden">
+      <div className="absolute inset-0 bg-bg text-ink overflow-hidden"
+        style={bottomChrome ? { '--aura-bottom-chrome': bottomChrome } : undefined}>
         <Suspense fallback={<ScreenSkeleton label={skeletonLabel}/>}>
         {/* Unified screen dispatch — the Desktop* screens render at every
             breakpoint. PlaylistsScreen / OnboardingScreen / SensingScreen are
@@ -1317,17 +1324,21 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         )}
         {overlay === 'crowd'  && track && <CrowdScreen  track={track} mood={t.mood} onClose={() => setOverlay(null)}/>}
 
-        {/* Mobile chrome: paired glass pills — MobileTopBar (brand + theme) at
-            the top, MobileBottomBar (now-playing + nav) at the bottom. Both
-            hide on the player screen so DesktopPlayer's floating back / ⋯
-            buttons aren't covered and the page swiper claims the full surface. */}
+        {/* Mobile chrome: stacked glass pills — MobileTopBar (brand + theme) at
+            the top; at the bottom, MobileNavBar (home/search/talk/you + the
+            back-to-top morph) pinned at bottom:16, with MobileNowPlayingBar
+            floating just above it whenever a track is loaded. All hide on the
+            player screen so DesktopPlayer's floating back / ⋯ buttons aren't
+            covered and the page swiper claims the full surface. */}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}
           onOpenProfile={() => onNav('library')}
           onOpenSearch={openSearch} searching={screen === 'search'} onCloseSearch={closeSearch}/>}
-        {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileBottomBar
+        {isMobile && !overlay && !talkOpen && screen !== 'player' && track && <MobileNowPlayingBar
           track={track} playing={playing}
           onTogglePlay={() => setPlaying(p => !p)}
-          onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}
+          onOpenPlayer={(el) => morphInto(track, el, () => { setPlayerReturn(screen); setScreen('player'); })}
+          hidden={barScrolled}/>}
+        {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileNavBar
           active={screen} onNav={onNav} onTalk={() => setTalkOpen(true)}
           mode={barScrolled ? 'backtotop' : 'bar'} onBackToTop={scrollActiveUp}/>}
         {/* Tablet-portrait chrome: TopNavStrip top + BottomMiniBar bottom.

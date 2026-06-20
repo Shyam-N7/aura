@@ -730,8 +730,8 @@
    covers search; touch has no keyboard shortcut). */
 @container dh (max-width: 600px) {
   /* Scroll padding (top + bottom) is set on the stage's direct children by
-     responsive.css so screens render below MobileTopBar and above
-     MobileBottomBar while letting content scroll *behind* the pills. */
+     responsive.css so screens render below MobileTopBar and above the
+     MobileNavBar / MobileNowPlayingBar pills while content scrolls *behind* them. */
   /* TopStrip is now redundant on mobile — MobileTopBar (rendered at the
      App.jsx level) carries the brand + stamp + theme toggle as a floating
      glass pill. Hide DesktopHome's internal strip entirely. */

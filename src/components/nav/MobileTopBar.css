@@ -1,5 +1,5 @@
-/* Mobile top pill — paired with MobileBottomBar. Same glass recipe, same
-   58 px height, same 14 px side insets, same 16 px viewport inset.
+/* Mobile top pill — paired with MobileNavBar / MobileNowPlayingBar. Same glass
+   recipe, same 14 px side insets, same 16 px viewport inset.
    Subtle bg tint so the pill reads as filled glass against dark scenes
    instead of an outlined empty shape. */
 

@@ -13,7 +13,7 @@
 }
 
 /* A pill that hugs just above the bottom chrome. The offset is per-surface
-   because the bottom bar differs: mobile uses .aura-mobile-bar (bottom:16 +
+   because the bottom bar differs: mobile uses .aura-nav-bar (bottom:16 +
    height:52 → top at 68px), tablet-portrait a 80px bar, and desktop a small
    right-side FloatingMini pill that a centered button clears at a low offset.
    Defaults here to the mobile case; the shell overrides below handle the rest. */
@@ -86,7 +86,7 @@
   .aura-btt--in  { transform: none; }
 }
 
-/* On mobile the bottom bar itself liquid-morphs into the back-to-top control
-   (see MobileBottomBar), so the floating pill is suppressed there. Desktop and
+/* On mobile the nav bar itself liquid-morphs into the back-to-top control
+   (see MobileNavBar), so the floating pill is suppressed there. Desktop and
    tablet keep it. */
 .aura-responsive-shell--mobile .aura-btt-anchor { display: none; }
