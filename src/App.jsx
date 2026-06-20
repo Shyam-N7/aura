@@ -813,10 +813,13 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       const begin = (attempt = 0) => {
         const el = document.getElementById('player-art');
         if (!el && attempt < 6) { requestAnimationFrame(() => begin(attempt + 1)); return; }
+        // Hold the flying cover soft (blur 12 → 12): the player's OWN banner does
+        // the visible focus-in (un-blurs once the cover seats), so the handoff is
+        // blurred→blurred→sharp with no pop. See PlayerDrawer.css (#player-art).
         const toRect = el
-          ? { ...getRect(el), radius: 10 }                       // exact banner frame
-          : { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS }; // fallback (rare)
-        setMorph({ track: target, fromRect, toRect, kind: 'open' });
+          ? { ...getRect(el), radius: 10, blur: 12 }                       // exact banner frame
+          : { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS, blur: 12 }; // fallback (rare)
+        setMorph({ track: target, fromRect: { ...fromRect, blur: 12 }, toRect, kind: 'open' });
         morphTimer.current = setTimeout(() => {
           requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
           setInstantPlayer(false);

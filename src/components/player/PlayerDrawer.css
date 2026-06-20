@@ -24,8 +24,18 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* The player's banner focuses in: it sits blurred while the (also-soft) cover
+   morphs up, then resolves to sharp once the morph seats and `--instant` clears
+   — "comes, fits, then the blur disappears". The morph lands on this exact rect,
+   so the handoff (flying soft → banner soft) is seamless before it sharpens. */
+.aura-player-drawer #player-art { transition: filter 420ms cubic-bezier(0.4, 0, 0.2, 1); }
+.aura-player-drawer.aura-player-drawer--instant #player-art { filter: blur(12px); }
+
 @media (prefers-reduced-motion: reduce) {
   .aura-player-drawer.aura-player-drawer--instant { animation: none; }
+  .aura-player-drawer #player-art { transition: none; }
+  .aura-player-drawer.aura-player-drawer--instant #player-art { filter: none; }
 }
 
 /* Pull-down affordance, pinned at the very top centre over the player. Purely
