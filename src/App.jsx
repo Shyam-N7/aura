@@ -240,6 +240,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [ended, setEnded]           = useState(false);
   const [morph, setMorph]           = useState(null); // { track, fromRect, toRect, kind }
   const morphTimer = useRef(null);
+  // Mobile open: suppress vaul's slide-from-bottom so the player fades in place
+  // WHILE the cover morphs up — one cohesive "the bar grows into the screen"
+  // motion instead of morph-then-slide. Cleared once the morph settles.
+  const [instantPlayer, setInstantPlayer] = useState(false);
   // While the player is closing, keep its wrapper mounted for ~220 ms so
   // the screen-out animation (scale + fade + slide) can run before the
   // wrapper unmounts. The destination screen is set immediately so it
@@ -798,10 +802,22 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       const toRect = { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS };
       setMorph({ track: target, fromRect, toRect, kind: 'open' });
       clearTimeout(morphTimer.current);
-      morphTimer.current = setTimeout(() => {
+      if (isMobile) {
+        // Open the player NOW (drawer fades in place, no slide) so the rise IS
+        // the cover morph — both run together as one motion. instantPlayer is
+        // cleared when the morph settles, restoring vaul's normal drag/close.
+        setInstantPlayer(true);
         arrive();
-        requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
-      }, 470);
+        morphTimer.current = setTimeout(() => {
+          requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
+          setInstantPlayer(false);
+        }, 470);
+      } else {
+        morphTimer.current = setTimeout(() => {
+          arrive();
+          requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
+        }, 470);
+      }
     } else {
       arrive();
     }
@@ -1133,7 +1149,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the drawer is rendered whenever a track exists so vaul can animate the
             slide-out on dismiss. */}
         {isMobile && track && (
-          <PlayerDrawer open={screen === 'player'} onClose={() => leavePlayer(playerReturn)}>
+          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} onClose={() => leavePlayer(playerReturn)}>
             <MobilePlayer
               open={screen === 'player'}
               track={track} progress={progress} playing={playing}

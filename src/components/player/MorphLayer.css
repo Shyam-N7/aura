@@ -1,6 +1,9 @@
 .aura-morph-layer {
   position: absolute;
-  z-index: 40;
+  /* Above the player drawer (content z-index 41) so the cover stays visible
+     flying up while the drawer fades in place during a mobile open; still below
+     toasts/sheets/dialogs (50+). */
+  z-index: 42;
   overflow: hidden;
   pointer-events: none;
   left: var(--morph-left);

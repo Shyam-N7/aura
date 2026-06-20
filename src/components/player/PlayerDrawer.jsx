@@ -16,11 +16,11 @@ import './PlayerDrawer.css';
 // patches/vaul+1.1.2.patch (applied by the postinstall script). Non-modal vaul
 // renders no overlay and preventDefault's onPointerDownOutside, so outside
 // taps can't dismiss; drag-to-dismiss is unaffected.
-export function PlayerDrawer({ open, onClose, children }) {
+export function PlayerDrawer({ open, instant = false, onClose, children }) {
   return (
     <Drawer open={open} modal={false} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DrawerContent
-        className="aura-player-drawer"
+        className={`aura-player-drawer${instant ? ' aura-player-drawer--instant' : ''}`}
         showHandle={false}>
         <DrawerSrTitle>Now playing</DrawerSrTitle>
         <div className="aura-player-drawer__grip" aria-hidden="true"><span/></div>

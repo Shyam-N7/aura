@@ -11,6 +11,23 @@
   background: var(--color-bg);
 }
 
+/* Mobile open via the cover morph: suppress vaul's slide-from-bottom (force the
+   final transform, killing the translateY) so the player fades in place while
+   the cover morphs up — one cohesive "the bar grows into the screen" entrance.
+   App removes the class once the morph settles, so vaul's drag + slide-to-close
+   behave normally afterwards. */
+.aura-player-drawer.aura-player-drawer--instant {
+  transform: none !important;
+  animation: aura-player-drawer-in 440ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes aura-player-drawer-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-player-drawer.aura-player-drawer--instant { animation: none; }
+}
+
 /* Pull-down affordance, pinned at the very top centre over the player. Purely
    visual (pointer-events:none) — vaul handles the drag from the content itself. */
 .aura-player-drawer__grip {
