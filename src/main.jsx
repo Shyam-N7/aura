@@ -1,13 +1,13 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Root } from './App';
 import { useAuth } from './lib/auth';
-import { toast } from './lib/toast';
 import { stashPostAuthPath, consumePostAuthPath } from './lib/routes';
 import { ConsentBanner } from './components/ConsentBanner';
+import { UpdatePrompt } from './components/UpdatePrompt';
 import { getConsent, subscribeConsent } from './lib/consent';
 
 // One-time legacy redirect: the app used hash routes (`#/artist/x`) before the
@@ -81,12 +81,15 @@ function AppRoot() {
   }, [isAuthed]);
 
   // Register the service worker after mount. registerType:'prompt' means a
-  // waiting update never force-reloads — it applies on the next natural reopen;
-  // we surface a quiet "reopen to update" toast (the toast bus buffers it, so it
-  // still shows even if raised before the in-app toast host has mounted).
+  // waiting update never force-reloads — it applies on the next natural reopen.
+  // Instead of a transient toast, surface a PERSISTENT UpdatePrompt with an
+  // Update button that calls updateSW(true) (skip-waiting + reload into the
+  // fresh build). Keep the returned updateSW fn in a ref so the button can fire it.
+  const [needRefresh, setNeedRefresh] = useState(false);
+  const updateSW = useRef(null);
   useEffect(() => {
-    registerSW({
-      onNeedRefresh() { toast('a new version is ready — reopen aura to update.'); },
+    updateSW.current = registerSW({
+      onNeedRefresh() { setNeedRefresh(true); },
     });
   }, []);
 
@@ -140,11 +143,17 @@ function AppRoot() {
     if (view !== 'app') document.body.style.background = THEME_BG[theme] || THEME_BG.dusk;
   }, [view, theme]);
 
+  // Persistent SW-update banner — shown in every view (app + pre-auth).
+  const updateBanner = needRefresh
+    ? <UpdatePrompt onUpdate={() => updateSW.current?.(true)} onDismiss={() => setNeedRefresh(false)} />
+    : null;
+
   if (view === 'app') return (
     <>
       <Root user={user} />
       {analyticsOn && <><Analytics /><SpeedInsights /></>}
       <ConsentBanner onPrivacy={() => navigate('/privacy')} />
+      {updateBanner}
     </>
   );
 
@@ -172,6 +181,7 @@ function AppRoot() {
       </div>
       {analyticsOn && <><Analytics /><SpeedInsights /></>}
       <ConsentBanner onPrivacy={() => navigate('/privacy')} />
+      {updateBanner}
     </>
   );
 }
