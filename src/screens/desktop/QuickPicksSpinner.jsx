@@ -19,7 +19,8 @@ const FRICTION   = 0.95;   // velocity retained per frame while coasting/flingin
 const MIN_VEL    = 0.12;   // deg/frame below which the spin coast stops
 const MAX_VEL    = 46;     // deg/frame cap so a hard flick can't go wild
 const TAP_SLOP   = 7;      // total deg of travel under which the gesture is a tap
-const INTENT_PX  = 6;      // px of travel before spin-vs-scroll is decided
+const INTENT_PX  = 10;     // px of travel before spin-vs-scroll is decided (also the tap slop:
+                           //   under this, the gesture stays a tap so a slightly-sloppy tap still plays)
 const SCROLL_MAX = 60;     // px/frame cap for the scroll fling
 
 const reducedMotion = () =>
@@ -39,6 +40,7 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
   const moved  = useRef(0);
   const dragging = useRef(false);
   const dragged  = useRef(false);        // true once a drag passed TAP_SLOP — suppresses the disc's click
+  const alive    = useRef(true);         // guards coast/fling frames against post-unmount execution
   const scroller  = useRef(null);        // the .aura-dh page scroller (vertical-drag target)
   const scrollVel = useRef(0);           // px/ms while scroll-dragging
   const scrollLast = useRef({ y: 0, t: 0 });
@@ -93,6 +95,7 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
       if (!sc) return;
       let v = Math.max(-SCROLL_MAX, Math.min(SCROLL_MAX, scrollVel.current * 16));   // px/frame
       const fling = () => {
+        if (!alive.current) return;
         sc.scrollTop -= v;
         v *= FRICTION;
         if (Math.abs(v) > 0.4) raf.current = requestAnimationFrame(fling);
@@ -103,6 +106,7 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     if (!dragged.current) return;                       // a tap → let the disc click play it
     let v = Math.max(-MAX_VEL, Math.min(MAX_VEL, vel.current * 16));
     const coast = () => {
+      if (!alive.current) return;
       spin.current += v;
       v *= FRICTION;
       apply(spin.current);
@@ -132,6 +136,7 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
   };
 
   useEffect(() => () => {
+    alive.current = false;
     cancelAnimationFrame(raf.current);
     ctrl.current?.abort();
   }, []);

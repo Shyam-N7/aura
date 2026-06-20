@@ -241,6 +241,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [ended, setEnded]           = useState(false);
   const [morph, setMorph]           = useState(null); // { track, fromRect, toRect, kind }
   const morphTimer = useRef(null);
+  const beginRaf   = useRef(0);       // the mobile-open #player-art poll rAF (cancellable)
   // Mobile open: suppress vaul's slide-from-bottom so the player fades in place
   // WHILE the cover morphs up — one cohesive "the bar grows into the screen"
   // motion instead of morph-then-slide. Cleared once the morph settles.
@@ -647,6 +648,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // setTimeout would otherwise fire setState on an unmounted tree.
   useEffect(() => () => {
     clearTimeout(morphTimer.current);
+    cancelAnimationFrame(beginRaf.current);
     clearTimeout(closingPlayerTimer.current);
     clearTimeout(closingLyricsTimer.current);
     clearTimeout(closingSearchTimer.current);
@@ -801,6 +803,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     const fromRect = srcEl && getRect(srcEl);
     if (!(fromRect && fromRect.width > 0)) { arrive(); return; }
     clearTimeout(morphTimer.current);
+    cancelAnimationFrame(beginRaf.current);   // drop any in-flight #player-art poll from a prior open
     if (isMobile) {
       // Open the player NOW (drawer fades in place, no slide) so the rise IS the
       // cover morph — both run together as one motion. Because the drawer is in
@@ -812,7 +815,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       arrive();
       const begin = (attempt = 0) => {
         const el = document.getElementById('player-art');
-        if (!el && attempt < 6) { requestAnimationFrame(() => begin(attempt + 1)); return; }
+        if (!el && attempt < 6) { beginRaf.current = requestAnimationFrame(() => begin(attempt + 1)); return; }
         // Hold the flying cover soft (blur 12 → 12): the player's OWN banner does
         // the visible focus-in (un-blurs once the cover seats), so the handoff is
         // blurred→blurred→sharp with no pop. See PlayerDrawer.css (#player-art).
@@ -825,7 +828,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           setInstantPlayer(false);
         }, 470);
       };
-      requestAnimationFrame(() => begin());
+      beginRaf.current = requestAnimationFrame(() => begin());
     } else {
       const toRect = { ...getPlayerArtRect(), radius: PLAYER_ART_RADIUS };
       setMorph({ track: target, fromRect, toRect, kind: 'open' });

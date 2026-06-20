@@ -57,7 +57,9 @@ export function MobileDock({
   useEffect(() => {
     if (first.current) { first.current = false; return; }
     setMorphing(true);
-    const id = setTimeout(() => setMorphing(false), 460);
+    // Match the morph CSS transitions (~360ms) so the goo filter drops as the
+    // morph settles instead of lingering blur on the content after it's done.
+    const id = setTimeout(() => setMorphing(false), 380);
     return () => clearTimeout(id);
   }, [mode]);
 
