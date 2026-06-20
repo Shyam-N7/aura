@@ -261,6 +261,22 @@
    glass under every app theme. */
 .aura-eq__panel .aura-vol__btn:hover { background: rgb(255 255 255 / 0.10); }
 
+/* Phone: grow the popup into a large near-fullscreen sheet — full width (inset),
+   from below the top bar down to a sensible bottom. The fader geometry scales up
+   in JS (eqGeometry), so this just sizes/centres the panel + its content. */
+@media (max-width: 600px) {
+  .aura-eq__panel {
+    width: calc(100vw - 28px);
+    max-width: 452px;
+    max-height: calc(100dvh - 116px);
+    padding: 18px 18px 20px;
+    border-radius: 26px;
+  }
+  .aura-eq__presets { max-width: none; }
+  .aura-eq__bands { display: flex; flex-direction: column; align-items: center; }
+  .aura-eq__quality { flex-wrap: wrap; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aura-eq__panel.is-open,
   .aura-eq__panel.is-closing { animation-duration: 1ms; }

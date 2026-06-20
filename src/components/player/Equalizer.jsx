@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MonoLabel } from '../primitives';
 import { VolumeSlider } from './VolumeSlider';
@@ -13,21 +13,29 @@ import { toast } from '../../lib/toast';
 import { isIOS } from '../../lib/platform';
 import './Equalizer.css';
 
-// Geometry for the curve-fader area (a fixed-size canvas inside the popup, so
-// the SVG response curve and the fader columns share one coordinate system).
+// Curve-fader geometry. The cell width + track height are computed per-open from
+// the viewport (see eqGeometry) so the panel can render as a compact popup on
+// desktop and a large near-fullscreen sheet on phones, sharing one coordinate
+// system between the SVG response curve and the fader columns.
 const COLS = EQ_FREQS.length;
-const CELL_W = 29;
-const TRACK_H = 112;
-const FADERS_W = COLS * CELL_W;
 const R = EQ_RANGE_DB;
 
-const gainToY = (g) => (1 - (g + R) / (2 * R)) * TRACK_H;
-const yToGain = (y) => {
-  const g = R - (y / TRACK_H) * 2 * R;
+function eqGeometry() {
+  const phone = typeof window !== 'undefined' && window.innerWidth <= 600;
+  if (!phone) return { cellW: 29, trackH: 112, fadersW: COLS * 29 };
+  const avail = Math.min(window.innerWidth, 452) - 56;   // panel inner width minus padding
+  const cellW = Math.max(30, Math.floor(avail / COLS));
+  const trackH = Math.round(Math.min(window.innerHeight * 0.40, 320));
+  return { cellW, trackH, fadersW: COLS * cellW };
+}
+
+// 0.5 dB steps — smooth but tidy. `h` is the live track height (real px), so the
+// gain mapping is correct whether the faders render at the desktop or sheet size.
+const yToGain = (y, h) => {
+  const g = R - (y / h) * 2 * R;
   const clamped = Math.max(-R, Math.min(R, g));
-  return Math.round(clamped * 2) / 2;            // 0.5 dB steps — smooth but tidy
+  return Math.round(clamped * 2) / 2;
 };
-const bandX = (i) => (i + 0.5) * CELL_W;
 
 // Catmull-Rom → cubic bezier: a smooth path threading the fader thumbs.
 function smoothPath(pts) {
@@ -109,6 +117,10 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   // paint (the open morph needs it) and refreshed on resize so the close morph
   // still collapses into the moved icon.
   const [{ dx, dy }, setOffset] = useState(() => offsetFromCentre(anchorEl));
+  // Fader geometry, fixed for this open (desktop popup vs phone sheet).
+  const geo = useMemo(() => eqGeometry(), []);
+  const gainToY = (g) => (1 - (g + R) / (2 * R)) * geo.trackH;
+  const bandX = (i) => (i + 0.5) * geo.cellW;
 
   const closeRef = useRef(onRequestClose); closeRef.current = onRequestClose;
 
@@ -155,11 +167,13 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   const onTrackPointerDown = (i) => (e) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     setActiveBand(i);
-    setBand(i, yToGain(e.clientY - e.currentTarget.getBoundingClientRect().top));
+    const r = e.currentTarget.getBoundingClientRect();
+    setBand(i, yToGain(e.clientY - r.top, r.height));
   };
   const onTrackPointerMove = (i) => (e) => {
     if (dragRef.current !== i) return;
-    setBand(i, yToGain(e.clientY - e.currentTarget.getBoundingClientRect().top));
+    const r = e.currentTarget.getBoundingClientRect();
+    setBand(i, yToGain(e.clientY - r.top, r.height));
   };
   const endDrag = () => { dragRef.current = null; setActiveBand(null); };
   const onBandKey = (i) => (e) => {
@@ -256,10 +270,10 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
       {/* Bands gray + blur out while the volume control is being used, so the two
           controls read as distinct. */}
       <div className={`aura-eq__bands ${opening ? 'is-morphing' : ''} ${volumeActive ? 'is-volume-active' : ''}`}>
-        <div className="aura-eq__faders" style={{ width: FADERS_W, height: TRACK_H }}>
-          <svg className="aura-eq__curve" viewBox={`0 0 ${FADERS_W} ${TRACK_H}`} width={FADERS_W} height={TRACK_H} aria-hidden="true">
-            <line x1="0" y1={gainToY(0)} x2={FADERS_W} y2={gainToY(0)} className="aura-eq__zero"/>
-            <path d={`${smoothPath(points)} L ${FADERS_W} ${TRACK_H} L 0 ${TRACK_H} Z`} className="aura-eq__fill"/>
+        <div className="aura-eq__faders" style={{ width: geo.fadersW, height: geo.trackH }}>
+          <svg className="aura-eq__curve" viewBox={`0 0 ${geo.fadersW} ${geo.trackH}`} width={geo.fadersW} height={geo.trackH} aria-hidden="true">
+            <line x1="0" y1={gainToY(0)} x2={geo.fadersW} y2={gainToY(0)} className="aura-eq__zero"/>
+            <path d={`${smoothPath(points)} L ${geo.fadersW} ${geo.trackH} L 0 ${geo.trackH} Z`} className="aura-eq__fill"/>
             <path d={smoothPath(points)} className="aura-eq__line"/>
             {points.map((p, i) => (
               <circle key={i} cx={p.x} cy={p.y} r={activeBand === i ? 5 : 3.5}
@@ -285,7 +299,7 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
             ))}
           </div>
         </div>
-        <div className="aura-eq__labels" style={{ width: FADERS_W }}>
+        <div className="aura-eq__labels" style={{ width: geo.fadersW }}>
           {EQ_LABELS.map((l, i) => <span key={i} className="aura-eq__label">{l}</span>)}
         </div>
       </div>
