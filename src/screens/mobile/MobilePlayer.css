@@ -227,6 +227,58 @@
   .aura-mp__hint { animation-duration: 2.4s; }
 }
 
+/* Gooey "swipe up for next" cue — bottom-centre overlay. A 2-circle metaball
+   under #aura-goo "pumps" upward (the swipe metaphor); the label is a SEPARATE
+   crisp layer (goo melts text). Goo is confined to the tiny blob, so it stays
+   cheap. Shown on player entry + each song switch (keyed), fades itself out. */
+.aura-mp__swipecue {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  animation: aura-mp-swipecue 2.6s ease forwards;
+}
+.aura-mp__swipecue-goo {
+  display: inline-flex;
+  color: var(--color-accent);
+  filter: url(#aura-goo);
+}
+.aura-mp__swipecue-rise {
+  /* Two pumps cover the cue's visible window, then it rests — no infinite loop
+     ticking on the element after it has faded out. */
+  animation: aura-mp-swipe-rise 1.15s cubic-bezier(0.4, 0.7, 0.3, 1) 2;
+}
+.aura-mp__swipecue-text {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+@keyframes aura-mp-swipecue {
+  0%   { opacity: 0; transform: translate(-50%, 8px); }
+  14%  { opacity: 1; transform: translate(-50%, 0); }
+  74%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
+}
+@keyframes aura-mp-swipe-rise {
+  0%   { transform: translateY(7px); }
+  50%  { transform: translateY(-3px); }
+  100% { transform: translateY(7px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-mp__swipecue { animation-duration: 2.2s; }
+  .aura-mp__swipecue-goo { filter: none; }
+  .aura-mp__swipecue-rise { animation: none; }
+}
+
 /* EQ trigger, relocated above the title — small centred control. */
 .aura-mp__eq {
   display: flex;

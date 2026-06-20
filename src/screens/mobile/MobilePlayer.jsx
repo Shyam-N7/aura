@@ -101,7 +101,7 @@ export function MobilePlayer({
               </span>
             )}
             {open && (
-              <span className="aura-mp__hint" aria-hidden="true">
+              <span key={track.id} className="aura-mp__hint" aria-hidden="true">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                 </svg>
@@ -188,6 +188,22 @@ export function MobilePlayer({
             </button>
           )}
         </div>
+
+        {/* Gooey "swipe up for next" cue — bottom-centre overlay, keyed on open +
+            track so it re-runs on entry AND each song switch. The blob is the only
+            thing under #aura-goo (goo melts text); the label is a separate crisp
+            layer. pointer-events:none so it never blocks the swipe it advertises. */}
+        {open && (
+          <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
+            <span className="aura-mp__swipecue-goo" aria-hidden="true">
+              <svg viewBox="0 0 36 48" width="34" height="46">
+                <circle cx="18" cy="34" r="11" fill="currentColor"/>
+                <circle className="aura-mp__swipecue-rise" cx="18" cy="15" r="7" fill="currentColor"/>
+              </svg>
+            </span>
+            <span className="aura-mp__swipecue-text">swipe up for next</span>
+          </span>
+        )}
       </div>
     </div>
   );
