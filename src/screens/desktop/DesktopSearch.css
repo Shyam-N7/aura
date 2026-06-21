@@ -8,9 +8,10 @@
 }
 
 /* Mobile: tapping the top bar opens search — give it a softer, slightly longer
-   rise + fade than the generic screen-in so the open reads as the surface
-   smoothly expanding into place. Overrides .animate-aura-screen-in on the
-   wrapper (higher specificity via the shell scope). */
+   rise + fade than other screens so the open reads as the surface smoothly
+   expanding into place. The wrapper is mounted with ScreenTransition noEnter on
+   mobile (GSAP enter skipped), so this CSS animation owns the mobile search
+   open/close on its own. */
 .aura-responsive-shell--mobile .aura-search-screen {
   animation: aura-search-in 460ms cubic-bezier(.22, 1, .36, 1) both;
   transform-origin: top center;

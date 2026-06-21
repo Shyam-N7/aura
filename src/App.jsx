@@ -14,6 +14,7 @@ import { LyricsScreen } from './screens/overlays/LyricsScreen';
 import { CrowdScreen } from './screens/overlays/CrowdScreen';
 
 import { MorphLayer } from './components/player/MorphLayer';
+import { ScreenTransition } from './components/ScreenTransition';
 import { MobileDock } from './components/nav/MobileDock';
 import { MobileTopBar } from './components/nav/MobileTopBar';
 import { GooFilter } from './components/GooFilter';
@@ -1140,7 +1141,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             breakpoint. PlaylistsScreen / OnboardingScreen / SensingScreen are
             the only mobile-specific screens still rendered as-is. */}
         {screen === 'home' && (
-          <div key="home" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="home">
             <DesktopHome tracks={pool}
               loading={featured.status === 'loading'}
               error={featured.error}
@@ -1158,7 +1159,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onOpenSearch={openSearch}
               onOpenArtist={onOpenArtist}
               t={t} setTweak={setTweak}/>
-          </div>
+          </ScreenTransition>
         )}
         {/* Phone now-playing: a full-height vaul drawer you pull DOWN to minimise
             back to the mini bar. `screen === 'player'` stays the source of truth;
@@ -1183,8 +1184,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         )}
         {/* Desktop / tablet now-playing: full-screen route with screen-out anim. */}
         {!isMobile && (screen === 'player' || closingPlayer) && track && (
-          <div key="player"
-            className={`absolute inset-0 ${closingPlayer ? 'animate-aura-screen-out' : 'animate-aura-screen-in'}`}>
+          <ScreenTransition key="player" out={closingPlayer}>
             <DesktopPlayer
               track={track} nextTrack={next} progress={progress} audioTime={audioTime} playing={playing}
               mood={t.mood} djName={t.djName} player={player}
@@ -1197,10 +1197,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}
               showRelated={!isDesktop || isTabletLandscape}
               onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'queue' && (
-          <div key="queue" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="queue">
             <DesktopQueue tracks={viewTracks} currentIdx={viewIdx} source={viewSource} djName={t.djName}
               onPick={pickFromQueue} onClose={() => setScreen(queueReturn)} onRemove={removeFromQueue}
               onReorder={reorderQueue} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
@@ -1211,10 +1211,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
                 const auto = consumeAutoNext(viewRef.current, offset);
                 if (auto) { setQueue(auto); setPlaying(true); }
               }}/>
-          </div>
+          </ScreenTransition>
         )}
         {(screen === 'search' || closingSearch) && (
-          <div key="search" className={`absolute inset-0 animate-aura-screen-in ${isMobile ? `aura-search-screen ${closingSearch ? 'aura-search-screen--closing' : ''}` : ''}`}>
+          <ScreenTransition key="search" noEnter={isMobile} className={isMobile ? `aura-search-screen ${closingSearch ? 'aura-search-screen--closing' : ''}` : ''}>
             <DesktopSearch djName={t.djName} onClose={() => setScreen('home')} headerless={isMobile}
               onPickLive={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
@@ -1222,15 +1222,15 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onOpenAlbum={onOpenAlbum}
               onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('search'); setScreen('catalog-playlist-detail'); }}
               onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('search'); setScreen('playlist-detail'); }}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'talk' && (
-          <div key="talk" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="talk">
             <DesktopTalk djName={t.djName} mood={t.mood} onPickSequence={pickLiveSequence}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'library' && (
-          <div key="library" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="library">
             <DesktopLibrary
               onOpenPlaylists={() => setScreen('playlists')}
               onPlaySequence={pickLiveSequence}
@@ -1244,66 +1244,66 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onOpenJournal={() => { setJournalReturn('library'); setScreen('journal'); }}
               onOpenDna={() => { setDnaReturn('library'); setScreen('dna'); }}
               t={t} setTweak={setTweak}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'liked' && (
-          <div key="liked" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="liked">
             <DesktopLiked onClose={() => setScreen('library')}
               onPlaySequence={pickLiveSequence} onPickLive={pickLiveTrack} onPlayOne={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'history' && (
-          <div key="history" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="history">
             <DesktopHistory onClose={() => setScreen('library')}
               onPickLive={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'playlists' && (
-          <div key="playlists" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="playlists">
             <PlaylistsScreen onClose={() => setScreen('library')}
               onPlaySequence={pickLiveSequence}
               onOpenAuto={(auto) => { setAutoPlaylist(auto); setAutoReturn('playlists'); setScreen('auto-playlist-detail'); }}
               onOpenPlaylist={(id) => { setDetailPlaylistId(id); setDetailReturn('playlists'); setScreen('playlist-detail'); }}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'playlist-detail' && detailPlaylistId && (
-          <div key={`pl-${detailPlaylistId}`} className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key={`pl-${detailPlaylistId}`}>
             <DesktopPlaylistDetail playlistId={detailPlaylistId}
               onClose={() => setScreen(detailReturn)} onPlaySequence={pickLiveSequence}
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'catalog-playlist-detail' && catalogPlaylistId && (
-          <div key={`cat-${catalogPlaylistId}`} className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key={`cat-${catalogPlaylistId}`}>
             <DesktopCatalogPlaylistDetail playlistId={catalogPlaylistId}
               onClose={() => setScreen(catalogReturn)} onPlaySequence={pickLiveSequence}
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'auto-playlist-detail' && autoPlaylist && (
-          <div key={`auto-${autoPlaylist.id}`} className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key={`auto-${autoPlaylist.id}`}>
             <DesktopCatalogPlaylistDetail playlistId={autoPlaylist.id} initialData={autoPlaylist}
               onClose={() => setScreen(autoReturn)} onPlaySequence={pickLiveSequence}
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'album-detail' && albumId && (
-          <div key={`al-${albumId}`} className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key={`al-${albumId}`}>
             <DesktopAlbumDetail albumId={albumId}
               onClose={() => setScreen(albumReturn)} onPlaySequence={pickLiveSequence}
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'language-hub' && hubLang && (
-          <div key={`hub-${hubLang}`} className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key={`hub-${hubLang}`}>
             <DesktopLanguageHub lang={hubLang}
               onClose={() => setScreen('home')} onPickLive={pickLiveTrack}
               onOpenCatalogPlaylist={(id) => { setCatalogPlaylistId(id); setCatalogReturn('language-hub'); setScreen('catalog-playlist-detail'); }}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'artist' && artistKey && (
-          <div key={`ar-${artistKey.id || artistKey.name}`} className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key={`ar-${artistKey.id || artistKey.name}`}>
             <DesktopArtist artistKey={artistKey}
               onClose={() => setScreen(artistReturn)}
               onPickLive={pickLiveTrack}
@@ -1312,25 +1312,25 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               onAddToQueue={enqueueLast}
               onOpenArtist={onOpenArtist}
               onOpenAlbum={onOpenAlbum}/>
-          </div>
+          </ScreenTransition>
         )}
 
         {/* Shared-element morph layer — sits above screens so source/target are covered cleanly */}
         {morph && <MorphLayer {...morph}/>}
         {screen === 'journal' && (
-          <div key="journal" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="journal">
             <DesktopJournal djName={t.djName} onPickLive={pickLiveTrack} onClose={() => setScreen(journalReturn)}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'dna' && (
-          <div key="dna" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="dna">
             <DesktopDna onClose={() => setScreen(dnaReturn)}/>
-          </div>
+          </ScreenTransition>
         )}
         {screen === 'bridges' && (
-          <div key="bridges" className="absolute inset-0 animate-aura-screen-in">
+          <ScreenTransition key="bridges">
             <DesktopBridges onPickSequence={pickLiveSequence}/>
-          </div>
+          </ScreenTransition>
         )}
         </Suspense>
 

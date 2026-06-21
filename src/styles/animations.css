@@ -40,22 +40,10 @@
   to   { opacity: 0; transform: scale(0.97); filter: blur(8px); }
 }
 
-@keyframes aura-screen-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.985); }
-  to   { opacity: 1; transform: translateY(0)    scale(1); }
-}
-
-/* Telegram-deletion-style close: shrink + fade + slight slide down.
-   Used by the player screen wrapper while closing so the surface feels
-   dismissed (not just unmounted). */
-@keyframes aura-screen-out {
-  from { opacity: 1; transform: translateY(0)    scale(1);    }
-  to   { opacity: 0; transform: translateY(12px) scale(0.92); }
-}
-.animate-aura-screen-out {
-  animation: aura-screen-out 220ms cubic-bezier(.32, .72, 0, 1) both;
-  transform-origin: center;
-}
+/* Screen enter/leave is GSAP-driven now (see ScreenTransition.jsx). The
+   `animate-aura-screen-in` class is kept as a layout/selector hook only
+   (responsive.css spacer, MobilePlayer.css insets) — its CSS animation moved
+   to a GSAP timeline so the two can't double-animate. */
 
 @keyframes aura-soft {
   0%, 100% { opacity: 0.95; }

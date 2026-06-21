@@ -69,7 +69,6 @@ body {
   --animate-aura-sheet-out: aura-sheet-out 240ms cubic-bezier(.6, .2, .9, .4) forwards;
   --animate-aura-fade-in:   aura-fade-in 0.9s ease forwards;
   --animate-aura-fade-out:  aura-fade-out 0.9s ease forwards;
-  --animate-aura-screen-in: aura-screen-in 420ms cubic-bezier(.2, .7, .2, 1);
   --animate-aura-soft:      aura-soft 2.4s ease-in-out infinite;
   --animate-aura-fadein:    aura-fadein 240ms ease;
   --animate-aura-heart-burst: aura-heart-burst 700ms cubic-bezier(.2, .8, .3, 1) forwards;
