@@ -332,66 +332,17 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
   /* ── Render ─────────────────────────────────────────────────────────── */
   return (
     <div className="aura-auth-page">
-      {/* Top brand link (top-left) */}
-      <button type="button" className="auth-top" onClick={handleBack}>
-        <span className="auth-top__mark">
-          <AuraMark size={20} />
-        </span>
-        <span>aura</span>
-      </button>
-
-      {/* Back link (top-right) */}
+      {/* Back link (top-right) — also steps back through the OTP/reset flow. */}
       <button type="button" className="auth-back-link" onClick={handleBack}>
         <BackArrowSvg />
         Back
       </button>
 
       <div className="auth-page">
-        {/* ════════ Brand visual (left) — fixed warm art ════════ */}
-        <aside className="auth-visual" aria-hidden="true">
-          <div className="top-meta">
-            <span className="mono">aura · vol. 01 · 2026</span>
-            <span className="mono">a calmer way to listen</span>
-          </div>
-
-          <div className="composition">
-            <div className="ring-bg" />
-            <div className="ring r2" />
-            <div className="ring" />
-            <div className="core" />
-            <div className="shard s1" />
-            <div className="shard s2" />
-            <div className="shard s3">
-              <div className="b" /><div className="b" /><div className="b" />
-            </div>
-          </div>
-
-          <div className="pitch">
-            <h1>welcome <em>back.</em></h1>
-            <p className="pitch-sub">
-              Your music is right where you left it. Sign in and pick up where you
-              stopped.
-            </p>
-            <div className="pitch-stats">
-              <div className="stat">
-                <div className="v">3 sec</div>
-                <span className="l">to get started</span>
-              </div>
-              <div className="stat">
-                <div className="v">47<span style={{ fontSize: 18 }}> hrs</span></div>
-                <span className="l">avg / month</span>
-              </div>
-              <div className="stat">
-                <div className="v">93%</div>
-                <span className="l">keep listening</span>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* ════════ Form (right) ════════ */}
+        {/* One centered glass card on the themed backdrop (no two-panel split). */}
         <main className="form-side">
           <div className="form-wrap">
+            <div className="auth-card-brand" aria-hidden="true"><AuraMark size={30} /></div>
             {/* ──────────── Sign in / sign up ──────────── */}
             {step === 'form' && (
               <>
