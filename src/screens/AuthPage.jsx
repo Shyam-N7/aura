@@ -409,43 +409,44 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
                   </p>
                 </header>
 
-                {/* Social providers aren't live yet — tapping one pops a
-                    "coming soon" speech bubble above that button (role=status
-                    announces it without moving focus). The bubble suppresses
-                    that button's hover name-tooltip while visible. */}
+                {/* Social providers aren't live yet — tapping one shows a single
+                    inline "coming soon" note (role=status announces it without
+                    moving focus). */}
+                {socialNote && (
+                  <p id="social-tip" className="social-note" role="status">
+                    coming soon — social sign-in is on the way.
+                  </p>
+                )}
                 <div className="social-row">
                   <button
                     type="button"
-                    className={`social-btn social-btn--apple ${socialNote === 'apple' ? 'social-btn--noted' : ''}`}
-                    onClick={handleApple}
-                    aria-label="Continue with Apple"
-                    aria-describedby={socialNote === 'apple' ? 'social-tip' : undefined}
-                    data-label="coming soon"
-                  >
-                    {socialNote === 'apple' && <span id="social-tip" className="social-tip" role="status">coming soon</span>}
-                    <AppleSvg />
-                  </button>
-                  <button
-                    type="button"
-                    className={`social-btn social-btn--spotify ${socialNote === 'spotify' ? 'social-btn--noted' : ''}`}
-                    onClick={handleSpotify}
-                    aria-label="Continue with Spotify"
-                    aria-describedby={socialNote === 'spotify' ? 'social-tip' : undefined}
-                    data-label="coming soon"
-                  >
-                    {socialNote === 'spotify' && <span id="social-tip" className="social-tip" role="status">coming soon</span>}
-                    <SpotifySvg />
-                  </button>
-                  <button
-                    type="button"
-                    className={`social-btn social-btn--google ${socialNote === 'google' ? 'social-btn--noted' : ''}`}
+                    className="social-btn social-btn--google"
                     onClick={handleGoogle}
                     aria-label="Continue with Google"
                     aria-describedby={socialNote === 'google' ? 'social-tip' : undefined}
-                    data-label="coming soon"
                   >
-                    {socialNote === 'google' && <span id="social-tip" className="social-tip" role="status">coming soon</span>}
                     <GoogleSvg />
+                    <span className="social-btn__label">Continue with Google</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="social-btn social-btn--apple"
+                    onClick={handleApple}
+                    aria-label="Continue with Apple"
+                    aria-describedby={socialNote === 'apple' ? 'social-tip' : undefined}
+                  >
+                    <AppleSvg />
+                    <span className="social-btn__label">Continue with Apple</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="social-btn social-btn--spotify"
+                    onClick={handleSpotify}
+                    aria-label="Continue with Spotify"
+                    aria-describedby={socialNote === 'spotify' ? 'social-tip' : undefined}
+                  >
+                    <SpotifySvg />
+                    <span className="social-btn__label">Continue with Spotify</span>
                   </button>
                 </div>
 

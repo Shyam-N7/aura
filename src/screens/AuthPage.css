@@ -38,7 +38,6 @@
 @keyframes auth-float-a  { 0%,100% { transform:translate3d(0,0,0) rotate(0deg); } 50% { transform:translate3d(-6px,-10px,0) rotate(2deg); } }
 @keyframes auth-float-b  { 0%,100% { transform:translate3d(0,0,0) rotate(0deg); } 50% { transform:translate3d(8px,-8px,0) rotate(-2deg); } }
 @keyframes auth-rise     { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-@keyframes auth-shimmer  { 0% { background-position: -200% 50%; } 100% { background-position: 200% 50%; } }
 
 /* ─── Mono helper ─────────────────────────────────────────────────────── */
 .aura-auth-page .mono {
@@ -278,211 +277,127 @@
   animation: auth-rise 600ms cubic-bezier(.2,.7,.2,1);
 }
 
-.aura-auth-page .form-head { margin-bottom: 36px; }
-.aura-auth-page .form-head .mono { display: inline-block; margin-bottom: 14px; }
+.aura-auth-page .form-head { margin-bottom: 40px; }
+.aura-auth-page .form-head .mono {
+  display: inline-block;
+  margin-bottom: 16px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
 .aura-auth-page .form-head h2 {
   font-family: var(--font-serif);
   font-weight: 400;
-  font-size: clamp(34px, 4.6vw, 50px);
-  line-height: 1.02;
-  letter-spacing: -0.02em;
+  font-size: clamp(36px, 5vw, 54px);
+  line-height: 1.0;
+  letter-spacing: -0.022em;
   margin: 0;
   color: var(--ink);
 }
 .aura-auth-page .form-head h2 em { font-style: italic; }
 .aura-auth-page .form-head .sub {
-  margin-top: 14px;
+  margin-top: 16px;
   font-family: var(--font-sans);
   font-weight: 400;
   font-size: 16px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--ink-soft);
   text-wrap: pretty;
 }
 
-/* Social buttons — compact circular glass chips with brand-tinted hover glow
-   + hover/focus tooltip via data-label. */
+/* Social buttons — full-width labelled pills with brand-tinted hover glow. */
 .aura-auth-page .social-row {
   display: flex;
-  gap: 18px;
-  justify-content: center;
-  margin-bottom: 28px;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 26px;
 }
 .aura-auth-page .social-btn {
   position: relative;
-  width: 56px;
-  height: 56px;
-  display: inline-flex;
+  width: 100%;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  /* Light theme default: subtle dark-tinted glass over cream — reads as a
-     gentle raised disk, not a heavy gray puck. */
-  background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02));
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  /* Light theme default: subtle dark-tinted glass over cream. */
+  background: linear-gradient(135deg, rgba(0,0,0,0.05), rgba(0,0,0,0.015));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(42,34,28,0.12);
+  border: 1px solid rgba(42,34,28,0.14);
   cursor: pointer;
-  /* No overflow:hidden — it clipped the tooltips/bubble that sit above the
-     button. The shimmer ::before clips itself with border-radius instead. */
-  isolation: isolate;
   color: var(--color-ink);
-  transition: transform 280ms cubic-bezier(.22,1,.36,1),
-              box-shadow 280ms ease,
-              border-color 280ms ease;
+  transition: transform 200ms cubic-bezier(.22,1,.36,1),
+              box-shadow 200ms ease,
+              border-color 200ms ease;
 }
-.aura-auth-page .social-btn svg {
-  position: relative; z-index: 2;
-  width: 22px; height: 22px;
-}
-
-/* Shimmer sweep on hover — dark in light theme so it reads against the
-   light glass; flipped to white in midnight via the .theme-midnight rule.
-   The gradient slides via background-position inside a self-clipped circle,
-   so the button needs no overflow:hidden. */
-.aura-auth-page .social-btn::before {
-  content: '';
-  position: absolute; inset: 0;
-  border-radius: 50%;
-  background: linear-gradient(120deg, transparent 30%, rgba(42,34,28,0.06) 50%, transparent 70%);
-  background-size: 250% 100%;
-  background-position: 100% 0;
-  transition: background-position 700ms cubic-bezier(.22,1,.36,1);
-  pointer-events: none;
-  z-index: 1;
-}
-.aura-auth-page .social-btn:hover::before { background-position: 0% 0; }
-
-/* Hover lift + active press */
-.aura-auth-page .social-btn:hover  { transform: translateY(-2px) scale(1.06); }
-.aura-auth-page .social-btn:active { transform: translateY(0) scale(0.96); }
-
-/* Tooltip — small pill above the button, fades in on hover/focus */
-.aura-auth-page .social-btn::after {
-  content: attr(data-label);
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
+.aura-auth-page .social-btn svg { flex-shrink: 0; width: 20px; height: 20px; }
+.aura-auth-page .social-btn__label {
   font-family: var(--font-sans);
   font-weight: 500;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 10px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 200ms ease, transform 200ms ease;
-  z-index: 3;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  color: inherit;
 }
-.aura-auth-page .social-btn:hover::after,
-.aura-auth-page .social-btn:focus-visible::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-/* While the "coming soon" bubble is up, suppress that button's name tooltip
-   (they'd overlap in the same spot). */
-.aura-auth-page .social-btn--noted::after { opacity: 0 !important; }
+.aura-auth-page .social-btn:hover  { transform: translateY(-1px); }
+.aura-auth-page .social-btn:active { transform: translateY(0) scale(0.99); }
 
-/* "Coming soon" speech bubble — pops above the tapped provider button, arrow
-   pointing down at it. Accent-filled so it reads as a notice, not a label. */
-.aura-auth-page .social-tip {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  left: 50%;
+/* Inline "coming soon" note — social sign-in isn't live yet. */
+.aura-auth-page .social-note {
+  margin: 0 0 12px;
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: 10px;
-  padding: 7px 12px;
-  z-index: 4;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
-  transform-origin: 50% 100%;
-  animation: aura-social-tip-in 260ms cubic-bezier(.2,.7,.2,1) both;
-}
-.aura-auth-page .social-tip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: var(--accent);
-  border-bottom-width: 0;
-}
-@keyframes aura-social-tip-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.8); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--accent);
+  text-align: center;
+  animation: auth-rise 240ms cubic-bezier(.2,.7,.2,1);
 }
 
-/* Brand-tinted borders + hover glows. Apple is "monochrome" — uses ink in
-   light theme and white in midnight, theme-aware via the override below.
-   Spotify + Google use brand-hex glows which read on both themes. */
+/* Brand-tinted borders + hover glows (Apple monochrome; Spotify/Google brand). */
 .aura-auth-page .social-btn--apple   { border-color: rgba(42,34,28,0.18); }
 .aura-auth-page .social-btn--apple:hover {
-  border-color: rgba(42,34,28,0.45);
-  box-shadow: 0 12px 28px rgba(42,34,28,0.18);
+  border-color: rgba(42,34,28,0.42);
+  box-shadow: 0 10px 24px rgba(42,34,28,0.16);
 }
 .aura-auth-page .social-btn--spotify { border-color: rgba(29,185,84,0.30); }
 .aura-auth-page .social-btn--spotify:hover {
-  border-color: rgba(29,185,84,0.70);
-  box-shadow: 0 12px 28px rgba(29,185,84,0.35);
+  border-color: rgba(29,185,84,0.62);
+  box-shadow: 0 10px 24px rgba(29,185,84,0.28);
 }
 .aura-auth-page .social-btn--google  { border-color: rgba(66,133,244,0.30); }
 .aura-auth-page .social-btn--google:hover {
-  border-color: rgba(66,133,244,0.70);
-  box-shadow: 0 12px 28px rgba(66,133,244,0.30);
+  border-color: rgba(66,133,244,0.62);
+  box-shadow: 0 10px 24px rgba(66,133,244,0.24);
 }
 
-/* Midnight theme — flip to white-tinted glass + white icons so the chips
-   read above the dark warm page bg. Brand-coloured Spotify/Google glows
-   already work; only base + Apple need the inversion. */
+/* Midnight theme — white-tinted glass + white label/icons over the dark page. */
 .theme-midnight .aura-auth-page .social-btn {
   background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
   border-color: rgba(255,255,255,0.16);
   color: #fff;
 }
-.theme-midnight .aura-auth-page .social-btn::before {
-  /* background-image (not the shorthand) so the base rule's background-size/
-     -position — which drive the sweep — survive. */
-  background-image: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10) 50%, transparent 70%);
-}
 .theme-midnight .aura-auth-page .social-btn--apple { border-color: rgba(255,255,255,0.24); }
 .theme-midnight .aura-auth-page .social-btn--apple:hover {
   border-color: rgba(255,255,255,0.55);
-  box-shadow: 0 12px 28px rgba(255,255,255,0.14);
+  box-shadow: 0 10px 24px rgba(255,255,255,0.12);
 }
-.theme-midnight .aura-auth-page .social-btn--spotify:hover {
-  box-shadow: 0 12px 28px rgba(29,185,84,0.45);
-}
-.theme-midnight .aura-auth-page .social-btn--google:hover {
-  box-shadow: 0 12px 28px rgba(66,133,244,0.40);
-}
+.theme-midnight .aura-auth-page .social-btn--spotify:hover { box-shadow: 0 10px 24px rgba(29,185,84,0.40); }
+.theme-midnight .aura-auth-page .social-btn--google:hover  { box-shadow: 0 10px 24px rgba(66,133,244,0.34); }
 
 @media (prefers-reduced-motion: reduce) {
-  .aura-auth-page .social-btn,
-  .aura-auth-page .social-btn::before,
-  .aura-auth-page .social-btn::after { transition: none; }
+  .aura-auth-page .social-btn { transition: border-color 200ms ease, box-shadow 200ms ease; }
   .aura-auth-page .social-btn:hover { transform: none; }
 }
 
 /* Divider */
 .aura-auth-page .divider {
   display: flex; align-items: center; gap: 14px;
-  margin: 6px 0 22px;
+  margin: 4px 0 24px;
 }
 .aura-auth-page .divider::before,
 .aura-auth-page .divider::after {
-  content: ''; flex: 1; height: 1px; background: var(--line);
+  content: ''; flex: 1; height: 1px;
+  background: color-mix(in srgb, var(--ink), transparent 92%);
 }
 .aura-auth-page .divider span {
   font-family: var(--font-sans); font-weight: 500; font-size: 9.5px;
@@ -490,7 +405,7 @@
 }
 
 /* Fields */
-.aura-auth-page .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.aura-auth-page .field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; }
 .aura-auth-page .field label {
   font-family: var(--font-sans); font-weight: 500; font-size: 9.5px;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft);
@@ -565,27 +480,28 @@
 }
 
 /* Submit */
+/* Primary action — accent-filled (var(--bg) text contrasts on every theme: the
+   accent is dark on dusk/bloom with a light bg, light on midnight with a dark bg
+   — same pairing as the in-app accent chips). */
 .aura-auth-page .auth-submit {
-  width: 100%; margin-top: 12px;
+  width: 100%; margin-top: 16px;
   padding: 16px 18px; border-radius: 12px;
-  background: var(--ink); color: var(--bg);
+  background: var(--accent); color: var(--bg);
   border: none; cursor: pointer;
-  font-family: var(--font-sans); font-weight: 500; font-size: 11.5px;
-  letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: var(--font-sans); font-weight: 600; font-size: 12px;
+  letter-spacing: 0.06em; text-transform: uppercase;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  transition: transform 200ms ease, box-shadow 200ms ease;
-  background-image: linear-gradient(90deg, var(--ink) 0%, var(--ink) 40%, #4a3a2c 50%, var(--ink) 60%, var(--ink) 100%);
-  background-size: 200% 100%;
+  transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease;
 }
 .aura-auth-page .auth-submit:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(42,34,28,0.25);
-  animation: auth-shimmer 2.4s linear infinite;
+  background: color-mix(in srgb, var(--accent), var(--ink) 12%);
+  box-shadow: 0 12px 26px var(--accent-soft);
 }
 .aura-auth-page .auth-submit svg { transition: transform 200ms; }
 .aura-auth-page .auth-submit:hover svg { transform: translateX(3px); }
-.aura-auth-page .auth-submit:disabled { opacity: 0.7; cursor: default; }
-.aura-auth-page .auth-submit:disabled:hover { transform: none; box-shadow: none; animation: none; }
+.aura-auth-page .auth-submit:disabled { opacity: 0.6; cursor: default; }
+.aura-auth-page .auth-submit:disabled:hover { transform: none; box-shadow: none; background: var(--accent); }
 
 /* Footer toggle */
 .aura-auth-page .form-foot {
