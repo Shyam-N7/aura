@@ -63,15 +63,6 @@ export async function getPlaylistRev(id, { signal } = {}) {
   return res.json();
 }
 
-export async function reorderPlaylist(id, order) {
-  const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/tracks`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order }),
-  });
-  if (!res.ok) throw new Error(`reorder failed (${res.status})`);
-}
-
 export async function createPlaylistInvite(id, { role } = {}) {
   const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/invite`, {
     method: 'POST',

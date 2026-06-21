@@ -271,6 +271,26 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // reach the shelves, quick picks, "surprise me", or the queue derived from it.
   const pool = useMemo(() => dropExplicit(featured.tracks, familyMode), [featured.tracks, familyMode]);
 
+  // If Family mode is switched on mid-session (or restored on load), prune
+  // explicit tracks already sitting in the live queue — keep the current track
+  // playing and remap the index. New additions are filtered upstream (the pool +
+  // getRelated), so this only catches a queue built while family mode was off.
+  useEffect(() => {
+    if (!familyMode) return;
+    // Functional updater returns the SAME queue reference when there's nothing
+    // explicit to prune, so React bails out — no cascading render in the common
+    // case. This is a one-shot reconcile on the family-mode transition.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setQueue(q => {
+      if (!q.tracks.length) return q;
+      const curId = q.tracks[q.idx]?.id;
+      const filtered = q.tracks.filter((t, i) => i === q.idx || !t?.explicit);
+      if (filtered.length === q.tracks.length) return q;
+      const idx = Math.max(0, filtered.findIndex(t => t.id === curId));
+      return { ...q, tracks: filtered, idx };
+    });
+  }, [familyMode]);
+
   // Path routing — sync `location.pathname` with screen + per-screen params
   // both ways. Cold-land on `/artist/abc` reads from initialFromPath above;
   // later mutations get mirrored back out via the effect inside usePathRoute.

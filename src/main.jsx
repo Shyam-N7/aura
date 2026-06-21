@@ -71,13 +71,14 @@ function AppRoot() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  // A logged-out visitor at an app deep link (e.g. /artist/x) sees the landing
-  // page, and heading into /auth would wipe the path — stash it so sign-in can
-  // land them where the link pointed. Reads the LIVE pathname (not loc.path):
-  // sign-out pushes '/' synchronously before this runs, so nothing stale is
-  // stashed. Consumed in onAuthed below; cleared on explicit sign-out.
+  // A logged-out visitor at an app deep link (e.g. /artist/x, or a playlist
+  // share link /playlists?join=TOKEN) sees the landing page, and heading into
+  // /auth would wipe the path — stash it so sign-in can land them where the link
+  // pointed. Include the QUERY so the ?join= invite token survives the bounce.
+  // Reads the LIVE location (not loc.path): sign-out pushes '/' synchronously
+  // before this runs, so nothing stale is stashed. Consumed in onAuthed below.
   useEffect(() => {
-    if (!isAuthed) stashPostAuthPath(window.location.pathname);
+    if (!isAuthed) stashPostAuthPath(window.location.pathname + window.location.search);
   }, [isAuthed]);
 
   // Register the service worker after mount. registerType:'prompt' means a

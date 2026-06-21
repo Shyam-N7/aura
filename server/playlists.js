@@ -1,13 +1,15 @@
+import crypto from 'node:crypto';
 import { pool } from './db.js';
 
 function newId() {
   return 'pl_' + Math.random().toString(36).slice(2, 10);
 }
 
+// Invite tokens are bearer credentials (presenting one grants collaborator access
+// for 7 days), so they must be unguessable — use a CSPRNG, not Math.random.
+// base64url keeps the token safe inside the /playlists?join=… share link.
 function newToken() {
-  let s = 'inv_';
-  for (let i = 0; i < 24; i++) s += Math.floor(Math.random() * 36).toString(36);
-  return s;
+  return 'inv_' + crypto.randomBytes(18).toString('base64url');
 }
 
 function notFound() {
@@ -261,35 +263,6 @@ export async function removeTrackFromPlaylist(userId, playlistId, trackId) {
      WHERE id = $1`,
     [playlistId, trackId, Date.now()],
   );
-}
-
-// Reorder to match `orderedTrackIds` (only ids already in the playlist move). A
-// transaction keeps the positions consistent; there's no UNIQUE on position so
-// transient overlaps during the rewrite are fine.
-export async function reorderPlaylist(userId, playlistId, orderedTrackIds) {
-  await requireEdit(userId, playlistId);
-  if (!Array.isArray(orderedTrackIds) || !orderedTrackIds.length) {
-    const err = new Error('order must be a non-empty array');
-    err.statusCode = 400;
-    throw err;
-  }
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    for (let i = 0; i < orderedTrackIds.length; i++) {
-      await client.query(
-        'UPDATE playlist_tracks SET position = $1 WHERE playlist_id = $2 AND track_id = $3',
-        [i, playlistId, orderedTrackIds[i]],
-      );
-    }
-    await client.query('UPDATE playlists SET updated_at = $1 WHERE id = $2', [Date.now(), playlistId]);
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 // ── Collaboration ────────────────────────────────────────────────────
