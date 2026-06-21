@@ -40,8 +40,8 @@
   justify-content: center;
 }
 /* Mobile chrome: two glass pills — MobileTopBar at the top, MobileDock at the
-   bottom (one pill carrying the now-playing lip over the nav row when a track is
-   loaded). Each is inset 14 px from the sides, 16 px from top/bottom. Shell +
+   bottom (a nav capsule with a now-playing bead budding off its left end when a
+   track is loaded). Each is inset 14 px from the sides, 16 px from top/bottom. Shell +
    stage span the full viewport with no padding so scrollable content can pass
    UNDER the floating pills and trigger the backdrop-filter blur.
    Clearance lives on the screen root via ::before / ::after pseudo-element
@@ -59,10 +59,10 @@
 .aura-responsive-shell--mobile .animate-aura-screen-in > *::after {
   content: "";
   display: block;
-  /* App sets --aura-bottom-chrome from the live MobileDock height: taller when a
-     track is loaded (now-playing lip + nav), shorter when idle (nav only). Falls
-     back to the with-track height if the var hasn't resolved. */
-  height: var(--aura-bottom-chrome, 112px);
+  /* App sets --aura-bottom-chrome from the live MobileDock height: slightly taller
+     when a track is loaded (the now-playing bead sits beside the nav), shorter
+     when idle (nav only). Falls back to the with-track height if unresolved. */
+  height: var(--aura-bottom-chrome, 92px);
   flex-shrink: 0;
 }
 

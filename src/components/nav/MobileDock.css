@@ -1,9 +1,10 @@
-/* Unified mobile bottom dock — ONE glass pill carrying the now-playing lip + the
-   nav row. Same glass recipe as MobileTopBar so the floating pills read as a set.
-   border-radius:26 reads as a pill when short (nav-only idle, ~52px) and as a
-   soft rounded-rect when the now-playing lip is present (~92px). While the active
-   screen is scrolled the whole pill liquid-contracts to a centered "Take me back
-   up" pill (lip collapses, nav crossfades). */
+/* Mercury dock — a glass NAV CAPSULE + a now-playing BEAD that buds off its left
+   end through #aura-goo. The capsule carries the glass; the bead is a separate
+   circle that overlaps the capsule's left ~16px so the two read as one liquid
+   blob "growing a head" (never two stacked strips). The goo rides the whole dock
+   for the morph window only (bead bud + back-to-top); at rest there's no filter
+   (`filter` and `backdrop-filter` fight). While the active screen is scrolled the
+   whole dock liquid-contracts to a centered "Take me back up" pill. */
 
 .aura-dock {
   position: fixed;
@@ -11,6 +12,31 @@
   left: 14px;
   right: 14px;
   z-index: 30;
+  color: var(--color-ink);
+  /* Horizontal contraction into the centered back-to-top pill. */
+  transition:
+    left  420ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    right 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Gooey merge — rides the whole dock for the morph window ONLY (the bead budding
+   in/out + the back-to-top contraction). At rest there is no filter. */
+.aura-dock--morphing { filter: url(#aura-goo); }
+/* During the goo window, drop the backdrop-filter and switch the bead + capsule
+   to an opaque-ish theme fill so the metaball has solid alpha to merge (`filter`
+   and `backdrop-filter` fight, and the goo's alpha threshold erases near-
+   transparent glass). Restored at rest. --color-surface is theme-aware, so this
+   one rule covers dusk/midnight/bloom. */
+.aura-dock--morphing .aura-dock__capsule,
+.aura-dock--morphing .aura-dock__bead {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: color-mix(in srgb, var(--color-surface), transparent 6%);
+}
+
+/* ── Nav capsule (the glass pill) ─────────────────────────────────────────── */
+.aura-dock__capsule {
+  position: relative;
   border-radius: 26px;
   background: linear-gradient(135deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.02));
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -19,14 +45,9 @@
   box-shadow:
     0 14px 38px rgb(0 0 0 / 0.16),
     inset 0 1px 0 rgb(255 255 255 / 0.25);
-  color: var(--color-ink);
   overflow: hidden;
-  /* Horizontal contraction into the centered back-to-top pill. */
-  transition:
-    left  420ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    right 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.theme-midnight .aura-dock {
+.theme-midnight .aura-dock__capsule {
   background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015));
   border-color: rgb(255 255 255 / 0.10);
   box-shadow:
@@ -34,166 +55,20 @@
     inset 0 1px 0 rgb(255 255 255 / 0.12);
 }
 
-.aura-dock__inner { position: relative; }
-
-/* ── Now-playing lip ─────────────────────────────────────────────────────── */
-/* Wrapped in a grid that animates 1fr→0fr so the lip collapses smoothly into
-   the back-to-top pill (no fixed-height guess; handles any content). */
-.aura-dock__lip-wrap {
-  display: grid;
-  grid-template-rows: 1fr;
-  transition: grid-template-rows 360ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 220ms ease;
-}
-.aura-dock__lip-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-.aura-dock__np {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  height: 46px;
-  padding: 0 8px 0 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink), transparent 88%);
-  /* Lip rises in when a track loads while staying on a non-player screen. */
-  animation: aura-dock-np-in 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-@keyframes aura-dock-np-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.aura-dock__np-open {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-  flex: 1;
-  min-width: 0;
-}
-.aura-dock__np-art {
-  position: relative;
-  display: inline-flex;
-  flex-shrink: 0;
-}
-.aura-dock__np-art .aura-album-art {
-  --size: 34px !important;
-  width: 34px !important;
-  height: 34px !important;
-  border-radius: 8px !important;
-  overflow: hidden;
-}
-/* Now-playing equalizer — three bars dancing in the art's corner while playing
-   (mounted only when playing; frozen under reduced motion). */
-.aura-dock__eq {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  display: flex;
-  align-items: flex-end;
-  gap: 1.5px;
-  padding: 2px 2.5px;
-  border-radius: 5px;
-  background: rgb(0 0 0 / 0.42);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-.aura-dock__eq i {
-  width: 2px;
-  height: 7px;
-  border-radius: 1px;
-  background: var(--color-accent);
-  transform-origin: bottom;
-  animation: aura-dock-eq 900ms ease-in-out infinite;
-}
-.aura-dock__eq i:nth-child(1) { animation-delay: -200ms; }
-.aura-dock__eq i:nth-child(2) { animation-delay: -600ms; }
-.aura-dock__eq i:nth-child(3) { animation-delay: -400ms; }
-@keyframes aura-dock-eq {
-  0%, 100% { transform: scaleY(0.35); }
-  50%      { transform: scaleY(1); }
-}
-.aura-dock__np-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.aura-dock__np-title {
-  font-family: var(--font-serif);
-  font-size: 13px;
-  line-height: 1.1;
-  color: var(--color-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.aura-dock__np-artist {
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-ink-soft);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.aura-dock__np-play {
-  width: 32px;
-  height: 32px;
-  border-radius: 9999px;
-  border: 0;
-  cursor: pointer;
-  background: var(--color-accent);
-  color: var(--color-ink);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding-left: 1px;
-  transition: transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.aura-dock__np-play:active { transform: scale(0.9); }
-.theme-midnight .aura-dock__np-play {
-  background: var(--color-ink);
-  color: var(--color-bg);
-}
-
-/* Progress hairline — sits on the seam, fills left→right with playback. */
-.aura-dock__progress {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: var(--color-accent);
-  transform: scaleX(var(--np-progress, 0));
-  transform-origin: left center;
-  border-radius: 0 2px 2px 0;
-}
-
 /* ── Nav row ─────────────────────────────────────────────────────────────── */
-.aura-dock__nav {
-  position: relative;
-  height: 50px;
-}
-
 .aura-dock__nav-items {
   position: relative;
   z-index: 2;
   display: flex;
   align-items: center;
-  height: 100%;
+  height: 52px;
   padding: 0 4px;
   transition: opacity 200ms ease, transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-/* Equal-width items so the four tabs are evenly spaced edge-to-edge (label
-   widths differ — space-around left a lopsided gap). Content stays centred. */
+/* When a track is playing the bead occupies the left end — pad the nav clear of
+   it (the change is masked by the goo bud window; instant under reduced motion). */
+.aura-dock--np .aura-dock__nav-items { padding-left: 60px; }
+/* Equal-width items so the tabs are evenly spaced (label widths differ). */
 .aura-dock__item {
   position: relative;
   flex: 1 1 0;
@@ -232,14 +107,108 @@
   text-transform: uppercase;
 }
 
-/* Gooey merge — during the morph each real nav item gets a solid blob backing
-   (mass for the goo), and the items converge to centre so #aura-goo metaball-
-   fuses them as the dock collapses into the pill. The goo rides the actual nav
-   items (not decorative shapes); icons/labels melt with their blobs. */
-.aura-dock--morphing .aura-dock__nav-items {
-  filter: url(#aura-goo);
+/* ── Now-playing bead ─────────────────────────────────────────────────────── */
+.aura-dock__bead {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 52px;
+  height: 52px;
+  z-index: 3;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.02));
+  border: 1px solid rgb(255 255 255 / 0.16);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 10px 26px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
+  /* Bud out of the capsule's left edge (origin near its right, where it overlaps
+     the capsule). Runs on mount, i.e. when a track loads. */
+  transform-origin: 84% 50%;
+  animation: aura-dock-bead-in 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.aura-dock--morphing .aura-dock__item::before {
+.theme-midnight .aura-dock__bead {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.015));
+  border-color: rgb(255 255 255 / 0.12);
+  box-shadow:
+    0 10px 26px rgb(0 0 0 / 0.40),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+@keyframes aura-dock-bead-in {
+  from { transform: scale(0.2); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.aura-dock__bead-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.aura-dock__bead-art {
+  position: absolute;
+  inset: 4px;             /* leave room for the progress ring */
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
+}
+.aura-dock__bead-art .aura-album-art {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+}
+.aura-dock__bead-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  display: block;
+}
+.aura-dock__bead-ring .aura-circular-dial { width: 52px; height: 52px; }
+/* Centered play/pause glyph — a small scrim disc so it reads on any artwork. The
+   bead body/ring around it opens the player; this toggles playback. */
+.aura-dock__bead-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  border: 0;
+  cursor: pointer;
+  background: rgb(0 0 0 / 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 1px;
+  transition: transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.aura-dock__bead-play:active { transform: translate(-50%, -50%) scale(0.86); }
+
+/* Back-to-top contraction: bead retracts as the dock collapses to the pill. */
+.aura-dock--btt .aura-dock__bead {
+  transform: scale(0);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease;
+}
+
+/* ── Back-to-top liquid morph (contract to a centered pill) ───────────────── */
+/* During the contraction each nav item gets a solid blob backing (mass for the
+   goo) and the items converge to centre so #aura-goo metaball-fuses them as the
+   dock collapses. Scoped to --btt so a plain track-change bud doesn't flash the
+   blobs. */
+.aura-dock--btt .aura-dock__item::before {
   content: "";
   position: absolute;
   inset: 4px 6px;
@@ -252,7 +221,6 @@
 .aura-dock--btt .aura-dock__item:nth-child(3) { transform: translateX(-50%); }
 .aura-dock--btt .aura-dock__item:nth-child(4) { transform: translateX(-150%); }
 
-/* ── Back-to-top liquid morph (contract to a centered pill) ───────────────── */
 .aura-dock__btt {
   position: absolute;
   inset: 0;
@@ -277,15 +245,11 @@
 }
 .aura-dock__btt svg { flex-shrink: 0; }
 
-/* Contracted back-to-top state: pill narrows to a centered 200px, the lip
-   collapses, the nav items melt out and the label fuses in. */
+/* Contracted back-to-top state: dock narrows to a centered 200px, the nav items
+   melt out and the label fuses in. */
 .aura-dock--btt {
   left: calc(50% - 100px);
   right: calc(50% - 100px);
-}
-.aura-dock--btt .aura-dock__lip-wrap {
-  grid-template-rows: 0fr;
-  opacity: 0;
 }
 .aura-dock--btt .aura-dock__nav-items {
   opacity: 0;
@@ -302,8 +266,8 @@
 @media (prefers-reduced-motion: reduce) {
   .aura-dock { transition: none; }
   .aura-dock--btt { left: 14px; right: 14px; }   /* no contraction */
-  .aura-dock__np { animation: none; }
-  .aura-dock__lip-wrap { transition: opacity 140ms ease; }
+  .aura-dock__bead { animation: none; }
+  .aura-dock--btt .aura-dock__bead { transition: none; }
   .aura-dock__nav-items,
   .aura-dock__btt { transition: opacity 140ms ease; transform: none; }
   .aura-dock--btt .aura-dock__nav-items,
@@ -312,8 +276,7 @@
   .aura-dock--btt .aura-dock__item:nth-child(2),
   .aura-dock--btt .aura-dock__item:nth-child(3),
   .aura-dock--btt .aura-dock__item:nth-child(4) { transform: none; }
-  .aura-dock__np-play:active { transform: none; }
-  .aura-dock__eq i { animation: none; transform: scaleY(0.8); }
-  .aura-dock--morphing .aura-dock__nav-items { filter: none; }
-  .aura-dock--morphing .aura-dock__item::before { display: none; }
+  .aura-dock__bead-play:active { transform: translate(-50%, -50%); }
+  .aura-dock--morphing { filter: none; }
+  .aura-dock--btt .aura-dock__item::before { display: none; }
 }

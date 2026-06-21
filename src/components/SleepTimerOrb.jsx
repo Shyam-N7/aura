@@ -41,9 +41,9 @@ function writePos(p) {
 export function SleepTimerOrb({ railCollapsed = true, isDesktop = false }) {
   const [state, setState] = useState({ mode: null, remainingMs: null });
   const [sheetOpen, setSheetOpen] = useState(false);
-  // Compact default clears the MobileDock (now-playing lip + nav, ~92px tall at
-  // bottom:16). A dragged-and-persisted position wins; this is just the resting
-  // spot for a freshly-armed timer.
+  // Compact default clears the MobileDock (nav capsule + now-playing bead, ~92px
+  // tall at bottom:16). A dragged-and-persisted position wins; this is just the
+  // resting spot for a freshly-armed timer.
   const [pos, setPos] = useState(() => readPos() ?? { right: 16, bottom: isDesktop ? 88 : 128 });
   const [dragging, setDragging] = useState(false);
   const totalRef = useRef(0);

@@ -1126,10 +1126,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     : (SCREEN_LABELS[screen] ?? 'Loading');
 
   // Bottom-chrome clearance for the mobile spacer (responsive.css ::after) and
-  // the floating SpeedDial / SleepTimerOrb. The single MobileDock is taller when
-  // a track is loaded (now-playing lip + nav, ~92px) than idle (nav only, ~52px),
-  // so the var tracks the real chrome height instead of a fixed guess.
-  const bottomChrome = isMobile ? (track ? '112px' : '84px') : undefined;
+  // the floating SpeedDial / SleepTimerOrb. The Mercury MobileDock keeps a near-
+  // constant height (the now-playing bead buds off the capsule's left, within the
+  // row), so it's only slightly taller with a track than idle (nav only).
+  const bottomChrome = isMobile ? (track ? '92px' : '84px') : undefined;
 
   return (
     <>
@@ -1357,8 +1357,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {overlay === 'crowd'  && track && <CrowdScreen  track={track} mood={t.mood} onClose={() => setOverlay(null)}/>}
 
         {/* Mobile chrome: MobileTopBar (brand + theme) at the top; MobileDock — a
-            single glass pill carrying the now-playing lip (only when a track is
-            loaded) over the home/search/talk/you nav row + the back-to-top morph
+            glass nav capsule (home/search/talk/you) with a now-playing bead that
+            buds off its left end when a track is loaded + the back-to-top morph
             — at the bottom. Both hide on the player screen so DesktopPlayer's
             floating back / ⋯ buttons aren't covered and the page swiper claims
             the full surface. */}
