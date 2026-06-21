@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { logout } from '../lib/auth';
+import { logout, useAuth, enableFamilyMode, disableFamilyMode } from '../lib/auth';
 import { confirm } from '../lib/confirm';
 import { clearPostAuthPath } from '../lib/routes';
 import { exportMyData, deleteMyAccount } from '../api/account';
@@ -30,6 +30,33 @@ export function SettingsPanel({ t, setTweak }) {
 
   const [quality, setQuality] = useAudioQuality();
   const qualityCaption = QUALITIES.find(q => q.id === quality)?.caption ?? '';
+
+  // Family mode — a PIN-gated toggle. Off → reveal a "set a PIN" field; on →
+  // reveal an "enter your PIN to turn off" field. The switch reads from the live
+  // user (enable/disable refresh the session, so this reacts immediately).
+  const { user } = useAuth();
+  const familyOn = !!user?.familyMode;
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+
+  const submitFamily = async (e) => {
+    e.preventDefault();
+    if (pinBusy) return;
+    if (!/^\d{4,6}$/.test(pin)) { toast('enter a 4–6 digit PIN'); return; }
+    setPinBusy(true);
+    try {
+      if (familyOn) { await disableFamilyMode(pin); toast('family mode is off.'); }
+      else          { await enableFamilyMode(pin);  toast('family mode is on.'); }
+      setPin('');
+      setPinOpen(false);
+    } catch (err) {
+      const left = err.attemptsLeft;
+      toast(left != null ? `${err.message} — ${left} left` : err.message);
+    } finally {
+      setPinBusy(false);
+    }
+  };
 
   const handleSignOut = async () => {
     const ok = await confirm({
@@ -133,6 +160,34 @@ export function SettingsPanel({ t, setTweak }) {
         ))}
       </div>
       <p className="aura-set__caption">{qualityCaption}</p>
+
+      <p className="aura-set__group-label">family mode</p>
+      <div className="aura-set__group">
+        <button type="button" role="switch" aria-checked={familyOn}
+          className="aura-set__row"
+          onClick={() => { setPin(''); setPinOpen(o => !o); }}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">family mode</span>
+            <span className="aura-set__row-caption">
+              {familyOn
+                ? 'explicit songs are hidden. enter your PIN to turn it off.'
+                : 'hide explicit songs and show curated sets. set a PIN to lock it.'}
+            </span>
+          </span>
+          <span className={`aura-set__switch ${familyOn ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
+        {pinOpen && (
+          <form className="aura-set__pinrow" onSubmit={submitFamily}>
+            <input className="aura-set__pin" type="password" inputMode="numeric" autoComplete="off"
+              maxLength={6} placeholder={familyOn ? 'PIN to turn off' : 'set a 4–6 digit PIN'}
+              value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+              aria-label="family mode PIN"/>
+            <button type="submit" className="aura-set__pin-btn" disabled={pinBusy}>
+              {familyOn ? 'turn off' : 'turn on'}
+            </button>
+          </form>
+        )}
+      </div>
 
       <p className="aura-set__group-label">privacy & data</p>
       <div className="aura-set__group">

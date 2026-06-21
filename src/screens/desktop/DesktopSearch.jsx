@@ -11,6 +11,7 @@ import { subscribeSearchFocus, requestSearchFocus } from '../../lib/searchFocus'
 import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
 import { getSearchResult, setSearchResult, getSearchLang, setSearchLang } from '../../lib/searchCache';
 import { getSeedSignals } from '../../lib/onboarding';
+import { dropExplicit } from '../../lib/explicit';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
 import { ctxOpen } from '../../lib/trackContextMenu';
@@ -47,6 +48,7 @@ function EntityTile({ image, name, sub, badge, round = false, onClick }) {
 export function DesktopSearch({
   djName, onClose, onPickLive, onPlayNext, onAddToQueue,
   onOpenPlaylist, onOpenArtist, onOpenAlbum, onOpenCatalogPlaylist, headerless = false,
+  familyMode = false,
 }) {
   const { query: q, setQuery: setQ } = useSearchQuery();
   const [lang, setLang] = useState(getSearchLang());
@@ -62,6 +64,9 @@ export function DesktopSearch({
   // re-fetch). Derived at render time to avoid setState-in-effect.
   const cached = getSearchResult(wantKey);
   const view = hit.key === wantKey ? hit : (cached ?? EMPTY);
+  // Family mode hides explicit songs from results (albums/artists/playlists carry
+  // no per-track flag, so only the song row is filtered).
+  const songs = dropExplicit(view.songs, familyMode);
 
   useEffect(() => {
     if (headerless) return undefined;   // no own input to focus — top bar owns it
@@ -137,7 +142,7 @@ export function DesktopSearch({
   const showHero = top && top.type !== 'song';       // songs lead for a song query
   const albumFirst = top?.type === 'album';          // a movie/album query → albums first
 
-  const nothing = !top && !view.songs.length && !view.artists.length && !view.albums.length && !view.playlists.length && !view.userPlaylists.length;
+  const nothing = !top && !songs.length && !view.artists.length && !view.albums.length && !view.playlists.length && !view.userPlaylists.length;
 
   const heroSection = showHero && (
     <section>
@@ -154,11 +159,11 @@ export function DesktopSearch({
     </section>
   );
 
-  const songsSection = view.songs.length > 0 && (
+  const songsSection = songs.length > 0 && (
     <section>
       <div className="aura-dse__section-title">Songs</div>
       <div className="aura-dse__results">
-        {view.songs.map(t => (
+        {songs.map(t => (
           <div key={t.id} className="aura-dse__result-wrap" onContextMenu={ctxOpen(t)}>
             <button onClick={(e) => onPickLive?.(t, e.currentTarget)} className="aura-dse__result">
               <AlbumArt track={t} radius={6} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>

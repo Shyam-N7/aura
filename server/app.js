@@ -30,6 +30,7 @@ import { generateTalk, sanitizeSuggestions } from './prompts/talk.js';
 import { getCurrentMood, inferMood, inferIfStale } from './mood.js';
 import { buildTalkContext } from './context.js';
 import authRouter from './auth.js';
+import familyRouter from './family.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 
 // The configured Express app, with NO side effects at import time: it neither
@@ -78,6 +79,9 @@ app.use(['/api/why', '/api/lyrics'], costLimiter);
 
 // ── Auth routes (public) ────────────────────────────────────────────
 app.use('/api/auth', authRouter);
+
+// ── Family mode (all routes require auth) ────────────────────────────
+app.use('/api/family', familyRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, ts: Date.now() });

@@ -71,6 +71,7 @@ function mapRecoSong(r) {
     durationSec: Number(info.duration ?? r.duration) || null,
     streamUrl:   decryptMediaUrl(info.encrypted_media_url ?? r.encrypted_media_url),
     imageUrl:    pickImageUrl(r.image),
+    explicit:    String(r.explicit_content ?? info.explicit_content ?? '0') === '1',
   };
 }
 

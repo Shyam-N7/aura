@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { SettingsPanel } from './SettingsPanel';
 
-vi.mock('../lib/auth', () => ({ logout: vi.fn() }));
+vi.mock('../lib/auth', () => ({
+  logout: vi.fn(),
+  useAuth: () => ({ user: null, isAuthed: false }),
+  enableFamilyMode: vi.fn(),
+  disableFamilyMode: vi.fn(),
+}));
 vi.mock('../api/account', () => ({
   exportMyData: vi.fn(),
   deleteMyAccount: vi.fn(),
@@ -28,7 +33,8 @@ describe('SettingsPanel', () => {
 
   it('analytics switch covers all three consent states', () => {
     const { getByText, getByRole } = renderPanel();
-    const sw = getByRole('switch');
+    // Two switches now (analytics + family mode) — target analytics by name.
+    const sw = getByRole('switch', { name: /analytics/i });
     // Undecided (null): off, with the "haven't chosen" caption.
     expect(sw).toHaveAttribute('aria-checked', 'false');
     expect(getByText(/haven't chosen yet/)).toBeInTheDocument();

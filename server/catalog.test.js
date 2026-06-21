@@ -78,3 +78,32 @@ describe('parsePlainLyrics (catalog plain-lyrics fallback)', () => {
     expect(parsePlainLyrics('<br><br>')).toBeNull();
   });
 });
+
+// mapSong carries the provider's parental flag so Family mode can hide explicit
+// tracks client-side. The provider sends explicit_content as "0"/"1", at the top
+// level (detail) or under more_info (search).
+describe('mapSong explicit flag', () => {
+  let mapSong;
+  beforeAll(async () => {
+    process.env.CATALOG_MEDIA_KEY = 'testkey1';     // exactly 8 bytes
+    process.env.CATALOG_BITRATE = process.env.CATALOG_BITRATE || '320';
+    for (const k of [
+      'CATALOG_API_BASE','CATALOG_USER_AGENT','CATALOG_CTX','CATALOG_CTX_HOME','CATALOG_API_VERSION',
+      'CATALOG_AUDIO_SRC_QUALITY','CATALOG_IMG_SRC_SIZE','CATALOG_IMG_DEST_SIZE',
+      'CATALOG_M_SEARCH','CATALOG_M_SONG','CATALOG_M_HOME','CATALOG_M_PLAYLIST',
+      'CATALOG_M_LYRICS','CATALOG_M_ARTIST','CATALOG_M_ALBUM','CATALOG_M_SUGGEST',
+      'LYRICS_API_BASE','LYRICS_USER_AGENT',
+    ]) process.env[k] = process.env[k] || 'x';
+    ({ mapSong } = await import('./catalog.js'));
+  });
+
+  it('reads explicit_content "1" as explicit (top level or more_info)', () => {
+    expect(mapSong({ id: 'a', title: 'X', explicit_content: '1' }).explicit).toBe(true);
+    expect(mapSong({ id: 'b', title: 'Y', more_info: { explicit_content: '1' } }).explicit).toBe(true);
+  });
+
+  it('defaults to not-explicit when absent or "0"', () => {
+    expect(mapSong({ id: 'c', title: 'Z' }).explicit).toBe(false);
+    expect(mapSong({ id: 'd', title: 'W', explicit_content: '0' }).explicit).toBe(false);
+  });
+});

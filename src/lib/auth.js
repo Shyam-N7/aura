@@ -203,6 +203,37 @@ export async function updatePreferences(prefs) {
   return data.user;
 }
 
+// ── Family mode ──────────────────────────────────────────────────────
+// Enable (set a PIN) / disable (verify the PIN). Both return the refreshed user
+// (with `familyMode`) and update the in-memory session so the UI reacts at once.
+export async function enableFamilyMode(pin) {
+  const res = await fetchAuthed('/api/family/enable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error ?? 'could not enable family mode'), { status: res.status, code: data.code });
+  _user = data.user;
+  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
+  notify();
+  return data.user;
+}
+
+export async function disableFamilyMode(pin) {
+  const res = await fetchAuthed('/api/family/disable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error ?? 'could not disable family mode'), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft, retryAfterSec: data.retryAfterSec });
+  _user = data.user;
+  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
+  notify();
+  return data.user;
+}
+
 export function logout() {
   clearSession();
 }

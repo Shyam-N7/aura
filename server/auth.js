@@ -22,7 +22,7 @@ const norm = (email) => String(email).toLowerCase().trim();
 // Dev/staging admin gate response (see adminGate.js). Inert when ADMIN_ONLY is off.
 const ADMIN_ONLY_RESPONSE = { error: 'this is a private dev environment — only the admin can sign in.', code: 'admin_only' };
 
-function sanitizeUser(row) {
+export function sanitizeUser(row) {
   return {
     id:             row.id,
     email:          row.email,
@@ -32,6 +32,7 @@ function sanitizeUser(row) {
     seedLanguages:  row.seed_languages ?? [],
     seedMood:       row.seed_mood ?? null,
     djName:         row.dj_name,
+    familyMode:     row.family_mode ?? false,
   };
 }
 

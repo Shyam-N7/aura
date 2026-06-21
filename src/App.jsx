@@ -110,6 +110,8 @@ import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
+import { useAuth } from './lib/auth';
+import { dropExplicit } from './lib/explicit';
 import { toast } from './lib/toast';
 import { confirm } from './lib/confirm';
 import { prompt } from './lib/prompt';
@@ -263,7 +265,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const closingSearchTimer = useRef(null);
 
   const featured = useFeaturedTracks({ limit: 24 });
-  const pool     = featured.tracks;
+  const { user } = useAuth();
+  const familyMode = !!user?.familyMode;
+  // In Family mode, drop explicit-flagged tracks from the home pool so they never
+  // reach the shelves, quick picks, "surprise me", or the queue derived from it.
+  const pool = useMemo(() => dropExplicit(featured.tracks, familyMode), [featured.tracks, familyMode]);
 
   // Path routing — sync `location.pathname` with screen + per-screen params
   // both ways. Cold-land on `/artist/abc` reads from initialFromPath above;
@@ -1146,7 +1152,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               loading={featured.status === 'loading'}
               error={featured.error}
               onRetry={featured.refetch}
-              djName={t.djName} mood={t.mood} currentTrackId={track?.id}
+              djName={t.djName} mood={t.mood} currentTrackId={track?.id} familyMode={familyMode}
               onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
               onOpenJournal={() => { setJournalReturn('home'); setScreen('journal'); }}
               onOpenDna={() => { setDnaReturn('home'); setScreen('dna'); }}
@@ -1216,6 +1222,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {(screen === 'search' || closingSearch) && (
           <ScreenTransition key="search" noEnter={isMobile} className={isMobile ? `aura-search-screen ${closingSearch ? 'aura-search-screen--closing' : ''}` : ''}>
             <DesktopSearch djName={t.djName} onClose={() => setScreen('home')} headerless={isMobile}
+              familyMode={familyMode}
               onPickLive={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
               onOpenArtist={onOpenArtist}

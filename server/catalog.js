@@ -85,6 +85,9 @@ export function mapSong(r) {
     durationSec: Number(duration) || null,
     streamUrl:   decryptMediaUrl(encryptedMedia),
     imageUrl:    pickImageUrl(r.image),
+    // Parental flag from the provider ("0"/"1"). Carried to the client so Family
+    // mode can hide explicit tracks from discovery surfaces.
+    explicit:    String(r.explicit_content ?? info.explicit_content ?? '0') === '1',
   };
 }
 

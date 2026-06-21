@@ -297,6 +297,17 @@ const migrations = [
       CREATE INDEX idx_lyrics_metrics_ts ON lyrics_metrics(ts DESC);
     `);
   },
+  async function v11_family_mode(client) {
+    // PIN-gated Family mode: hides explicit content + surfaces curated locked
+    // sets; turning it OFF requires the PIN. The PIN is bcrypt-hashed (same cost
+    // as passwords); attempts/locked_until throttle disable guesses per-account.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN family_mode BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN family_pin_hash TEXT;
+      ALTER TABLE users ADD COLUMN family_pin_attempts INT NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN family_pin_locked_until BIGINT;
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
