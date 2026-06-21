@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
-import { getPlaylist, removeFromPlaylist } from '../../api/playlists';
+import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite } from '../../api/playlists';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
@@ -34,6 +34,41 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   }, [playlistId]);
 
   const tracks = hit.data?.tracks ?? [];
+  const canEdit = hit.data?.canEdit ?? false;
+  const isOwner = hit.data?.role === 'owner';
+  const shared = hit.data?.shared ?? false;
+  const collaborators = hit.data?.collaborators ?? [];
+  const updatedAt = hit.data?.updatedAt;
+
+  // Live sync for shared playlists — poll the cheap rev cursor while the screen
+  // is open + visible, and refetch the full playlist when a collaborator changed
+  // it. Cleared on unmount; skips while the tab is hidden.
+  useEffect(() => {
+    if (!shared) return undefined;
+    let stop = false;
+    const tick = async () => {
+      if (stop || document.hidden) return;
+      try {
+        const { updatedAt: rev } = await getPlaylistRev(playlistId);
+        if (stop || !rev || rev === updatedAt) return;
+        const data = await getPlaylist(playlistId);
+        if (!stop) setHit({ data, error: null });
+      } catch { /* transient — next tick retries */ }
+    };
+    const id = setInterval(tick, 15000);
+    return () => { stop = true; clearInterval(id); };
+  }, [playlistId, shared, updatedAt]);
+
+  const share = async () => {
+    try {
+      const { token } = await createPlaylistInvite(playlistId);
+      const link = `${window.location.origin}/playlists?join=${token}`;
+      try { await navigator.clipboard.writeText(link); toast('Share link copied — anyone you send it to can edit.'); }
+      catch { toast(link); }
+    } catch (err) {
+      toast(`Couldn’t create a link — ${err.message}`);
+    }
+  };
 
   const remove = async (track) => {
     setMenu(null);
@@ -84,11 +119,14 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
         )}
         {status === 'ok' && (
           <>
-            <div className="aura-dpd__kind">playlist</div>
+            <div className="aura-dpd__kind">playlist{shared ? ' · shared' : ''}</div>
             <h1 className="aura-dpd__hero">{hit.data.name}</h1>
-            {tracks.length > 0 && <div className="aura-dpd__by">by you</div>}
-            {tracks.length > 0 && (
-              <div className="mt-6">
+            <div className="aura-dpd__by">
+              {isOwner ? 'by you' : `by ${hit.data.ownerName ?? 'someone'}`}
+              {collaborators.length > 0 && ` · ${collaborators.length} ${collaborators.length === 1 ? 'collaborator' : 'collaborators'}`}
+            </div>
+            <div className="aura-dpd__actions">
+              {tracks.length > 0 && (
                 <button onClick={playAll} className="aura-dpd__play-all">
                   <span className="aura-dpd__play-disc">
                     <svg width="10" height="12" viewBox="0 0 12 14">
@@ -97,8 +135,17 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                   </span>
                   Play all
                 </button>
-              </div>
-            )}
+              )}
+              {isOwner && (
+                <button onClick={share} className="aura-dpd__share">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M6.5 9.5 L9.5 6.5 M7 4.5 L8.5 3 a2.5 2.5 0 0 1 3.5 3.5 L10.5 8 M9 11.5 L7.5 13 a2.5 2.5 0 0 1 -3.5 -3.5 L5.5 8"
+                      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Share
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -150,9 +197,11 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                       <button onClick={() => playNext(t)}     className="aura-pl-menu-item">play next</button>
                       <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">add to queue</button>
                       <button onClick={() => addElsewhere(t)} className="aura-pl-menu-item">add to another playlist</button>
-                      <button onClick={() => remove(t)}       className="aura-pl-menu-item aura-pl-menu-item--danger">
-                        remove from this playlist
-                      </button>
+                      {canEdit && (
+                        <button onClick={() => remove(t)} className="aura-pl-menu-item aura-pl-menu-item--danger">
+                          remove from this playlist
+                        </button>
+                      )}
                     </AnchoredMenu>
                   )}
                 </div>

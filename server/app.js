@@ -16,7 +16,7 @@ import { generateWhy } from './prompts/why.js';
 import { getJournalEntries } from './journal.js';
 import { getSonicDna } from './sonicDna.js';
 import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
-import { listPlaylists, getPlaylist, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists } from './playlists.js';
+import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, reorderPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator } from './playlists.js';
 import { getLibrarySummary } from './library.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
@@ -680,6 +680,53 @@ app.post('/api/playlists/:id/tracks', requireAuth, async (req, res) => {
 app.delete('/api/playlists/:id/tracks/:track_id', requireAuth, async (req, res) => {
   try {
     await removeTrackFromPlaylist(req.userId, req.params.id, req.params.track_id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Reorder tracks (owner or editor collaborator). body: { order: [track_id, ...] }
+app.patch('/api/playlists/:id/tracks', requireAuth, async (req, res) => {
+  try {
+    await reorderPlaylist(req.userId, req.params.id, req.body?.order);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Cheap change cursor for collaboration polling.
+app.get('/api/playlists/:id/rev', requireAuth, async (req, res) => {
+  try {
+    res.json(await getPlaylistRev(req.userId, req.params.id));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Owner mints a share invite. body: { role?: 'editor' | 'viewer' }
+app.post('/api/playlists/:id/invite', requireAuth, async (req, res) => {
+  try {
+    res.json(await createInvite(req.userId, req.params.id, { role: req.body?.role }));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Accept a share invite → become a collaborator. (No :id — distinct path.)
+app.post('/api/playlists/invite/:token/accept', requireAuth, async (req, res) => {
+  try {
+    res.json(await acceptInvite(req.userId, req.params.token));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Remove a collaborator (owner removes anyone; a collaborator removes themselves).
+app.delete('/api/playlists/:id/collaborators/:user_id', requireAuth, async (req, res) => {
+  try {
+    await removeCollaborator(req.userId, req.params.id, req.params.user_id);
     res.json({ ok: true });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });

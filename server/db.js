@@ -308,6 +308,32 @@ const migrations = [
       ALTER TABLE users ADD COLUMN family_pin_locked_until BIGINT;
     `);
   },
+  async function v12_playlist_collab(client) {
+    // Shared-playlist collaboration. A playlist stays single-OWNER (playlists.
+    // user_id); collaborators get per-user edit/view access. Invites are
+    // token-based share links with an expiry. The client polls playlists.
+    // updated_at (bumped on every edit) to sync collaborators' views.
+    await client.query(`
+      CREATE TABLE playlist_collaborators (
+        playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+        user_id     TEXT NOT NULL REFERENCES users(id)     ON DELETE CASCADE,
+        role        TEXT NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer','editor')),
+        added_at    BIGINT NOT NULL,
+        PRIMARY KEY (playlist_id, user_id)
+      );
+      CREATE INDEX idx_pl_collab_user ON playlist_collaborators(user_id);
+
+      CREATE TABLE playlist_invites (
+        token       TEXT PRIMARY KEY,
+        playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+        created_by  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role        TEXT NOT NULL DEFAULT 'editor' CHECK (role IN ('viewer','editor')),
+        expires_at  BIGINT NOT NULL,
+        created_at  BIGINT NOT NULL
+      );
+      CREATE INDEX idx_pl_invites_playlist ON playlist_invites(playlist_id);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

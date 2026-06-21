@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { listPlaylists, createPlaylist, deletePlaylist } from '../api/playlists';
+import { listPlaylists, createPlaylist, deletePlaylist, acceptPlaylistInvite, removePlaylistCollaborator } from '../api/playlists';
 import { listAutoPlaylists } from '../api/autoPlaylists';
+import { getUser } from '../lib/auth';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
 import { AnchoredMenu } from '../components/AnchoredMenu';
@@ -43,6 +44,28 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
+  // Accept a share link (?join=TOKEN) — opened from a collaborator's invite.
+  // Strip the param first so a refresh can't re-run it, then join + open.
+  useEffect(() => {
+    let token;
+    try { token = new URLSearchParams(window.location.search).get('join'); } catch { token = null; }
+    if (!token) return;
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('join');
+      window.history.replaceState(null, '', u.pathname + u.search);
+    } catch { /* ignore */ }
+    acceptPlaylistInvite(token)
+      .then(({ playlistId, name }) => {
+        toast(name ? `Joined “${name}”.` : 'Joined the playlist.');
+        listPlaylists().then(data => setHit({ data, error: null })).catch(() => {});
+        onOpenPlaylist?.(playlistId);
+      })
+      .catch(err => toast(err.message));
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const submitNew = async (e) => {
     e?.preventDefault?.();
     const name = newName.trim();
@@ -73,6 +96,27 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
       toast('Playlist deleted.');
     } catch (err) {
       toast(`Couldn’t delete — ${err.message}`);
+    }
+  };
+
+  // Collaborator leaving a shared playlist (owners use Delete instead).
+  const leave = async (playlist) => {
+    setMenu(null);
+    const me = getUser();
+    if (!me?.id) return;
+    const ok = await confirm({
+      title: `Leave “${playlist.name}”?`,
+      body:  'You’ll lose access until you’re invited again.',
+      confirmLabel: 'Leave',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await removePlaylistCollaborator(playlist.id, me.id);
+      setHit(h => ({ ...h, data: (h.data ?? []).filter(p => p.id !== playlist.id) }));
+      toast('Left the playlist.');
+    } catch (err) {
+      toast(`Couldn’t leave — ${err.message}`);
     }
   };
 
@@ -194,6 +238,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
                 <div className="aura-pl-row-name truncate">{p.name}</div>
                 <div className="aura-pl-row-count">
                   {p.trackCount} {p.trackCount === 1 ? 'track' : 'tracks'}
+                  {p.shared && ` · ${p.role === 'owner' ? 'shared' : 'shared with you'}`}
                 </div>
               </div>
               <button
@@ -209,11 +254,15 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
             </button>
             {menu?.id === p.id && (
               <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={52}>
-                <button
-                  onClick={() => remove(p)}
-                  className="aura-pl-menu-item aura-pl-menu-item--danger">
-                  Delete
-                </button>
+                {p.role === 'owner' ? (
+                  <button onClick={() => remove(p)} className="aura-pl-menu-item aura-pl-menu-item--danger">
+                    Delete
+                  </button>
+                ) : (
+                  <button onClick={() => leave(p)} className="aura-pl-menu-item aura-pl-menu-item--danger">
+                    Leave
+                  </button>
+                )}
               </AnchoredMenu>
             )}
           </div>
