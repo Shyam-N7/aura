@@ -1063,13 +1063,25 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       if (!fromRect || fromRect.width <= 0 || !dockShows || reduce) { setScreen(nextScreen); return; }
       clearTimeout(morphTimer.current);
       cancelAnimationFrame(beginRaf.current);
-      setClosingMorph(true);    // drawer fades in place; bead skips its bud-in
+      setClosingMorph(true);    // drawer fades in place (no vaul slide)
       setScreen(nextScreen);    // dock + bead mount behind the fading drawer
       const begin = (attempt = 0) => {
-        const bead = document.querySelector('.aura-dock__bead-art');
-        if (!bead && attempt < 6) { beginRaf.current = requestAnimationFrame(() => begin(attempt + 1)); return; }
-        if (bead) {
-          const toRect = { ...getRect(bead), radius: 999, blur: 0 };
+        const dock = document.querySelector('.aura-dock');
+        const art = dock && dock.querySelector('.aura-dock__bead-art');
+        if (!art && attempt < 6) { beginRaf.current = requestAnimationFrame(() => begin(attempt + 1)); return; }
+        if (art) {
+          // The bead plays its bud-in (scale) as the cover lands, so its live rect
+          // is mid-scale. offsetLeft/Top/Width are LAYOUT metrics (ignore the
+          // transform), so with the dock's un-animated viewport box they give the
+          // bead-art's FINAL rect for the cover to settle onto.
+          const d = dock.getBoundingClientRect();
+          const bead = art.offsetParent || art.parentElement;
+          const toRect = {
+            left: d.left + (bead?.offsetLeft || 0) + art.offsetLeft,
+            top:  d.top  + (bead?.offsetTop  || 0) + art.offsetTop,
+            width: art.offsetWidth, height: art.offsetHeight,
+            radius: 999, blur: 0,
+          };
           setMorph({ track, fromRect: { ...fromRect, radius: 10, blur: 0 }, toRect, kind: 'close' });
         }
         morphTimer.current = setTimeout(() => {
@@ -1433,7 +1445,6 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           onTogglePlay={() => setPlaying(p => !p)}
           onOpenPlayer={(el) => morphInto(track, el, () => { setPlayerReturn(screen); setScreen('player'); })}
           active={screen} onNav={onNav} onTalk={() => setTalkOpen(true)}
-          beadEnter={!closingMorph}
           mode={barScrolled ? 'backtotop' : 'bar'} onBackToTop={scrollActiveUp}/>}
         {/* Tablet-portrait chrome: TopNavStrip top + BottomMiniBar bottom.
             NavRail + DesktopRail are desktop-only. */}

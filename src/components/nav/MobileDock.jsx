@@ -50,16 +50,10 @@ export function MobileDock({
   onTogglePlay, onOpenPlayer,
   active, onNav, onTalk,
   mode = 'bar', onBackToTop,
-  beadEnter = true,
 }) {
   const btt = mode === 'backtotop';
   const hasTrack = !!track;
   const artRef = useRef(null);
-  // Capture the entry-skip ONCE at mount: App flips beadEnter back to true after
-  // the close morph settles, and re-adding `animation: aura-dock-bead-in` would
-  // re-play the bud-in on the already-seated bead. The dock remounts each time it
-  // appears, so this correctly reflects whether THIS appearance is a close-morph.
-  const beadInstant = useRef(!beadEnter).current;
 
   // Goo only for the morph window — at rest it would just blur the content and
   // fight the backdrop-filter. ONE window covers both the back-to-top contraction
@@ -78,11 +72,9 @@ export function MobileDock({
 
   return (
     <div className={`aura-dock${track ? ' aura-dock--np' : ''}${btt ? ' aura-dock--btt' : ''}${morphing ? ' aura-dock--morphing' : ''}`}>
-      {/* Now-playing bead — buds off the capsule's left end when a track plays.
-          beadEnter=false (App's close-morph) skips the bud-in so the bead is at
-          full size when the player's cover morphs DOWN onto it. */}
+      {/* Now-playing bead — buds off the capsule's left end when a track plays. */}
       {track && (
-        <div className={`aura-dock__bead${beadInstant ? ' aura-dock__bead--instant' : ''}`}>
+        <div className="aura-dock__bead">
           <button type="button" className="aura-dock__bead-open" data-tour="mnav-np"
             tabIndex={btt ? -1 : 0}
             aria-label={`open player — ${cleanTitle(track.title)}${track.artist ? ` by ${track.artist}` : ''}`}
