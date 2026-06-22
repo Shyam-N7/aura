@@ -9,6 +9,8 @@ import { stashPostAuthPath, consumePostAuthPath } from './lib/routes';
 import { ConsentBanner } from './components/ConsentBanner';
 import { UpdatePrompt } from './components/UpdatePrompt';
 import { getConsent, subscribeConsent } from './lib/consent';
+import { confirm } from './lib/confirm';
+import { initExitGuard, setExitGuard } from './lib/exitGuard';
 
 // One-time legacy redirect: the app used hash routes (`#/artist/x`) before the
 // path-routing migration — rewrite them to real paths so old bookmarks, shares,
@@ -104,6 +106,18 @@ function AppRoot() {
     return 'landing';
   }, [loc.path, isAuthed]);
 
+  // Back-button exit guard — armed only while the authed app is showing, so a
+  // stray Back asks before leaving instead of dropping the user out. Inert on
+  // landing / auth / legal pages (normal Back).
+  useEffect(() => {
+    setExitGuard(view === 'app', () => confirm({
+      title: 'Leave AURA?',
+      body: 'Your music will stop if you leave.',
+      confirmLabel: 'Leave',
+      cancelLabel: 'Stay',
+    }));
+  }, [view]);
+
   // Analytics consent — Vercel Analytics / Speed Insights load only once granted.
   const [consent, setConsentState] = useState(getConsent());
   useEffect(() => subscribeConsent(setConsentState), []);
@@ -186,5 +200,9 @@ function AppRoot() {
     </>
   );
 }
+
+// Register the Back-button exit guard before React mounts, so its popstate
+// listener runs ahead of the routing listeners.
+initExitGuard();
 
 createRoot(document.getElementById('root')).render(<AppRoot />);
