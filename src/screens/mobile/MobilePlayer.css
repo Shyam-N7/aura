@@ -249,15 +249,19 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 5px;
   color: var(--color-accent);
   opacity: 0;
+  /* Lift the centered stack up to around/above the EQ icon so it isn't buried
+     behind the serif title. (Only opacity is animated, so this static transform
+     is safe; the per-chevron rise runs on the SVGs.) */
+  transform: translateY(-24px);
   animation: aura-mp-swipecue 3.4s ease 0.5s forwards;
 }
 .aura-mp__swipecue svg { display: block; }
-.aura-mp__swipecue svg:nth-child(1) { opacity: 0.50; animation: aura-mp-chev 1.5s ease-in-out 0.5s infinite; }
-.aura-mp__swipecue svg:nth-child(2) { opacity: 0.32; animation: aura-mp-chev 1.5s ease-in-out 0.66s infinite; }
-.aura-mp__swipecue svg:nth-child(3) { opacity: 0.18; animation: aura-mp-chev 1.5s ease-in-out 0.82s infinite; }
+.aura-mp__swipecue svg:nth-child(1) { opacity: 0.95; animation: aura-mp-chev 1.5s ease-in-out 0.5s infinite; }
+.aura-mp__swipecue svg:nth-child(2) { opacity: 0.70; animation: aura-mp-chev 1.5s ease-in-out 0.66s infinite; }
+.aura-mp__swipecue svg:nth-child(3) { opacity: 0.45; animation: aura-mp-chev 1.5s ease-in-out 0.82s infinite; }
 @keyframes aura-mp-swipecue {
   0%   { opacity: 0; }
   14%  { opacity: 1; }
@@ -265,8 +269,8 @@
   100% { opacity: 0; }
 }
 @keyframes aura-mp-chev {
-  0%, 100% { transform: translateY(5px); }
-  50%      { transform: translateY(-5px); }
+  0%, 100% { transform: translateY(7px); }
+  50%      { transform: translateY(-7px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .aura-mp__swipecue { animation-duration: 2.4s; }

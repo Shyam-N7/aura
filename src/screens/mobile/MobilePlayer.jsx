@@ -116,9 +116,9 @@ export function MobilePlayer({
         <div className="aura-mp__midzone">
           {open && (
             <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
-              <svg viewBox="0 0 40 22" width="40" height="22" fill="none"><path d="M5 17 L20 6 L35 17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <svg viewBox="0 0 40 22" width="40" height="22" fill="none"><path d="M5 17 L20 6 L35 17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <svg viewBox="0 0 40 22" width="40" height="22" fill="none"><path d="M5 17 L20 6 L35 17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </span>
           )}
           {player && (
