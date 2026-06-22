@@ -170,14 +170,14 @@
   display: block;
 }
 .aura-dock__bead-ring .aura-circular-dial { width: 52px; height: 52px; }
-/* Play/pause — a small accent badge tucked in the bead's bottom-right corner, so
-   the WHOLE bead body opens the player (the big, reliable target) and this stays
-   a deliberate, distinct tap. Accent fill (no dark outline) reads on any artwork
-   and on all three themes (accent inversely tracks bg). */
+/* Play/pause — a small accent disc centered in the bead. Accent fill (no dark
+   outline) reads on any artwork and on all three themes (accent inversely tracks
+   bg). The bead body/ring around it opens the player; this toggles playback. */
 .aura-dock__bead-play {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 3;
   width: 22px;
   height: 22px;
@@ -193,7 +193,7 @@
   padding-left: 1px;
   transition: transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.aura-dock__bead-play:active { transform: scale(0.86); }
+.aura-dock__bead-play:active { transform: translate(-50%, -50%) scale(0.86); }
 
 /* Back-to-top contraction: bead retracts as the dock collapses to the pill. */
 .aura-dock--btt .aura-dock__bead {
