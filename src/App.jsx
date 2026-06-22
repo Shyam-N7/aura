@@ -1451,8 +1451,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         <SleepTimerSheet/>
         <SleepTimerOrb railCollapsed={railCollapsed} isDesktop={isDesktop}/>
         {/* Quick-action speed dial — compact surfaces only (desktop has the
-            rails). Hidden over the player drawer / overlays / talk. */}
-        {isCompact && !overlay && !talkOpen && screen !== 'player' && (
+            rails). Hidden over the player drawer / overlays / talk, and on the
+            queue (its own toolbar — save/shuffle/clear + per-row menus — covers
+            these, so the floating dial there is redundant clutter). */}
+        {isCompact && !overlay && !talkOpen && screen !== 'player' && screen !== 'queue' && (
           <SpeedDial actions={[
             { id: 'why', label: 'why this song', show: !!track,
               onClick: () => openOverlay('why'),

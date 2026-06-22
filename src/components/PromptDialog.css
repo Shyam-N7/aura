@@ -6,7 +6,8 @@
   inset: 0;
   background: rgb(0 0 0 / 0.36);
   backdrop-filter: blur(3px);
-  z-index: 50;
+  /* Above the equalizer sheet (z-index 80) so "+ Save this preset" lands on top. */
+  z-index: 90;
   animation: aura-fadein 200ms ease both;
 }
 
@@ -14,7 +15,7 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 51;
+  z-index: 91;
   transform-origin: center;
   background: var(--color-bg);
   border: 1px solid color-mix(in srgb, var(--color-ink), transparent 86%);

@@ -25,7 +25,7 @@ function eqGeometry() {
   if (!phone) return { cellW: 29, trackH: 112, fadersW: COLS * 29 };
   const avail = Math.min(window.innerWidth, 452) - 56;   // panel inner width minus padding
   const cellW = Math.max(30, Math.floor(avail / COLS));
-  const trackH = Math.round(Math.min(window.innerHeight * 0.40, 320));
+  const trackH = Math.round(Math.min(window.innerHeight * 0.34, 300));
   return { cellW, trackH, fadersW: COLS * cellW };
 }
 
@@ -218,6 +218,7 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
 
   return createPortal(
     <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Equalizer"
+      data-no-gesture
       className={`aura-eq__panel ${closing ? 'is-closing' : 'is-open'}`}
       style={{ '--eq-dx': `${dx}px`, '--eq-dy': `${dy}px` }}
       onClick={(e) => e.stopPropagation()}

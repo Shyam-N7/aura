@@ -111,15 +111,26 @@ export function MobilePlayer({
           </div>
         </div>
 
-        {player && (
-          <div className="aura-mp__eq" data-vaul-no-drag onClick={(e) => e.stopPropagation()}>
-            <EqualizerControl player={player} compact/>
-          </div>
-        )}
+        {/* Midzone (between banner and progress): the EQ trigger + meta sit in
+            front; the big "swipe up = next" cue rises BEHIND them. */}
+        <div className="aura-mp__midzone">
+          {open && (
+            <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
+              <svg viewBox="0 0 40 22" width="40" height="22" fill="none"><path d="M5 17 L20 6 L35 17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 40 22" width="40" height="22" fill="none"><path d="M5 17 L20 6 L35 17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 40 22" width="40" height="22" fill="none"><path d="M5 17 L20 6 L35 17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </span>
+          )}
+          {player && (
+            <div className="aura-mp__eq" data-vaul-no-drag data-no-gesture onClick={(e) => e.stopPropagation()}>
+              <EqualizerControl player={player} compact/>
+            </div>
+          )}
 
-        <div key={track.id} className="aura-mp__meta aura-track-text">
-          <div className="aura-mp__title">{cleanTitle(track.title)}</div>
-          <div className="aura-mp__artist">{track.artist}</div>
+          <div key={track.id} className="aura-mp__meta aura-track-text">
+            <div className="aura-mp__title">{cleanTitle(track.title)}</div>
+            <div className="aura-mp__artist">{track.artist}</div>
+          </div>
         </div>
 
         <div className="aura-mp__scrub" data-vaul-no-drag data-no-gesture>
@@ -144,19 +155,6 @@ export function MobilePlayer({
           <button onClick={onNext} aria-label="next" className="aura-mp__nav">
             <svg width="26" height="19" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 0 L9 5 L0 10 Z M11 0 H13 V10 H11 Z" fill="currentColor"/></svg>
           </button>
-          {/* "swipe up" cue — rising chevrons in the right margin at the controls'
-              height (off-centre, by the next control: swipe-up advances forward).
-              Keyed on open + track so it re-runs on entry + each switch; starts a
-              beat after the cover's double-tap hint so the two cues don't pop together. */}
-          {open && (
-            <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
-              <span className="aura-mp__swipecue-arrows">
-                <svg viewBox="0 0 16 10" width="14" height="9" fill="none"><path d="M2 8 L8 3 L14 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                <svg viewBox="0 0 16 10" width="14" height="9" fill="none"><path d="M2 8 L8 3 L14 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </span>
-              <span className="aura-mp__swipecue-label">next</span>
-            </span>
-          )}
         </div>
 
         {(nextTrack || nextLoading) && (

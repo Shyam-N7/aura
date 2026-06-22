@@ -2,6 +2,7 @@
   position: relative;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;   /* a long hero/name can never make the screen scroll sideways */
   color: var(--color-ink);
   container-type: inline-size;
   container-name: dpd;
@@ -21,6 +22,7 @@
   font-weight: 400;
   color: var(--color-ink);
   text-wrap: pretty;
+  overflow-wrap: anywhere;   /* break a long single-word name instead of overflowing */
 }
 .aura-dpd__hero em { font-style: italic; }
 
@@ -210,7 +212,7 @@
    Liked / Artist (they all import this stylesheet for their shell). */
 @container dpd (max-width: 600px) {
   .aura-dpd__header { padding: 14px 22px 0; }
-  .aura-dpd__hero { font-size: 44px; margin-top: 18px; }
+  .aura-dpd__hero { font-size: clamp(32px, 10vw, 44px); margin-top: 18px; }
   .aura-dpd__list { padding: 22px 22px 0; }
   .aura-dpd__empty { padding: 28px 22px 0; }
   .aura-dpd__empty-title { font-size: 19px; }
@@ -225,7 +227,7 @@
   .aura-dar__hero-row { gap: 18px; margin-top: 16px; }
   .aura-dar__avatar { width: 72px; height: 72px; }
   .aura-dar__avatar--fallback { font-size: 36px; }
-  .aura-dar__hero-row .aura-dpd__hero { font-size: 36px; }
+  .aura-dar__hero-row .aura-dpd__hero { font-size: clamp(26px, 8vw, 36px); }
   .aura-dar__albums,
   .aura-dar__similar {
     padding: 8px 22px 0;

@@ -268,7 +268,7 @@
   .aura-eq__panel {
     width: calc(100vw - 28px);
     max-width: 452px;
-    max-height: calc(100dvh - 116px);
+    max-height: calc(100dvh - 140px);
     padding: 18px 18px 20px;
     border-radius: 26px;
   }
