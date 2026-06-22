@@ -139,6 +139,9 @@
   from { transform: scale(0.2); opacity: 0; }
   to   { transform: scale(1);   opacity: 1; }
 }
+/* Close-morph mount: skip the bud-in so the bead sits full-size for the player's
+   cover to morph down onto (App passes beadEnter=false during the reverse morph). */
+.aura-dock__bead--instant { animation: none; }
 .aura-dock__bead-open {
   position: absolute;
   inset: 0;

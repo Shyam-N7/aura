@@ -249,6 +249,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // WHILE the cover morphs up — one cohesive "the bar grows into the screen"
   // motion instead of morph-then-slide. Cleared once the morph settles.
   const [instantPlayer, setInstantPlayer] = useState(false);
+  // Mobile close: the reverse of the open — the cover morphs DOWN into the dock
+  // bead while the drawer fades in place (no vaul slide). Drives the drawer's
+  // fade-out (`closing` prop) and suppresses the bead's bud-in (`beadEnter`) so
+  // the flying cover lands on a full-size bead. Cleared once the morph settles.
+  const [closingMorph, setClosingMorph] = useState(false);
   // While the player is closing, keep its wrapper mounted for ~220 ms so
   // the screen-out animation (scale + fade + slide) can run before the
   // wrapper unmounts. The destination screen is set immediately so it
@@ -1043,10 +1048,37 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // the art flew to the top-left of the viewport for no clear reason.
   const leavePlayer = (nextScreen) => {
     if (!track) { setScreen(nextScreen); return; }
+    // Mobile: the reverse of the open — morph the cover DOWN into the now-playing
+    // bead while the drawer fades in place (no vaul slide). Needs the dock to show
+    // at the destination so the bead exists to land on; otherwise (queue/overlay)
+    // or under reduced motion, fall back to a plain close.
+    if (isMobile) {
+      const fromRect = getRect(document.getElementById('player-art'));
+      const dockShows = nextScreen !== 'player' && nextScreen !== 'queue' && !overlay && !talkOpen;
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (!fromRect || fromRect.width <= 0 || !dockShows || reduce) { setScreen(nextScreen); return; }
+      clearTimeout(morphTimer.current);
+      cancelAnimationFrame(beginRaf.current);
+      setClosingMorph(true);    // drawer fades in place; bead skips its bud-in
+      setScreen(nextScreen);    // dock + bead mount behind the fading drawer
+      const begin = (attempt = 0) => {
+        const bead = document.querySelector('.aura-dock__bead-art');
+        if (!bead && attempt < 6) { beginRaf.current = requestAnimationFrame(() => begin(attempt + 1)); return; }
+        if (bead) {
+          const toRect = { ...getRect(bead), radius: 999, blur: 0 };
+          setMorph({ track, fromRect: { ...fromRect, radius: 10, blur: 0 }, toRect, kind: 'close' });
+        }
+        morphTimer.current = setTimeout(() => {
+          requestAnimationFrame(() => requestAnimationFrame(() => setMorph(null)));
+          setClosingMorph(false);
+        }, 470);
+      };
+      beginRaf.current = requestAnimationFrame(() => begin());
+      return;
+    }
+    // Desktop/tablet: keep the routed player wrapper mounted for ~220 ms so its
+    // screen-out animation (scale + fade + slide) can play out before it unmounts.
     clearTimeout(closingPlayerTimer.current);
-    // Switch screens immediately so the destination renders BEHIND the
-    // fading player wrapper. Keep the player wrapper mounted via
-    // `closingPlayer` so its screen-out animation can play out.
     setClosingPlayer(true);
     setScreen(nextScreen);
     closingPlayerTimer.current = setTimeout(() => setClosingPlayer(false), 220);
@@ -1192,7 +1224,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the drawer is rendered whenever a track exists so vaul can animate the
             slide-out on dismiss. */}
         {isMobile && track && (
-          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} onClose={() => leavePlayer(playerReturn)}>
+          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} closing={closingMorph} onClose={() => leavePlayer(playerReturn)}>
             <MobilePlayer
               open={screen === 'player'}
               track={track} progress={progress} playing={playing}
@@ -1397,6 +1429,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           onTogglePlay={() => setPlaying(p => !p)}
           onOpenPlayer={(el) => morphInto(track, el, () => { setPlayerReturn(screen); setScreen('player'); })}
           active={screen} onNav={onNav} onTalk={() => setTalkOpen(true)}
+          beadEnter={!closingMorph}
           mode={barScrolled ? 'backtotop' : 'bar'} onBackToTop={scrollActiveUp}/>}
         {/* Tablet-portrait chrome: TopNavStrip top + BottomMiniBar bottom.
             NavRail + DesktopRail are desktop-only. */}

@@ -25,6 +25,21 @@
   to   { opacity: 1; }
 }
 
+/* Mobile close via the reverse morph: same trick the other way — suppress vaul's
+   slide-DOWN so the drawer fades in place while the cover morphs into the dock
+   bead. #player-art is hidden at once so only the flying cover is seen (it
+   started from this exact rect, so the handoff is clean). Higher specificity than
+   --instant, so it wins the animation if both classes are briefly present. */
+.aura-player-drawer.aura-player-drawer--closing {
+  transform: none !important;
+  animation: aura-player-drawer-out 440ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.aura-player-drawer.aura-player-drawer--closing #player-art { opacity: 0; }
+@keyframes aura-player-drawer-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 /* The player's banner focuses in: it sits blurred while the (also-soft) cover
    morphs up, then resolves to sharp once the morph seats and `--instant` clears
    — "comes, fits, then the blur disappears". The morph lands on this exact rect,
@@ -34,6 +49,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .aura-player-drawer.aura-player-drawer--instant { animation: none; }
+  .aura-player-drawer.aura-player-drawer--closing { animation: none; }
   .aura-player-drawer #player-art { transition: none; }
   .aura-player-drawer.aura-player-drawer--instant #player-art { filter: none; }
 }
