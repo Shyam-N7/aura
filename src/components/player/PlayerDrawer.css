@@ -11,34 +11,40 @@
   background: var(--color-bg);
 }
 
-/* Mobile open via the cover morph: suppress vaul's slide-from-bottom (force the
-   final transform, killing the translateY) so the player fades in place while
-   the cover morphs up — one cohesive "the bar grows into the screen" entrance.
-   App removes the class once the morph settles, so vaul's drag + slide-to-close
-   behave normally afterwards. */
+/* Mobile open — the player BLOOMS OUT of the now-playing bead: suppress vaul's
+   slide (kill the translateY) and reveal the drawer with a clip-path circle that
+   grows from the bead (origin = --bloom-x/--bloom-y, set by App) on a springy,
+   slightly-overshooting curve — the same liquid-glass-bloom language as the
+   top-bar search. No SVG goo, so the glass never has to swap. The cover
+   shared-element morph rides on top. App clears the class once it settles. */
 .aura-player-drawer.aura-player-drawer--instant {
   transform: none !important;
-  animation: aura-player-drawer-in 440ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation:
+    aura-pd-fade-in 240ms cubic-bezier(0.3, 0.7, 0.3, 1),
+    aura-pd-bloom-in 460ms cubic-bezier(0.34, 1.28, 0.5, 1);
 }
-@keyframes aura-player-drawer-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes aura-pd-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aura-pd-bloom-in {
+  from { clip-path: circle(26px   at var(--bloom-x, 50%) var(--bloom-y, 92%)); }
+  to   { clip-path: circle(1500px at var(--bloom-x, 50%) var(--bloom-y, 92%)); }
 }
 
-/* Mobile close via the reverse morph: same trick the other way — suppress vaul's
-   slide-DOWN so the drawer fades in place while the cover morphs into the dock
-   bead. #player-art is hidden at once so only the flying cover is seen (it
-   started from this exact rect, so the handoff is clean). Equal specificity to
-   --instant, so it wins by being LATER in source order if both classes are ever
-   present together (App also gates `closing` off once the player is open). */
+/* Mobile close — the player COLLAPSES BACK INTO the bead: the clip circle shrinks
+   to the disk while the drawer fades, then vaul unmounts on animationend. The
+   cover morphs down into the bead on top; #player-art is hidden so only the flying
+   cover shows. App gates `closing` off once the player is open, so an open drawer
+   can never inherit this. */
 .aura-player-drawer.aura-player-drawer--closing {
   transform: none !important;
-  animation: aura-player-drawer-out 440ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation:
+    aura-pd-fade-out 340ms cubic-bezier(0.4, 0, 0.2, 1) forwards,
+    aura-pd-bloom-out 460ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 .aura-player-drawer.aura-player-drawer--closing #player-art { opacity: 0; }
-@keyframes aura-player-drawer-out {
-  from { opacity: 1; }
-  to   { opacity: 0; }
+@keyframes aura-pd-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes aura-pd-bloom-out {
+  from { clip-path: circle(1500px at var(--bloom-x, 50%) var(--bloom-y, 92%)); }
+  to   { clip-path: circle(26px   at var(--bloom-x, 50%) var(--bloom-y, 92%)); }
 }
 
 /* The player's banner focuses in: it sits blurred while the (also-soft) cover

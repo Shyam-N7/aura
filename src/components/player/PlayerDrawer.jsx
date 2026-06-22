@@ -16,11 +16,18 @@ import './PlayerDrawer.css';
 // patches/vaul+1.1.2.patch (applied by the postinstall script). Non-modal vaul
 // renders no overlay and preventDefault's onPointerDownOutside, so outside
 // taps can't dismiss; drag-to-dismiss is unaffected.
-export function PlayerDrawer({ open, instant = false, closing = false, onClose, children }) {
+export function PlayerDrawer({ open, instant = false, closing = false, bloomOrigin = null, onClose, children }) {
+  // Origin of the clip-path bloom (the bead's viewport centre) → CSS vars the
+  // --instant / --closing keyframes read, so the player grows out of / collapses
+  // into the now-playing disk.
+  const bloomStyle = bloomOrigin
+    ? { '--bloom-x': `${bloomOrigin.x}px`, '--bloom-y': `${bloomOrigin.y}px` }
+    : undefined;
   return (
     <Drawer open={open} modal={false} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DrawerContent
         className={`aura-player-drawer${instant ? ' aura-player-drawer--instant' : ''}${closing ? ' aura-player-drawer--closing' : ''}`}
+        style={bloomStyle}
         showHandle={false}>
         <DrawerSrTitle>Now playing</DrawerSrTitle>
         <div className="aura-player-drawer__grip" aria-hidden="true"><span/></div>

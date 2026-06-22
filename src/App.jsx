@@ -254,6 +254,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // fade-out (`closing` prop) and suppresses the bead's bud-in (`beadEnter`) so
   // the flying cover lands on a full-size bead. Cleared once the morph settles.
   const [closingMorph, setClosingMorph] = useState(false);
+  // Container-transform origin — the bead's viewport centre. The player blooms
+  // OUT of / collapses INTO this point (a clip-path circle, see PlayerDrawer.css),
+  // so it reads as emerging from the now-playing disk. Set on open + close.
+  const [bloomOrigin, setBloomOrigin] = useState(null); // { x, y }
   // While the player is closing, keep its wrapper mounted for ~220 ms so
   // the screen-out animation (scale + fade + slide) can run before the
   // wrapper unmounts. The destination screen is set immediately so it
@@ -841,6 +845,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     // closing/instant flag (which would fade the just-opened player to nothing).
     setClosingMorph(false);
     if (isMobile) {
+      // Bloom OUT of whatever was tapped (the bead, or a list item's art).
+      setBloomOrigin({ x: fromRect.left + fromRect.width / 2, y: fromRect.top + fromRect.height / 2 });
       // Open the player NOW (drawer fades in place, no slide) so the rise IS the
       // cover morph — both run together as one motion. Because the drawer is in
       // place (not sliding), #player-art is already at its FINAL size, so we wait
@@ -1082,6 +1088,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             width: art.offsetWidth, height: art.offsetHeight,
             radius: 999, blur: 0,
           };
+          // Collapse INTO the bead (the clip circle is full-screen this early, so
+          // its centre doesn't bite until it shrinks — well after this lands).
+          setBloomOrigin({ x: toRect.left + toRect.width / 2, y: toRect.top + toRect.height / 2 });
           setMorph({ track, fromRect: { ...fromRect, radius: 10, blur: 0 }, toRect, kind: 'close' });
         }
         morphTimer.current = setTimeout(() => {
@@ -1240,7 +1249,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the drawer is rendered whenever a track exists so vaul can animate the
             slide-out on dismiss. */}
         {isMobile && track && (
-          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} closing={closingMorph && screen !== 'player'} onClose={() => leavePlayer(playerReturn)}>
+          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} closing={closingMorph && screen !== 'player'} bloomOrigin={bloomOrigin} onClose={() => leavePlayer(playerReturn)}>
             <MobilePlayer
               open={screen === 'player'}
               track={track} progress={progress} playing={playing}
