@@ -37,7 +37,8 @@ function PromptDialogBody({ event }) {
   return (
     <>
       <div className="aura-prompt-backdrop" onClick={cancel}/>
-      <div className="aura-prompt" onClick={(e) => e.stopPropagation()}>
+      <div className={`aura-prompt ${event.variant === 'glass' ? 'aura-prompt--glass' : ''}`}
+        onClick={(e) => e.stopPropagation()}>
         <div className="aura-prompt__title">{event.title}</div>
         {event.body && <div className="aura-prompt__body">{event.body}</div>}
         <form

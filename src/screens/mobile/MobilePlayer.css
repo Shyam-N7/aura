@@ -229,28 +229,30 @@
   .aura-mp__hint { animation-duration: 2.4s; }
 }
 
-/* Ambient "swipe up = next" cue — a soft mark set into the cover/glass area at
-   the top of the hero, BEHIND the album art (z-index:0; the cover is z-index:1)
-   and clear of the title/artist below. Fades in on entry + each track change
-   (keyed); the three chevrons rise in a staggered loop while visible. Static
-   under reduced motion. */
+/* "swipe up = next" cue — sits in the gap between the album cover and the EQ
+   button (bottom of the hero), on top so it's always visible, and clear of the
+   title/artist below. Fades in on entry + each track change (keyed); the three
+   chevrons rise in a staggered loop while visible. Static under reduced motion. */
 .aura-mp__swipecue {
   position: absolute;
-  top: 4px;
+  bottom: -8px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 0;
+  z-index: 2;          /* above the cover so it can't get hidden behind the art */
   pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   color: var(--color-accent);
   opacity: 0;
   animation: aura-mp-swipecue 3.4s ease 0.5s forwards;
 }
 .aura-mp__swipecue svg { display: block; }
-.aura-mp__swipecue svg:nth-child(1) { opacity: 0.80; animation: aura-mp-chev 1.5s ease-in-out 0.5s infinite; }
+/* The lead (top) chevron is the "active" one: bright at the top of its travel,
+   dimming as it falls back (aura-mp-chev-lead couples the recede with a fade).
+   The lower two hold their constant opacity and just rise. */
+.aura-mp__swipecue svg:nth-child(1) { animation: aura-mp-chev-lead 1.5s ease-in-out 0.5s infinite; }
 .aura-mp__swipecue svg:nth-child(2) { opacity: 0.55; animation: aura-mp-chev 1.5s ease-in-out 0.66s infinite; }
 .aura-mp__swipecue svg:nth-child(3) { opacity: 0.32; animation: aura-mp-chev 1.5s ease-in-out 0.82s infinite; }
 @keyframes aura-mp-swipecue {
@@ -262,6 +264,10 @@
 @keyframes aura-mp-chev {
   0%, 100% { transform: translateY(7px); }
   50%      { transform: translateY(-7px); }
+}
+@keyframes aura-mp-chev-lead {
+  0%, 100% { transform: translateY(7px);  opacity: 0.25; }
+  50%      { transform: translateY(-7px); opacity: 0.9; }
 }
 @media (prefers-reduced-motion: reduce) {
   .aura-mp__swipecue { animation-duration: 2.4s; }

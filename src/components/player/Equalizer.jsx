@@ -151,10 +151,17 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   // a re-tap toggles via EqualizerControl instead of double-firing a close.)
   useEffect(() => {
     const onDown = (e) => {
+      // A prompt/confirm dialog can layer ABOVE the EQ (e.g. "+ Save preset",
+      // delete-preset). Those render outside the panel, and this is a capture
+      // listener they can't stop — so clicking them must NOT close the EQ.
+      if (e.target.closest?.('.aura-prompt, .aura-prompt-backdrop, .aura-confirm, .aura-confirm-backdrop')) return;
       if (panelRef.current?.contains(e.target) || anchorEl?.contains(e.target)) return;
       closeRef.current();
     };
-    const onKey = (e) => { if (e.key === 'Escape') closeRef.current(); };
+    const onKey = (e) => {
+      // Esc closes the layered dialog first (if any), not the EQ underneath.
+      if (e.key === 'Escape' && !document.querySelector('.aura-prompt, .aura-confirm')) closeRef.current();
+    };
     document.addEventListener('pointerdown', onDown, true);
     document.addEventListener('keydown', onKey);
     return () => {
@@ -191,7 +198,7 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   // Save the live curve as a named preset. Only offered when it's "Custom" (the
   // curve matches no existing preset). Reuses the shared prompt/toast buses.
   const savePreset = async () => {
-    const name = await prompt({ title: 'name this preset', placeholder: 'e.g. late night', submitLabel: 'save' });
+    const name = await prompt({ title: 'name this preset', placeholder: 'e.g. late night', submitLabel: 'save', variant: 'glass' });
     if (!name) return;   // prompt returns the trimmed value, or null on cancel/empty
     if (userPresets.length >= MAX_PRESETS) { toast(`preset limit reached (${MAX_PRESETS}).`); return; }
     if (userPresets.some(p => p.name.toLowerCase() === name.toLowerCase())) {

@@ -34,6 +34,34 @@
   to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
+/* Glass variant (opt-in via prompt({ variant: 'glass' })) — mirrors the
+   equalizer panel so the EQ "save preset" popup reads as the same dark frosted
+   glass. Forces its own dark palette so the title/input/buttons stay legible on
+   it, regardless of the app theme. Also a touch shorter. The default prompt
+   (e.g. "save queue as playlist") is untouched. */
+.aura-prompt--glass {
+  --color-ink: #f5ede1;
+  --color-ink-soft: rgb(245 237 225 / 0.68);
+  --color-ink-faint: rgb(245 237 225 / 0.52);
+  --color-surface: #241f19;
+  --color-bg: #1b1712;
+  --color-line: rgb(245 237 225 / 0.14);
+  --color-accent: #eaa079;
+  --color-accent-soft: rgb(234 160 121 / 0.20);
+
+  padding: 18px 20px 14px;
+  background: color-mix(in srgb, #201b16 66%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    0 22px 54px rgb(0 0 0 / 0.46),
+    0 2px 8px rgb(0 0 0 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.16);
+}
+.aura-prompt--glass .aura-prompt__form { margin-top: 12px; }
+.aura-prompt--glass .aura-prompt__actions { margin-top: 16px; }
+
 .aura-prompt__title {
   font-family: var(--font-serif);
   font-size: 22px;

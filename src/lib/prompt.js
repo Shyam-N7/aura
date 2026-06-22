@@ -23,6 +23,7 @@ export function prompt(opts) {
       defaultValue: opts.defaultValue ?? '',
       submitLabel:  opts.submitLabel ?? 'ok',
       cancelLabel:  opts.cancelLabel ?? 'cancel',
+      variant:      opts.variant ?? null,
       resolve,
     };
     pending = event;
