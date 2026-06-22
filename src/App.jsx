@@ -836,6 +836,10 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     if (!(fromRect && fromRect.width > 0)) { arrive(); return; }
     clearTimeout(morphTimer.current);
     cancelAnimationFrame(beginRaf.current);   // drop any in-flight #player-art poll from a prior open
+    // Reopening DURING a close-morph cancels that close's settle timer above —
+    // clear its state here too so the reopened drawer never inherits a stranded
+    // closing/instant flag (which would fade the just-opened player to nothing).
+    setClosingMorph(false);
     if (isMobile) {
       // Open the player NOW (drawer fades in place, no slide) so the rise IS the
       // cover morph — both run together as one motion. Because the drawer is in
@@ -1224,7 +1228,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the drawer is rendered whenever a track exists so vaul can animate the
             slide-out on dismiss. */}
         {isMobile && track && (
-          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} closing={closingMorph} onClose={() => leavePlayer(playerReturn)}>
+          <PlayerDrawer open={screen === 'player'} instant={instantPlayer} closing={closingMorph && screen !== 'player'} onClose={() => leavePlayer(playerReturn)}>
             <MobilePlayer
               open={screen === 'player'}
               track={track} progress={progress} playing={playing}

@@ -28,8 +28,9 @@
 /* Mobile close via the reverse morph: same trick the other way — suppress vaul's
    slide-DOWN so the drawer fades in place while the cover morphs into the dock
    bead. #player-art is hidden at once so only the flying cover is seen (it
-   started from this exact rect, so the handoff is clean). Higher specificity than
-   --instant, so it wins the animation if both classes are briefly present. */
+   started from this exact rect, so the handoff is clean). Equal specificity to
+   --instant, so it wins by being LATER in source order if both classes are ever
+   present together (App also gates `closing` off once the player is open). */
 .aura-player-drawer.aura-player-drawer--closing {
   transform: none !important;
   animation: aura-player-drawer-out 440ms cubic-bezier(0.4, 0, 0.2, 1) forwards;

@@ -11,7 +11,14 @@ let armed = false;
 let busy = false;
 let confirmFn = null;
 
+// The buffer entry is tagged in history.state so we can tell when we're already
+// sitting on one — making pushGuard idempotent, so re-arming or re-absorbing
+// never stacks duplicate entries.
+function onGuardEntry() {
+  return !!(window.history.state && window.history.state.auraExitGuard);
+}
 function pushGuard() {
+  if (onGuardEntry()) return;
   try { history.pushState({ auraExitGuard: true }, '', window.location.href); }
   catch { /* history unavailable — nothing to guard */ }
 }
@@ -21,14 +28,18 @@ function onPop(e) {
   // Stop the app's other popstate listeners so the screen doesn't change while
   // we ask (this listener is registered first, so it wins).
   e.stopImmediatePropagation();
-  if (busy) return;                 // a confirm is already open
+  if (busy) { pushGuard(); return; } // extra Back while the confirm is open → re-absorb it
   busy = true;
   Promise.resolve(confirmFn?.()).then((leave) => {
     busy = false;
     if (!armed) return;             // disarmed meanwhile (e.g. signed out)
     if (leave) {
       armed = false;
-      history.back();               // let Back proceed → previous page / exit
+      // Best-effort exit: with real prior history this navigates/unloads. On a
+      // single-entry launch (installed PWA cold-start / refresh) there's nothing
+      // below, so back() is a no-op — we stay disarmed so the user's NEXT system
+      // Back exits natively instead of being trapped (a page can't self-close).
+      history.back();
     } else {
       pushGuard();                  // stay → re-arm the buffer entry
     }

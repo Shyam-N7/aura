@@ -69,8 +69,9 @@ export function SettingsPanel({ t, setTweak }) {
     if (!ok) return;
     logout();
     // Land the signed-out view on '/' before AppRoot's stash effect runs, and
-    // drop any pending post-auth redirect from an earlier bounce.
-    try { window.history.pushState(null, '', '/'); } catch { /* ignore */ }
+    // drop any pending post-auth redirect from an earlier bounce. replaceState
+    // (not push) so the exit-guard's buffer entry is overwritten, not buried.
+    try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
     clearPostAuthPath();
   };
 
@@ -87,7 +88,7 @@ export function SettingsPanel({ t, setTweak }) {
     try {
       await deleteMyAccount();
       logout();
-      try { window.history.pushState(null, '', '/'); } catch { /* ignore */ }
+      try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
       clearPostAuthPath();
       toast('your account has been deleted.');
     } catch (err) {
