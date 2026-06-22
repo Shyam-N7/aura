@@ -83,15 +83,6 @@ export function MobilePlayer({
         </div>
 
         <div className="aura-mp__hero">
-          {/* Ambient "swipe up = next" cue — a soft mark set into the cover/glass
-              area, behind the album art and clear of the title/artist below. */}
-          {open && (
-            <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
-              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </span>
-          )}
           <div className="aura-mp__cover">
             <div id="player-art" className="aura-mp__cover-art">
               <MorphingAlbumArt track={track} size={360} radius={10}/>
@@ -120,15 +111,26 @@ export function MobilePlayer({
           </div>
         </div>
 
-        {player && (
-          <div className="aura-mp__eq" data-vaul-no-drag data-no-gesture onClick={(e) => e.stopPropagation()}>
-            <EqualizerControl player={player} compact/>
-          </div>
-        )}
+        {/* Between the banner and the progress bar: the EQ trigger + title/artist,
+            with the "swipe up = next" cue as an ambient mark rising BEHIND them. */}
+        <div className="aura-mp__midband">
+          {open && (
+            <span key={`swipe-${track.id}`} className="aura-mp__swipecue" aria-hidden="true">
+              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 60 32" width="60" height="32" fill="none"><path d="M8 24 L30 9 L52 24" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </span>
+          )}
+          {player && (
+            <div className="aura-mp__eq" data-vaul-no-drag data-no-gesture onClick={(e) => e.stopPropagation()}>
+              <EqualizerControl player={player} compact/>
+            </div>
+          )}
 
-        <div key={track.id} className="aura-mp__meta aura-track-text">
-          <div className="aura-mp__title">{cleanTitle(track.title)}</div>
-          <div className="aura-mp__artist">{track.artist}</div>
+          <div key={track.id} className="aura-mp__meta aura-track-text">
+            <div className="aura-mp__title">{cleanTitle(track.title)}</div>
+            <div className="aura-mp__artist">{track.artist}</div>
+          </div>
         </div>
 
         <div className="aura-mp__scrub" data-vaul-no-drag data-no-gesture>

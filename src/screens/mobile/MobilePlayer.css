@@ -126,7 +126,7 @@
 /* ── Art hero — the cover takes only the leftover vertical space, capped at
    70vw so it's the hero yet breathes clear of the top chrome and never scrolls. ── */
 .aura-mp__hero {
-  position: relative;   /* anchors the ambient swipe-up cue behind the cover */
+  position: relative;   /* flex-centres the cover */
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -136,7 +136,7 @@
 }
 .aura-mp__cover {
   position: relative;
-  z-index: 1;   /* in front of the ambient swipe-up cue */
+  z-index: 1;
   height: 100%;
   aspect-ratio: 1;
   max-height: min(70vw, 100%);
@@ -235,10 +235,10 @@
    chevrons rise in a staggered loop while visible. Static under reduced motion. */
 .aura-mp__swipecue {
   position: absolute;
-  bottom: -8px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;          /* above the cover so it can't get hidden behind the art */
+  transform: translate(-50%, -50%);
+  z-index: 0;          /* BEHIND the EQ icon / title / artist, in the mid-band */
   pointer-events: none;
   display: flex;
   flex-direction: column;
@@ -274,16 +274,28 @@
   .aura-mp__swipecue svg { animation: none; }
 }
 
+/* Mid-band — the EQ trigger + title/artist that sit between the cover and the
+   scrubber. Positioned so the swipe-up cue can sit absolutely BEHIND this group
+   (the cue rises through it, behind the EQ icon / title / artist). */
+.aura-mp__midband {
+  position: relative;
+  margin-top: 14px;
+  flex-shrink: 0;
+}
+
 /* EQ trigger, relocated above the title — small centred control. */
 .aura-mp__eq {
+  position: relative;
+  z-index: 1;          /* above the ambient swipe cue behind the band */
   display: flex;
   justify-content: center;
-  margin-top: 14px;
   flex-shrink: 0;
 }
 
 /* ── Meta ── */
 .aura-mp__meta {
+  position: relative;
+  z-index: 1;          /* above the ambient swipe cue behind the band */
   flex-shrink: 0;
   margin-top: 10px;
   padding: 0 8px;
