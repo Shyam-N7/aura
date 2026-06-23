@@ -31,6 +31,8 @@ import { getCurrentMood, inferMood, inferIfStale } from './mood.js';
 import { buildTalkContext } from './context.js';
 import authRouter from './auth.js';
 import familyRouter from './family.js';
+import modesRouter from './modesRoutes.js';
+import { modeSeedArtists } from './modes.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 
 // The configured Express app, with NO side effects at import time: it neither
@@ -82,6 +84,9 @@ app.use('/api/auth', authRouter);
 
 // ── Family mode (all routes require auth) ────────────────────────────
 app.use('/api/family', familyRouter);
+
+// ── Listening modes (all routes require auth) ────────────────────────
+app.use('/api/modes', modesRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, ts: Date.now() });
@@ -199,11 +204,19 @@ app.get('/api/albums/:id', async (req, res) => {
   }
 });
 
-app.get('/api/catalog/featured', async (req, res) => {
+app.get('/api/catalog/featured', optionalAuth, async (req, res) => {
   const lang = req.query.lang ? String(req.query.lang) : undefined;
   const limit = Number(req.query.limit) || 20;
   try {
-    const results = await getFeatured({ lang, limit });
+    // Signed-in: seed the pool from the user's active mode (empty seed for
+    // `everyday` → the unchanged global default). Signed-out: global default.
+    let seedArtists, modeKey;
+    if (req.userId) {
+      const u = await pool.query('SELECT active_mode FROM users WHERE id = $1', [req.userId]);
+      modeKey = u.rows[0]?.active_mode || 'everyday';
+      seedArtists = modeSeedArtists(modeKey);
+    }
+    const results = await getFeatured({ lang, limit, seedArtists, modeKey, userId: req.userId });
     res.json({ results });
     cacheTracks(results);
   } catch (err) {
@@ -726,7 +739,7 @@ app.delete('/api/playlists/:id/collaborators/:user_id', requireAuth, async (req,
 const EVENT_KINDS = new Set(['play', 'pause', 'skip', 'seek', 'end']);
 
 app.post('/api/events', requireAuth, async (req, res) => {
-  const { track_id, kind, position_sec, mood, language } = req.body ?? {};
+  const { track_id, kind, position_sec, mood, language, mode } = req.body ?? {};
   if (!track_id || !EVENT_KINDS.has(kind)) {
     return res.status(400).json({ error: 'invalid track_id or kind' });
   }
@@ -739,9 +752,9 @@ app.post('/api/events', requireAuth, async (req, res) => {
     const known = await pool.query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
     if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
     await pool.query(
-      `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood ?? null, language ?? null],
+      `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language, mode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood ?? null, language ?? null, mode ?? null],
     );
     res.json({ ok: true });
   } catch (err) {

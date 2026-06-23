@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuraMark } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
 import { ProfileButton } from './ProfileButton';
+import { AnchoredMenu } from '../AnchoredMenu';
 import { useSearchQuery, getSearchQuery } from '../../lib/searchQuery';
 import { subscribeSearchFocus } from '../../lib/searchFocus';
 import './MobileTopBar.css';
@@ -23,10 +24,15 @@ import './MobileTopBar.css';
 export function MobileTopBar({
   djName = 'aura', t, setTweak, showAccount = true, onOpenProfile,
   onOpenSearch, searching = false, onCloseSearch,
+  activeMode = 'everyday', modes = [], onSetMode,
 }) {
   const { query, setQuery } = useSearchQuery();
   const inputRef = useRef(null);
   const barRef = useRef(null);
+  // Listening-mode chip → AnchoredMenu of modes. anchorEl in state per the
+  // AnchoredMenu contract.
+  const [modeMenuEl, setModeMenuEl] = useState(null);
+  const activeLabel = modes.find(m => m.key === activeMode)?.label ?? 'Everyday';
   // True while a pointer is pressing a control inside the search surface (the
   // top bar or the search screen). Lets blur tell "tapped a search control"
   // (stay open) from "tapped an inert area / dismissed the keyboard" (collapse)
@@ -109,6 +115,7 @@ export function MobileTopBar({
   );
 
   return (
+    <>
     <div className={`aura-mobile-top ${searching ? 'is-searching' : ''}`}>
       {/* Layer 1 — the normal bar. Brand doubles as a large search tap target
           (flex-fills to the trio); the ⌕ button is the explicit affordance. */}
@@ -122,6 +129,13 @@ export function MobileTopBar({
           <div className="aura-mobile-top__brand">{brandInner}</div>
         )}
         <div className="aura-mobile-top__right">
+          {onSetMode && modes.length > 0 && (
+            <button type="button" className="aura-mobile-top__mode"
+              onClick={(e) => { const el = e.currentTarget; setModeMenuEl(prev => (prev ? null : el)); }}
+              aria-haspopup="menu" aria-label={`Listening mode: ${activeLabel}`}>
+              {activeLabel}
+            </button>
+          )}
           {onOpenSearch && (
             <button type="button" onClick={onOpenSearch} aria-label="Search"
               data-tour="mtop-search"
@@ -170,5 +184,16 @@ export function MobileTopBar({
         </div>
       )}
     </div>
+    {modeMenuEl && (
+      <AnchoredMenu anchorEl={modeMenuEl} onClose={() => setModeMenuEl(null)}>
+        {modes.map(m => (
+          <button key={m.key} type="button" className="aura-pl-menu-item"
+            onClick={() => { setModeMenuEl(null); onSetMode?.(m.key); }}>
+            {m.label}{m.key === activeMode ? '  ✓' : ''}
+          </button>
+        ))}
+      </AnchoredMenu>
+    )}
+    </>
   );
 }

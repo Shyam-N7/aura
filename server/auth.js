@@ -5,6 +5,7 @@ import { pool } from './db.js';
 import { signToken, requireAuth } from './middleware/auth.js';
 import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
 import { adminBlocked } from './adminGate.js';
+import { buildModesView } from './modes.js';
 
 const router = Router();
 
@@ -33,6 +34,8 @@ export function sanitizeUser(row) {
     seedMood:       row.seed_mood ?? null,
     djName:         row.dj_name,
     familyMode:     row.family_mode ?? false,
+    activeMode:     row.active_mode ?? 'everyday',
+    modes:          buildModesView(row.modes_state ?? {}),
   };
 }
 

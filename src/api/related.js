@@ -1,4 +1,4 @@
-import { fetchAuthed, getUser } from '../lib/auth';
+import { fetchAuthed, getActiveExplicitOff } from '../lib/auth';
 import { dropExplicit } from '../lib/explicit';
 
 export async function getRelated(trackId, { lang, limit, signal } = {}) {
@@ -11,8 +11,8 @@ export async function getRelated(trackId, { lang, limit, signal } = {}) {
     throw new Error(body.error || `related failed (${res.status})`);
   }
   const data = await res.json();
-  // Family mode hides explicit songs from discovery. The related endpoint feeds
-  // BOTH the auto-radio (queue fill) and the "more like this" rails, so filtering
-  // here is the single chokepoint that covers every consumer.
-  return dropExplicit(data.tracks ?? [], !!getUser()?.familyMode);
+  // The active mode's explicit policy hides explicit songs from discovery. The
+  // related endpoint feeds BOTH the auto-radio (queue fill) and the "more like
+  // this" rails, so filtering here is the single chokepoint for every consumer.
+  return dropExplicit(data.tracks ?? [], getActiveExplicitOff());
 }

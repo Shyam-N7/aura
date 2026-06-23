@@ -334,6 +334,49 @@ const migrations = [
       CREATE INDEX idx_pl_invites_playlist ON playlist_invites(playlist_id);
     `);
   },
+  async function v13_listening_modes(client) {
+    // Listening modes: switchable contexts (everyday/family/bhakti/trip/focus/kids),
+    // each seeded by real artists → the provider similarity graph, with its own
+    // explicit policy + optional PIN. active_mode = the user's current context;
+    // modes_state holds per-mode { pinHash, pinAttempts, lockedUntil, explicitOff }.
+    // The old PIN-gated Family mode folds in → backfilled below.
+    // We also start CAPTURING signal from day one (before learning uses it):
+    // listening_events.mode tags behaviour per context; track_similarity
+    // accumulates our own copy of the provider's similarity graph; track_features
+    // is reserved (empty) for a future audio/embedding engine.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN active_mode TEXT NOT NULL DEFAULT 'everyday';
+      ALTER TABLE users ADD COLUMN modes_state JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+      UPDATE users SET modes_state = jsonb_build_object(
+        'family', jsonb_strip_nulls(jsonb_build_object(
+          'pinHash',     family_pin_hash,
+          'pinAttempts', family_pin_attempts,
+          'lockedUntil', family_pin_locked_until,
+          'explicitOff', true
+        ))
+      ) WHERE family_mode = TRUE;
+
+      ALTER TABLE listening_events ADD COLUMN mode TEXT;
+      CREATE INDEX idx_events_user_mode_ts ON listening_events(user_id, mode, ts DESC);
+
+      CREATE TABLE track_similarity (
+        source_track_id  TEXT NOT NULL,
+        related_track_id TEXT NOT NULL,
+        provenance       TEXT NOT NULL,
+        rank             INT,
+        observed_at      BIGINT NOT NULL,
+        PRIMARY KEY (source_track_id, related_track_id, provenance)
+      );
+      CREATE INDEX idx_track_sim_source ON track_similarity(source_track_id);
+
+      CREATE TABLE track_features (
+        track_id   TEXT PRIMARY KEY,
+        features   JSONB,
+        updated_at BIGINT
+      );
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

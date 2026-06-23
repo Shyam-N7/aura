@@ -234,6 +234,34 @@ export async function disableFamilyMode(pin) {
   return data.user;
 }
 
+// ── Listening modes ──────────────────────────────────────────────────
+// Switch the active context. Returns the refreshed user (with `activeMode` + the
+// `modes` view) and updates the session so the UI reacts at once.
+export async function setActiveMode(key) {
+  const res = await fetchAuthed('/api/modes/active', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error ?? 'could not switch mode'), { status: res.status, code: data.code });
+  _user = data.user;
+  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
+  notify();
+  return data.user;
+}
+
+// Whether the active mode hides explicit content — replaces the old global
+// `familyMode` check at the dropExplicit call sites. Falls back to familyMode
+// for sessions cached before modes existed.
+export function getActiveExplicitOff() {
+  const u = _user;
+  if (!u) return false;
+  const key = u.activeMode ?? 'everyday';
+  const m = (u.modes ?? []).find(x => x.key === key);
+  return m ? !!m.explicitOff : !!u.familyMode;
+}
+
 export function logout() {
   clearSession();
 }

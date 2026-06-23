@@ -14,6 +14,9 @@ vi.mock('./config.js', () => ({
   CATALOG_CTX_STATION: 'android',
 }));
 vi.mock('./tracks.js', () => ({ cacheTracks: vi.fn(), getTrackById: vi.fn() }));
+// related.js now persists similarity edges via the pool; stub it so the test
+// stays isolated from the DB (db.js throws at import without DATABASE_URL).
+vi.mock('./db.js', () => ({ pool: { query: vi.fn().mockResolvedValue({ rows: [] }) } }));
 vi.mock('./catalog.js', () => ({
   searchSongs: vi.fn(),
   decodeEntities: (s) => s,

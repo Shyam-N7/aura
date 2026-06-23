@@ -110,7 +110,7 @@ import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
-import { useAuth } from './lib/auth';
+import { useAuth, setActiveMode } from './lib/auth';
 import { dropExplicit } from './lib/explicit';
 import { toast } from './lib/toast';
 import { confirm } from './lib/confirm';
@@ -273,22 +273,29 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [closingSearch, setClosingSearch] = useState(false);
   const closingSearchTimer = useRef(null);
 
-  const featured = useFeaturedTracks({ limit: 24 });
   const { user } = useAuth();
-  const familyMode = !!user?.familyMode;
-  // In Family mode, drop explicit-flagged tracks from the home pool so they never
+  // The active listening mode drives the home pool (re-seeded server-side) and its
+  // explicit policy. `mode` keys the featured fetch so switching refetches.
+  const activeMode = user?.activeMode ?? 'everyday';
+  const featured = useFeaturedTracks({ limit: 24, mode: activeMode });
+  // Per-mode explicit policy (replaces the old global familyMode): the active mode
+  // decides whether explicit tracks are dropped from the home pool so they never
   // reach the shelves, quick picks, "surprise me", or the queue derived from it.
-  const pool = useMemo(() => dropExplicit(featured.tracks, familyMode), [featured.tracks, familyMode]);
+  const explicitOff = useMemo(() => {
+    const m = (user?.modes ?? []).find(x => x.key === activeMode);
+    return m ? !!m.explicitOff : !!user?.familyMode;
+  }, [user, activeMode]);
+  const pool = useMemo(() => dropExplicit(featured.tracks, explicitOff), [featured.tracks, explicitOff]);
 
-  // If Family mode is switched on mid-session (or restored on load), prune
-  // explicit tracks already sitting in the live queue — keep the current track
-  // playing and remap the index. New additions are filtered upstream (the pool +
-  // getRelated), so this only catches a queue built while family mode was off.
+  // If an explicit-off mode is switched on mid-session (or restored on load),
+  // prune explicit tracks already sitting in the live queue — keep the current
+  // track playing and remap the index. New additions are filtered upstream (the
+  // pool + getRelated), so this only catches a queue built while it was off.
   useEffect(() => {
-    if (!familyMode) return;
+    if (!explicitOff) return;
     // Functional updater returns the SAME queue reference when there's nothing
     // explicit to prune, so React bails out — no cascading render in the common
-    // case. This is a one-shot reconcile on the family-mode transition.
+    // case. This is a one-shot reconcile on the explicit-off transition.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQueue(q => {
       if (!q.tracks.length) return q;
@@ -298,7 +305,15 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       const idx = Math.max(0, filtered.findIndex(t => t.id === curId));
       return { ...q, tracks: filtered, idx };
     });
-  }, [familyMode]);
+  }, [explicitOff]);
+
+  // Switch listening mode. setActiveMode updates the session → useAuth re-renders
+  // → activeMode changes → the featured pool refetches (re-seeded server-side).
+  const switchMode = async (key) => {
+    if (!key || key === activeMode) return;
+    try { await setActiveMode(key); }
+    catch (err) { toast(err.message || 'could not switch mode'); }
+  };
 
   // Path routing — sync `location.pathname` with screen + per-screen params
   // both ways. Cold-land on `/artist/abc` reads from initialFromPath above;
@@ -390,7 +405,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   viewRef.current = { tracks: viewTracks, idx: viewIdx, source: viewSource };
 
   const player = useAudioPlayer();
-  useListeningRecorder({ player, track, mood: t.mood, language: track?.language });
+  useListeningRecorder({ player, track, mood: t.mood, language: track?.language, mode: activeMode });
   useMediaSession({ track, playing, player, setPlaying, goNext: () => goNext(), goPrev: () => goPrev() });
   useKeyboardShortcuts({
     enabled: isDesktop,
@@ -1229,7 +1244,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               loading={featured.status === 'loading'}
               error={featured.error}
               onRetry={featured.refetch}
-              djName={t.djName} mood={t.mood} currentTrackId={track?.id} familyMode={familyMode}
+              djName={t.djName} mood={t.mood} currentTrackId={track?.id} familyMode={explicitOff}
               onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
               onOpenJournal={() => { setJournalReturn('home'); setScreen('journal'); }}
               onOpenDna={() => { setDnaReturn('home'); setScreen('dna'); }}
@@ -1299,7 +1314,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         {(screen === 'search' || closingSearch) && (
           <ScreenTransition key="search" noEnter={isMobile} className={isMobile ? `aura-search-screen ${closingSearch ? 'aura-search-screen--closing' : ''}` : ''}>
             <DesktopSearch djName={t.djName} onClose={() => setScreen('home')} headerless={isMobile}
-              familyMode={familyMode}
+              familyMode={explicitOff}
               onPickLive={pickLiveTrack}
               onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
               onOpenArtist={onOpenArtist}
@@ -1448,6 +1463,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the full surface. */}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}
           onOpenProfile={() => onNav('library')}
+          activeMode={activeMode} modes={user?.modes} onSetMode={switchMode}
           onOpenSearch={openSearch} searching={screen === 'search'} onCloseSearch={closeSearch}/>}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileDock
           track={track} playing={playing} progress={progress}

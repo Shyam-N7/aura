@@ -11,11 +11,12 @@ import { postEvent } from '../api/events';
 //
 // Mood/language are snapshotted into refs so the player-event callbacks always
 // see the current values without re-binding subscriptions on every change.
-export function useListeningRecorder({ player, track, mood, language }) {
-  const ctxRef = useRef({ track, mood, language, playedOnce: false });
+export function useListeningRecorder({ player, track, mood, language, mode }) {
+  const ctxRef = useRef({ track, mood, language, mode, playedOnce: false });
   ctxRef.current.track    = track;
   ctxRef.current.mood     = mood;
   ctxRef.current.language = language;
+  ctxRef.current.mode     = mode;
 
   // Track id changes → emit a skip for the previous track if it had been
   // playing, then arm the new track for its first 'play' event.
@@ -23,7 +24,7 @@ export function useListeningRecorder({ player, track, mood, language }) {
   useEffect(() => {
     const prevId = prevIdRef.current;
     if (prevId && prevId !== track?.id && ctxRef.current.playedOnce) {
-      postEvent(prevId, 'skip', { mood: ctxRef.current.mood, language: ctxRef.current.language });
+      postEvent(prevId, 'skip', { mood: ctxRef.current.mood, language: ctxRef.current.language, mode: ctxRef.current.mode });
     }
     prevIdRef.current = track?.id ?? null;
     ctxRef.current.playedOnce = false;
@@ -38,7 +39,7 @@ export function useListeningRecorder({ player, track, mood, language }) {
         c.playedOnce = true;
         postEvent(c.track.id, 'play', {
           position_sec: player.getProgress?.() * (c.track.durationSec ?? 0) || 0,
-          mood: c.mood, language: c.track.language ?? c.language,
+          mood: c.mood, language: c.track.language ?? c.language, mode: c.mode,
         });
       }
     });
@@ -47,7 +48,7 @@ export function useListeningRecorder({ player, track, mood, language }) {
       if (!c.track?.id || !c.playedOnce) return;
       postEvent(c.track.id, 'pause', {
         position_sec: player.getProgress?.() * (c.track.durationSec ?? 0) || 0,
-        mood: c.mood, language: c.track.language ?? c.language,
+        mood: c.mood, language: c.track.language ?? c.language, mode: c.mode,
       });
     });
     const offEnded = player.on('ended', () => {
@@ -55,7 +56,7 @@ export function useListeningRecorder({ player, track, mood, language }) {
       if (!c.track?.id) return;
       postEvent(c.track.id, 'end', {
         position_sec: c.track.durationSec ?? null,
-        mood: c.mood, language: c.track.language ?? c.language,
+        mood: c.mood, language: c.track.language ?? c.language, mode: c.mode,
       });
       c.playedOnce = false;
     });

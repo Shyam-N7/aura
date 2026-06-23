@@ -104,7 +104,36 @@ function interleave(buckets) {
   return out;
 }
 
-export async function getFeatured({ lang, limit = 20 } = {}) {
+// Per-user-per-mode pool cache (seeded modes only; `everyday`/no-seed stays on
+// the global dailyCache, so the default has no per-user fan-out). MRU-capped.
+const modeCache = new Map();
+const MODE_CACHE_MAX = 200;
+
+// A mode's pool: each real seed artist's songs, interleaved so the top is a mix
+// (not all of one artist), then deduped/filtered by the caller. No lang filter —
+// a mode's artists deliberately span languages; the artist IS the seed.
+async function fetchForSeedArtists(seedArtists, perArtist = 8) {
+  const batches = await Promise.allSettled(
+    seedArtists.map(a => searchSongs(a, { limit: perArtist })),
+  );
+  const buckets = batches.map(b => (b.status === 'fulfilled' ? dedupe(b.value) : []));
+  return interleave(buckets);
+}
+
+export async function getFeatured({ lang, limit = 20, seedArtists, modeKey, userId } = {}) {
+  // A seeded mode → its own per-user/mode pool, cached for the day. `everyday`
+  // (no seed) falls through to the unchanged global default below.
+  if (Array.isArray(seedArtists) && seedArtists.length) {
+    const key = `${userId || 'anon'}|${modeKey || 'mode'}|${dateSeed()}`;
+    let tracks = modeCache.get(key);
+    if (!tracks) {
+      tracks = dedupe(await fetchForSeedArtists(seedArtists)).filter(t => t.streamUrl);
+      modeCache.delete(key);          // MRU: re-insert at the end
+      modeCache.set(key, tracks);
+      if (modeCache.size > MODE_CACHE_MAX) modeCache.delete(modeCache.keys().next().value);
+    }
+    return tracks.slice(0, limit);
+  }
   if (lang && STATIC_QUERIES[lang]) {
     const tracks = dedupe(await fetchForLang(lang));
     return tracks.filter(t => t.streamUrl).slice(0, limit);

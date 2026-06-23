@@ -5,6 +5,7 @@
 
 import { searchSongs, decodeEntities, decryptMediaUrl, pickImageUrl } from './catalog.js';
 import { cacheTracks, getTrackById } from './tracks.js';
+import { pool } from './db.js';
 import {
   CATALOG_API_BASE, CATALOG_USER_AGENT, CATALOG_API_VERSION,
   CATALOG_M_STATION_CREATE, CATALOG_M_STATION_SONGS, CATALOG_CTX_STATION,
@@ -129,6 +130,30 @@ function cacheSet(k, v) {
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
+// Persist the seed→related edges as OUR own copy of the similarity graph (the
+// data foundation a future engine bootstraps from). Best-effort and fire-and-
+// forget — never blocks or fails the request. No FK on track_similarity, so it's
+// safe even before every related track is cached.
+function recordSimilarity(sourceId, related, provenance) {
+  const rows = (related || []).filter(t => t?.id && t.id !== sourceId).slice(0, 20);
+  if (!sourceId || !rows.length) return;
+  const now = Date.now();
+  const values = [];
+  const params = [];
+  rows.forEach((t, i) => {
+    const b = i * 5;
+    values.push(`($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5})`);
+    params.push(sourceId, t.id, provenance, i, now);
+  });
+  pool.query(
+    `INSERT INTO track_similarity (source_track_id, related_track_id, provenance, rank, observed_at)
+     VALUES ${values.join(',')}
+     ON CONFLICT (source_track_id, related_track_id, provenance)
+     DO UPDATE SET rank = EXCLUDED.rank, observed_at = EXCLUDED.observed_at`,
+    params,
+  ).catch(() => { /* signal capture is best-effort */ });
+}
+
 export async function getRelatedTracks(pid, { lang, limit } = {}) {
   if (!pid) return [];
   // Callers ask for different counts: the related rail wants 8, auto-radio
@@ -149,6 +174,7 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
   // have room to trim. The station is seeded purely by the song, so its results are
   // already same-language — no language param needed.
   let tracks = await fetchStationSongs(pid, Math.max(15, want));
+  let provenance = 'station';
 
   // Relevance + dedup, applied to whichever source we use. Prefer same-language
   // and same-artist matches and sink explicit covers BEFORE the by-title dedup so
@@ -189,12 +215,13 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
       try {
         const radio = await searchSongs(q, { lang: fallbackLang, limit: Math.max(10, want) });
         tracks = capPerArtist(refine(radio));
+        provenance = 'related';
       } catch { /* leave empty */ }
     }
   }
 
   tracks = tracks.slice(0, 20);   // keep up to the max; callers slice to their limit
-  if (tracks.length > 0) cacheTracks(tracks);
+  if (tracks.length > 0) { cacheTracks(tracks); recordSimilarity(pid, tracks, provenance); }
   cacheSet(key, tracks);
   return tracks.slice(0, want);
 }

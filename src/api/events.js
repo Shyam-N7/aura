@@ -13,6 +13,7 @@ export function postEvent(track_id, kind, opts = {}) {
       position_sec: opts.position_sec ?? null,
       mood:         opts.mood ?? null,
       language:     opts.language ?? null,
+      mode:         opts.mode ?? null,
     }),
   }).catch(err => console.warn('[events] post failed', kind, track_id, err.message));
 }
