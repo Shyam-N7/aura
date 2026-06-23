@@ -15,8 +15,8 @@ import './QuickPicksSpinner.css';
 // horizontal → spin (angular), vertical → we scroll the page ourselves (the
 // .aura-dh container) with matching fling momentum. A flick spins, a vertical
 // drag scrolls, a tap plays the disc (morphing the cover up into the player).
-const FRICTION   = 0.95;   // velocity retained per frame while coasting/flinging
-const MIN_VEL    = 0.12;   // deg/frame below which the spin coast stops
+const FRICTION   = 0.96;   // velocity retained per frame while coasting/flinging
+const MIN_VEL    = 0.08;   // deg/frame below which the spin coast stops
 const MAX_VEL    = 46;     // deg/frame cap so a hard flick can't go wild
 const TAP_SLOP   = 7;      // total deg of travel under which the gesture is a tap
 const INTENT_PX  = 10;     // px of travel before spin-vs-scroll is decided (also the tap slop:
