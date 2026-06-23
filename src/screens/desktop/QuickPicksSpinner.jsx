@@ -56,8 +56,21 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
       const dx = e.clientX - start.current.x;
       const dy = e.clientY - start.current.y;
       if (Math.hypot(dx, dy) <= INTENT_PX) return;
-      intent.current = Math.abs(dx) >= Math.abs(dy) ? 'spin' : 'scroll';
-      last.current = { a: angleOf(e), t: e.timeStamp };          // seed angular delta
+      // Spin vs scroll by whether the drag ORBITS the centre (tangential =
+      // rotation), not by horizontal-vs-vertical. To rotate a wheel you drag
+      // along its tangent, and at the sides/diagonals (e.g. the bottom-right)
+      // that tangent is vertical-ish — so the old |dx|>=|dy| test misread those
+      // rotations as a page scroll (the dead zone). `tang` is the share of the
+      // move that runs along the tangent at the grab point; ≥ half → spin.
+      const px = start.current.x - center.current.x;
+      const py = start.current.y - center.current.y;
+      const plen = Math.hypot(px, py) || 1;
+      const tang = Math.abs(dx * (-py / plen) + dy * (px / plen));
+      intent.current = tang >= Math.hypot(dx, dy) * 0.5 ? 'spin' : 'scroll';
+      // Do NOT re-seed last.current here — the pointer-down angle (seeded in
+      // onDown) is the correct reference, so the first spin delta captures the
+      // rotation from finger-down to this lock point instead of dropping it
+      // (re-seeding made d = a - a = 0, losing the first move).
       scrollLast.current = { y: e.clientY, t: e.timeStamp };     // seed scroll delta
       scrollVel.current = 0;
     }
