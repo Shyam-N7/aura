@@ -16,6 +16,14 @@ export function GooFilter() {
             values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -8" result="goo"/>
           <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
         </filter>
+        {/* Stronger metaball — the liquid mode-radio ball stretching between dots
+            as it slides (the gooey-liquid-radio look). */}
+        <filter id="aura-goo-radio" colorInterpolationFilters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+          <feColorMatrix in="blur" type="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" result="goo"/>
+          <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+        </filter>
       </defs>
     </svg>
   );

@@ -3,6 +3,7 @@ import { AuraMark } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
 import { ProfileButton } from './ProfileButton';
 import { AnchoredMenu } from '../AnchoredMenu';
+import { GooeyModeRadio } from './GooeyModeRadio';
 import { useSearchQuery, getSearchQuery } from '../../lib/searchQuery';
 import { subscribeSearchFocus } from '../../lib/searchFocus';
 import './MobileTopBar.css';
@@ -186,12 +187,9 @@ export function MobileTopBar({
     </div>
     {modeMenuEl && (
       <AnchoredMenu anchorEl={modeMenuEl} onClose={() => setModeMenuEl(null)}>
-        {modes.map(m => (
-          <button key={m.key} type="button" className="aura-pl-menu-item"
-            onClick={() => { setModeMenuEl(null); onSetMode?.(m.key); }}>
-            {m.label}{m.key === activeMode ? '  ✓' : ''}
-          </button>
-        ))}
+        {/* Keep the menu open on select so the liquid ball-slide is visible;
+            outside-tap / Esc closes it. */}
+        <GooeyModeRadio modes={modes} activeMode={activeMode} onSelect={(k) => onSetMode?.(k)}/>
       </AnchoredMenu>
     )}
     </>
