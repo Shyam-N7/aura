@@ -19,6 +19,7 @@ import './DesktopPlaylistDetail.css';
 export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
   const [hit, setHit]     = useState({ data: null, error: null });
   const [menu, setMenu] = useState(null);
+  const [shareEl, setShareEl] = useState(null);   // Share button → options menu anchor
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`playlist:${playlistId}`, { ready: status === 'ok' });
 
@@ -59,14 +60,28 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
     return () => { stop = true; clearInterval(id); };
   }, [playlistId, shared, updatedAt]);
 
-  const share = async () => {
+  // Mint a fresh collaborate invite link (anyone with it can edit).
+  const makeShareLink = async () => {
+    const { token } = await createPlaylistInvite(playlistId);
+    return `${window.location.origin}/playlists?join=${token}`;
+  };
+  const copyShareLink = async () => {
+    setShareEl(null);
     try {
-      const { token } = await createPlaylistInvite(playlistId);
-      const link = `${window.location.origin}/playlists?join=${token}`;
+      const link = await makeShareLink();
       try { await navigator.clipboard.writeText(link); toast('Share link copied — anyone you send it to can edit.'); }
       catch { toast(link); }
     } catch (err) {
       toast(`Couldn’t create a link — ${err.message}`);
+    }
+  };
+  const shareVia = async () => {
+    setShareEl(null);
+    try {
+      const link = await makeShareLink();
+      await navigator.share({ title: hit.data.name, text: `Join my playlist “${hit.data.name}” on AURA`, url: link });
+    } catch (err) {
+      if (err?.name !== 'AbortError') toast(`Couldn’t share — ${err.message}`);
     }
   };
 
@@ -137,13 +152,25 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                 </button>
               )}
               {isOwner && (
-                <button onClick={share} className="aura-dpd__share">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M6.5 9.5 L9.5 6.5 M7 4.5 L8.5 3 a2.5 2.5 0 0 1 3.5 3.5 L10.5 8 M9 11.5 L7.5 13 a2.5 2.5 0 0 1 -3.5 -3.5 L5.5 8"
-                      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Share
-                </button>
+                <>
+                  <button type="button"
+                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setShareEl(s => s ? null : el); }}
+                    className="aura-dpd__share">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M6.5 9.5 L9.5 6.5 M7 4.5 L8.5 3 a2.5 2.5 0 0 1 3.5 3.5 L10.5 8 M9 11.5 L7.5 13 a2.5 2.5 0 0 1 -3.5 -3.5 L5.5 8"
+                        stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Share
+                  </button>
+                  {shareEl && (
+                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={104}>
+                      {typeof navigator !== 'undefined' && navigator.share && (
+                        <button onClick={shareVia} className="aura-pl-menu-item">share via…</button>
+                      )}
+                      <button onClick={copyShareLink} className="aura-pl-menu-item">copy link</button>
+                    </AnchoredMenu>
+                  )}
+                </>
               )}
             </div>
           </>
