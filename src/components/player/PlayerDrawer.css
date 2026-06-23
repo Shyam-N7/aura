@@ -11,6 +11,18 @@
   background: var(--color-bg);
 }
 
+/* Suppress vaul's own slideFromBottom/slideToBottom on the player drawer at all
+   times EXCEPT while our bloom is running (--instant / --closing). Without this,
+   clearing `instantPlayer` removes --instant, which flips the computed
+   animation-name from our bloom back to vaul's slideFromBottom — and that change
+   RE-STARTS the slide, so the already-seated player slides up from the bottom
+   after the cover seats. `!important` beats vaul's (non-important) [data-state]
+   rule; the :not()s leave our bloom untouched while it plays. Net: open is just
+   the bloom (the clean reverse of close), never a slide. */
+.aura-player-drawer:not(.aura-player-drawer--instant):not(.aura-player-drawer--closing) {
+  animation: none !important;
+}
+
 /* Mobile open — the player BLOOMS OUT of the now-playing bead: reveal the drawer
    with a clip-path circle that grows from the bead (origin = --bloom-x/--bloom-y,
    set by App) on a springy, slightly-overshooting curve — the same liquid-glass-
