@@ -148,6 +148,26 @@
   background: rgb(0 0 0 / 0.04);
   color: var(--color-ink);
 }
+/* Listening-mode switcher chip — sits left of search, mirrors its pill look. */
+.aura-dh-topstrip__mode {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-line);
+  background: transparent;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  white-space: nowrap;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+.aura-dh-topstrip__mode:hover { background: rgb(0 0 0 / 0.04); color: var(--color-ink); }
+.aura-dh-topstrip__mode:active { transform: scale(0.96); }
 .aura-dh-topstrip__kbd {
   padding: 2px 6px;
   border-radius: 4px;
@@ -576,7 +596,9 @@
 .aura-dh__new-picks {
   padding: 0 48px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* auto-fill keeps cards a sane size and lets the column count adapt to width,
+     instead of stretching 4 cards huge on desktop / 2 giant ones on a phone. */
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
   gap: 16px;
 }
 .aura-dh__pick {
@@ -685,6 +707,7 @@
 /* Dark-mode hover/kbd overlays — dark-on-dark is invisible, so flip to a
    light tint at low alpha to read as the same "subtle lift". */
 .theme-midnight .aura-dh-topstrip__search:hover,
+.theme-midnight .aura-dh-topstrip__mode:hover,
 .theme-midnight .aura-dh-section-header__more:hover {
   background: rgb(255 255 255 / 0.06);
 }
@@ -754,7 +777,7 @@
   .aura-dh__playlists-grid { padding: 0 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .aura-dh__playlist-name { font-size: 17px; }
   .aura-dh__playlist-cover--fallback { font-size: 48px; }
-  .aura-dh__new-picks { padding: 0 22px; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .aura-dh__new-picks { padding: 0 22px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
   .aura-dh__about-grid { padding: 0 22px; grid-template-columns: 1fr; gap: 12px; }
   .aura-dh__about-card { padding: 20px; min-height: 150px; }
   .aura-dh__about-headline { font-size: 24px; }

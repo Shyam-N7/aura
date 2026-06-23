@@ -6,7 +6,6 @@ import { getMostPlayed, getTopArtists, getRecentlyPlayed } from '../../api/stats
 import { listPlaylists } from '../../api/playlists';
 import { listAutoPlaylists } from '../../api/autoPlaylists';
 import { getDiscoverHome } from '../../api/discover';
-import { fetchFamilySets } from '../../api/family';
 import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -25,7 +24,8 @@ import './DesktopHome.css';
 const _cache = {};
 
 export function DesktopHome({
-  tracks, djName, currentTrackId, familyMode = false,
+  tracks, djName, currentTrackId,
+  activeMode = 'everyday', modes = [], onSetMode,
   onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenAuto, onOpenPlaylists, onOpenSearch,
   onOpenArtist,
@@ -48,7 +48,6 @@ export function DesktopHome({
         : tracks
   ).slice(0, 8);
   const [discover,       setDiscover]       = useState(() => _cache.discover ?? { trending: [], popularPlaylists: [], movieSongs: [] });
-  const [familySets,     setFamilySets]     = useState(() => _cache.familySets ?? []);
   useEffect(() => {
     const ctl = new AbortController();
     // Each fetch writes into the cache on success so remounts read it
@@ -62,46 +61,12 @@ export function DesktopHome({
     return () => ctl.abort();
   }, []);
 
-  // Curated, family-safe sets — fetched only while Family mode is on (re-runs if
-  // it's toggled on later). Read-only: tapping a track plays it.
-  useEffect(() => {
-    if (!familyMode || _cache.familySets) return undefined;
-    const ctl = new AbortController();
-    fetchFamilySets({ signal: ctl.signal }).then(d => { _cache.familySets = d; setFamilySets(d); }).catch(() => {});
-    return () => ctl.abort();
-  }, [familyMode]);
-
   const scrollRef = useScrollMemory('home');   // cache renders synchronously on remount
 
   return (
     <div ref={scrollRef} className="aura-dh">
-      <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}/>
-
-      {/* Family mode — curated, read-only sets lead the page (explicit already
-          filtered server-side). Tap a track to play it. */}
-      {familyMode && familySets.map(set => (
-        <section key={set.key}>
-          <SectionHeader title={set.title} sub="Family-safe picks" large/>
-          <div className="aura-dh__new-picks">
-            {set.tracks.slice(0, 8).map(tr => (
-              <button key={tr.id} onClick={() => onPickLive?.(tr)} className="aura-dh__pick">
-                <span className="aura-dh__pick-art">
-                  <AlbumArt track={tr} radius={6} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
-                  <span className="aura-dh__pick-play">
-                    <svg width="10" height="12" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
-                  </span>
-                </span>
-                <div>
-                  <div className="aura-dh__pick-title">{cleanTitle(tr.title)}</div>
-                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
-                    {(tr.artist ?? '').toLowerCase()}
-                  </MonoLabel>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+      <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}
+        activeMode={activeMode} modes={modes} onSetMode={onSetMode}/>
 
       {/* Quick picks — an orbital ring drawn from your LISTENING (most-played,
           then recently-played, then featured for brand-new users), above the
@@ -234,7 +199,7 @@ export function DesktopHome({
                   : <span className="aura-dh__playlist-cover aura-dh__playlist-cover--fallback">♫</span>}
                 <div>
                   <div className="aura-dh__playlist-name">{a.name}</div>
-                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
+                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
                     {a.description}
                   </MonoLabel>
                 </div>
@@ -259,7 +224,7 @@ export function DesktopHome({
                 </span>
                 <div>
                   <div className="aura-dh__pick-title">{cleanTitle(t.title)}</div>
-                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
+                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
                     {(t.artist ?? '').toLowerCase()}
                   </MonoLabel>
                 </div>
@@ -322,7 +287,7 @@ export function DesktopHome({
                 <div>
                   <div className="aura-dh__playlist-name">{p.name}</div>
                   {p.subtitle && (
-                    <MonoLabel className="text-ink-soft mt-1 block truncate" size={9}>
+                    <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
                       {p.subtitle.toLowerCase()}
                     </MonoLabel>
                   )}
