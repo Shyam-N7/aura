@@ -14,7 +14,7 @@ import {
 // Strip "(From "Movie Name")" / "(From X)" suffix and normalize a title for
 // dedup so "Aura 10/10" and "Aura 10/10 (From "Meesaya Murukku 2")" — and a
 // song's original vs. a cover/alt-credit recording of it — collapse together.
-function normalizeTitle(s) {
+export function normalizeTitle(s) {
   return (s ?? '')
     .replace(/\(from\s+[^)]*\)/giu, ' ')                                            // "(From "Movie")" anywhere
     .replace(/\s*[-–—]\s*(telugu|tamil|hindi|malayalam|kannada|english)\s*$/iu, '') // trailing " - <language>"
@@ -154,7 +154,13 @@ function recordSimilarity(sourceId, related, provenance) {
   ).catch(() => { /* signal capture is best-effort */ });
 }
 
-export async function getRelatedTracks(pid, { lang, limit } = {}) {
+// `noLangFloor` (used by mode seeding): when a seed's station is empty AND the
+// seed has no known artist (e.g. a pulled id → null seed), DON'T fall back to a
+// generic `<lang> songs` radio. The caller would rather get nothing for that seed
+// (its siblings + the mode-level seedArtists fallback cover it) than dilute a
+// curated mode with generic language pop. The normal radio path leaves it false so
+// auto-radio still has its language floor.
+export async function getRelatedTracks(pid, { lang, limit, noLangFloor } = {}) {
   if (!pid) return [];
   // Callers ask for different counts: the related rail wants 8, auto-radio
   // prefetches a ~15-track batch to fill the queue. Clamp the request, cache
@@ -210,7 +216,8 @@ export async function getRelatedTracks(pid, { lang, limit } = {}) {
   // artist from dominating; with no known artist, fall back to a language radio.
   if (tracks.length === 0) {
     const fallbackLang = lang || seed?.language || undefined;
-    const q = (seed?.artist || '').trim() || (fallbackLang ? `${fallbackLang} songs` : '');
+    const q = (seed?.artist || '').trim()
+      || (noLangFloor ? '' : (fallbackLang ? `${fallbackLang} songs` : ''));
     if (q) {
       try {
         const radio = await searchSongs(q, { lang: fallbackLang, limit: Math.max(10, want) });

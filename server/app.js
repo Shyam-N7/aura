@@ -32,7 +32,7 @@ import { buildTalkContext } from './context.js';
 import authRouter from './auth.js';
 import familyRouter from './family.js';
 import modesRouter from './modesRoutes.js';
-import { modeSeedArtists } from './modes.js';
+import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 
 // The configured Express app, with NO side effects at import time: it neither
@@ -210,13 +210,14 @@ app.get('/api/catalog/featured', optionalAuth, async (req, res) => {
   try {
     // Signed-in: seed the pool from the user's active mode (empty seed for
     // `everyday` → the unchanged global default). Signed-out: global default.
-    let seedArtists, modeKey;
+    let seedTracks, seedArtists, modeKey;
     if (req.userId) {
       const u = await pool.query('SELECT active_mode FROM users WHERE id = $1', [req.userId]);
       modeKey = u.rows[0]?.active_mode || 'everyday';
+      seedTracks = modeSeedTracks(modeKey);
       seedArtists = modeSeedArtists(modeKey);
     }
-    const results = await getFeatured({ lang, limit, seedArtists, modeKey, userId: req.userId });
+    const results = await getFeatured({ lang, limit, seedTracks, seedArtists, modeKey, userId: req.userId });
     res.json({ results });
     cacheTracks(results);
   } catch (err) {

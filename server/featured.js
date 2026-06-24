@@ -4,6 +4,7 @@
 // the date rolls over.
 
 import { searchSongs } from './catalog.js';
+import { getRelatedTracks, normalizeTitle } from './related.js';
 
 // Queries are built dynamically so year-tagged ones auto-update each calendar
 // year. Artist-only queries (no year) stay reliable across all dates.
@@ -93,6 +94,22 @@ function dedupe(tracks) {
   return [...seen.values()];
 }
 
+// Collapse the same song surfacing under different provider ids across seeds (a
+// cover, a "(From …)" re-credit, or the same track in two stations) — the by-id
+// dedupe above can't see those. Keeps the first occurrence; tracks with no title
+// pass through untouched. Reuses related.js's title normalizer so the two paths
+// agree on what counts as "the same song".
+function dedupeTitles(tracks) {
+  const seen = new Set();
+  return tracks.filter((t) => {
+    const k = normalizeTitle(t.title);
+    if (!k) return true;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 function interleave(buckets) {
   const out = [];
   const maxLen = Math.max(...buckets.map(b => b.length));
@@ -120,17 +137,51 @@ async function fetchForSeedArtists(seedArtists, perArtist = 8) {
   return interleave(buckets);
 }
 
-export async function getFeatured({ lang, limit = 20, seedArtists, modeKey, userId } = {}) {
-  // A seeded mode → its own per-user/mode pool, cached for the day. `everyday`
-  // (no seed) falls through to the unchanged global default below.
-  if (Array.isArray(seedArtists) && seedArtists.length) {
+// A mode's pool from its seed TRACKS: each seed's provider station (the real
+// song-similarity graph) interleaved so the top is a mix, not all of one seed.
+// Preferred over artist search because a station returns genuinely on-vibe
+// neighbours. The per-seed `lang` lets the station's own refine sink off-language
+// outliers; the union across seeds still spans the mode's languages.
+async function fetchForSeedTracks(seedTracks, perTrack = 10) {
+  const batches = await Promise.allSettled(
+    seedTracks.map(s => getRelatedTracks(s.id, { lang: s.lang, limit: perTrack, noLangFloor: true })),
+  );
+  const buckets = batches.map((b, i) => {
+    const v = b.status === 'fulfilled' ? b.value : [];
+    // A seed that stations to nothing means its id was likely pulled upstream —
+    // surface it (its curation is silently gone) rather than letting the mode
+    // quietly thin out. Cheap: no extra fetch, the work already ran.
+    if (!v.length) console.warn(`[featured] mode seed "${seedTracks[i].label}" (${seedTracks[i].id}) returned 0 station tracks`);
+    return v;
+  });
+  return interleave(buckets);
+}
+
+export async function getFeatured({ lang, limit = 20, seedTracks, seedArtists, modeKey, userId } = {}) {
+  // A seeded mode → its own per-user/mode pool, cached for the day. Station-based
+  // (seedTracks → the real similarity graph) is preferred; artist-name search is
+  // the fallback if every station misses. `everyday` (no seed) falls through to
+  // the unchanged global default below.
+  const hasTracks  = Array.isArray(seedTracks)  && seedTracks.length;
+  const hasArtists = Array.isArray(seedArtists) && seedArtists.length;
+  if (hasTracks || hasArtists) {
     const key = `${userId || 'anon'}|${modeKey || 'mode'}|${dateSeed()}`;
     let tracks = modeCache.get(key);
-    if (!tracks) {
-      tracks = dedupe(await fetchForSeedArtists(seedArtists)).filter(t => t.streamUrl);
-      modeCache.delete(key);          // MRU: re-insert at the end
-      modeCache.set(key, tracks);
-      if (modeCache.size > MODE_CACHE_MAX) modeCache.delete(modeCache.keys().next().value);
+    if (!tracks || !tracks.length) {   // recompute when uncached (empty pools are never cached, below)
+      tracks = hasTracks
+        ? dedupeTitles(dedupe(await fetchForSeedTracks(seedTracks)).filter(t => t.streamUrl))
+        : [];
+      // Stations all missed (e.g. every seed id was pulled upstream) → artist search.
+      if (!tracks.length && hasArtists) {
+        tracks = dedupeTitles(dedupe(await fetchForSeedArtists(seedArtists)).filter(t => t.streamUrl));
+      }
+      // Cache ONLY a non-empty pool: a transient upstream miss must not pin a blank
+      // mode home for the whole UTC day (the date is in the key) — retry next request.
+      if (tracks.length) {
+        modeCache.delete(key);          // MRU: re-insert at the end
+        modeCache.set(key, tracks);
+        if (modeCache.size > MODE_CACHE_MAX) modeCache.delete(modeCache.keys().next().value);
+      }
     }
     return tracks.slice(0, limit);
   }
