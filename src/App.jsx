@@ -1242,9 +1242,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           <ScreenTransition key="home">
             <DesktopHome tracks={pool}
               loading={featured.status === 'loading'}
-              error={featured.error}
-              onRetry={featured.refetch}
-              djName={t.djName} mood={t.mood} currentTrackId={track?.id} familyMode={explicitOff}
+              djName={t.djName} currentTrackId={track?.id}
+              activeMode={activeMode} modes={user?.modes} onSetMode={switchMode}
               onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
               onOpenJournal={() => { setJournalReturn('home'); setScreen('journal'); }}
               onOpenDna={() => { setDnaReturn('home'); setScreen('dna'); }}

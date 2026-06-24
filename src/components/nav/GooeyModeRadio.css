@@ -19,21 +19,25 @@
   filter: url(#aura-goo-radio);
 }
 
-/* 26px dot + 7px margins top/bottom = 40px box (= STEP). */
+/* 22px dot + 9px margins top/bottom = 40px box (= STEP). SOLID fill (not a
+   transparent ring): the #aura-goo-radio alpha threshold (×20 −10) blurs a faint
+   ring below threshold and erases it, leaving the ball nothing to merge with. A
+   near-opaque fill survives the threshold, so the ball metaball-stretches between
+   the dots as it slides. */
 .aura-goomode__dot {
-  width: 26px;
-  height: 26px;
-  margin: 7px;
+  width: 22px;
+  height: 22px;
+  margin: 9px;
   padding: 0;
+  border: 0;
   border-radius: 50%;
-  border: 5px solid color-mix(in srgb, var(--color-ink), transparent 76%);
-  background: transparent;
+  background: color-mix(in srgb, var(--color-ink-soft) 42%, var(--color-surface));
   cursor: pointer;
   outline: 0;
   -webkit-tap-highlight-color: transparent;
-  transition: border-color 480ms ease;
+  transition: background 480ms ease;
 }
-.aura-goomode__dot.is-active { border-color: var(--color-accent); }
+.aura-goomode__dot.is-active { background: var(--color-accent); }
 
 /* 16px ball, centred on the first dot (top:12 → centre 20 = dot centre), then
    translated DOWN one STEP per mode index. Spring/overshoot = liquid snap. */
@@ -79,4 +83,15 @@
   .aura-goomode__ball { transition: none; }    /* ball jumps to the mode */
   .aura-goomode__dot,
   .aura-goomode__label { transition: none; }
+}
+
+/* The AnchoredMenu that hosts this radio opts out of the glass blur: an SVG
+   `filter` and `backdrop-filter` fight, and the metaball's alpha threshold erases
+   the near-transparent glass. Drop the blur + use a near-opaque surface fill so
+   the goo merges cleanly (mirrors MobileDock's opaque swap during its goo window).
+   Scoped to the mode popover only — other AnchoredMenus keep their glass. */
+.aura-pl-menu--goo {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: color-mix(in srgb, var(--color-surface), transparent 4%) !important;
 }

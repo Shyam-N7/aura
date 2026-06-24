@@ -24,7 +24,7 @@ import './DesktopHome.css';
 const _cache = {};
 
 export function DesktopHome({
-  tracks, djName, currentTrackId,
+  tracks, djName, currentTrackId, loading = false,
   activeMode = 'everyday', modes = [], onSetMode,
   onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenAuto, onOpenPlaylists, onOpenSearch,
@@ -34,6 +34,7 @@ export function DesktopHome({
   const heroTrack = tracks[0];
   const newPicks  = tracks.slice(1, 5);
   const stations  = tracks.slice(5, 9);
+  const activeLabel = modes.find(m => m.key === activeMode)?.label ?? 'Everyday';
 
   const [mostPlayed,     setMostPlayed]     = useState(() => _cache.mostPlayed     ?? []);
   const [topArtists,     setTopArtists]     = useState(() => _cache.topArtists     ?? []);
@@ -67,6 +68,33 @@ export function DesktopHome({
     <div ref={scrollRef} className="aura-dh">
       <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}
         activeMode={activeMode} modes={modes} onSetMode={onSetMode}/>
+
+      {/* {Mode} mix — one tap to play the active context's whole station-seeded
+          pool. Leads the page when you're in a mode; Everyday has no mix, so Quick
+          Picks stays the top there. Gated on !loading so a mode switch never shows
+          the PREVIOUS mode's pool under the new mode's label (the pool lags the
+          label by one fetch). */}
+      {activeMode !== 'everyday' && !loading && tracks.length > 0 && (
+        <section className="aura-dh__modemix">
+          <button type="button" className="aura-dh__modemix-card"
+            onClick={() => onPlaySequence?.(tracks, 0, `${activeLabel} mix`)}>
+            <span className="aura-dh__modemix-art" aria-hidden="true">
+              {tracks.slice(0, 4).map(tr => (
+                <AlbumArt key={tr.id} track={tr} radius={0}
+                  style={{ width: '100%', height: '100%', aspectRatio: 1 }}/>
+              ))}
+            </span>
+            <span className="aura-dh__modemix-meta">
+              <span className="aura-dh__modemix-kicker">your mix</span>
+              <span className="aura-dh__modemix-title">{activeLabel} mix</span>
+              <span className="aura-dh__modemix-sub">{tracks.length} songs · tap to play all</span>
+            </span>
+            <span className="aura-dh__modemix-play" aria-hidden="true">
+              <svg width="15" height="17" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
+            </span>
+          </button>
+        </section>
+      )}
 
       {/* Quick picks — an orbital ring drawn from your LISTENING (most-played,
           then recently-played, then featured for brand-new users), above the

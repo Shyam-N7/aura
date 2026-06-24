@@ -186,7 +186,7 @@ export function MobileTopBar({
       )}
     </div>
     {modeMenuEl && (
-      <AnchoredMenu anchorEl={modeMenuEl} onClose={() => setModeMenuEl(null)}>
+      <AnchoredMenu anchorEl={modeMenuEl} onClose={() => setModeMenuEl(null)} className="aura-pl-menu--goo">
         {/* Keep the menu open on select so the liquid ball-slide is visible;
             outside-tap / Esc closes it. */}
         <GooeyModeRadio modes={modes} activeMode={activeMode} onSelect={(k) => onSetMode?.(k)}/>

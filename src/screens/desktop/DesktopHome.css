@@ -765,6 +765,8 @@
   .aura-dh__greeting { padding: 26px 22px 0; }
   .aura-dh__mood-hero { font-size: 30px; }
   .aura-dh__qp { padding: 22px 0 0; }
+  .aura-dh__modemix { padding: 22px 22px 0; }
+  .aura-dh__modemix-title { font-size: 17px; }
   /* Phone: swap the auto-orbit for the spinnable fidget wheel. */
   .aura-dh__qp-orbit { display: none; }
   .aura-dh__qp-spinner { display: block; }
@@ -819,4 +821,76 @@
   .aura-dh__mood-hero { font-size: 28px; }
   .aura-dh-hero-band__headline { font-size: 22px; }
   .aura-dh-hero-band__art .aura-album-art { --size: 92px !important; }
+}
+
+/* ── {Mode} mix — one-tap play of the active context's station-seeded pool ── */
+.aura-dh__modemix {
+  padding: 24px 48px 0;
+}
+.aura-dh__modemix-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-accent), transparent 90%);
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 80%);
+  transition: background 180ms ease, transform 180ms ease;
+}
+.aura-dh__modemix-card:hover {
+  background: color-mix(in srgb, var(--color-accent), transparent 84%);
+  transform: translateY(-1px);
+}
+.aura-dh__modemix-art {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1px;
+  background: var(--color-surface);
+}
+.aura-dh__modemix-art > * { width: 100%; height: 100%; line-height: 0; }
+.aura-dh__modemix-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.aura-dh__modemix-kicker {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+}
+.aura-dh__modemix-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.aura-dh__modemix-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink-soft);
+}
+.aura-dh__modemix-play {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-accent);
+  color: var(--color-bg);   /* theme-aware: readable on the accent disc in every theme */
 }

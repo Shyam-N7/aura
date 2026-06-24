@@ -15,7 +15,7 @@ const GAP = 6;
 //
 // Usage: keep `{ id, el }` in state; render
 //   {menu?.id === t.id && <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)}>…items…</AnchoredMenu>}
-export function AnchoredMenu({ anchorEl, onClose, estHeight = 172, children }) {
+export function AnchoredMenu({ anchorEl, onClose, estHeight = 172, className = '', children }) {
   const ref = useRef(null);
   const [pos, setPos] = useState(null);
   // Hold the latest onClose without making the listener effect depend on it —
@@ -83,7 +83,7 @@ export function AnchoredMenu({ anchorEl, onClose, estHeight = 172, children }) {
   };
 
   return createPortal(
-    <div ref={ref} role="menu" className="aura-pl-menu" style={style}
+    <div ref={ref} role="menu" className={`aura-pl-menu${className ? ` ${className}` : ''}`} style={style}
       onClick={(e) => e.stopPropagation()}>
       {children}
     </div>,
