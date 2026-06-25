@@ -24,6 +24,16 @@ export function GooFilter() {
             values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" result="goo"/>
           <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
         </filter>
+        {/* Strong metaball — the canonical Codrops "Creative Gooey Effects" values.
+            Used by the onboarding language pick: the solid ink drop flows off the
+            last-picked pill, pulling a liquid tail that stretches + snaps as it
+            flies to the new one. */}
+        <filter id="aura-goo-strong" colorInterpolationFilters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+          <feColorMatrix in="blur" type="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo"/>
+          <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+        </filter>
       </defs>
     </svg>
   );

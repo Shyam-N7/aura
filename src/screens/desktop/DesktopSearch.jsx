@@ -11,6 +11,7 @@ import { subscribeSearchFocus, requestSearchFocus } from '../../lib/searchFocus'
 import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
 import { getSearchResult, setSearchResult, getSearchLang, setSearchLang } from '../../lib/searchCache';
 import { getSeedSignals } from '../../lib/onboarding';
+import { LANGUAGES } from '../../data/languages';
 import { dropExplicit } from '../../lib/explicit';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
@@ -21,7 +22,7 @@ import { SearchSidebar } from './SearchSidebar';
 import '../PlaylistsScreen.css';
 import './DesktopSearch.css';
 
-const LANGS = ['all', 'tamil', 'english', 'hindi', 'malayalam', 'kannada'];
+const LANGS = ['all', ...LANGUAGES];
 const EMPTY = { key: '', top: null, songs: [], artists: [], albums: [], playlists: [], userPlaylists: [], error: null };
 
 // A cover-tile (album / movie / playlist / artist — `round` for artist avatars).

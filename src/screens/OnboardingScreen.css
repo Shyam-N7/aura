@@ -1,30 +1,32 @@
-/* Editorial onboarding — two-column shell with a sticky rail on the left
-   (brand + headline + step checklist) and three scrolling sections on the
-   right (languages / mood / artists). A sticky glass dock pins the action
-   row to the bottom, and a thin accent strip at the very top of viewport
-   tracks completion across all three steps. */
+/* Step-by-step onboarding — one decision at a time (language → mood → artists).
+   The flow lives in a single shell that renders per-surface: a centered focused
+   card on tablet/desktop (≥600 px), and full-screen steps on phones (<600 px)
+   with a glass action pill pinned to the bottom. Each step shows a head (brand
+   + stepper dots + the question), a scrolling panel (the picker), and a foot
+   (Back · Next). A thin accent strip at the very top of the viewport tracks
+   which step you're on. */
 
 .aura-onb {
   /* position: fixed so the screen escapes the responsive-shell padding
-     (--aura-nav-w + --aura-rail-w reserve ~644 px for the chrome that isn't
-     rendered during onboarding). Without this, the right column dies in the
-     420 px gutter meant for the player rail. */
+     (--aura-nav-w + --aura-rail-w reserve ~644 px for chrome that isn't
+     rendered during onboarding). */
   position: fixed;
   inset: 0;
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
   z-index: 30;
-  /* Mobile (default): one page-level scroll — rail collapses to top + sections
-     stack vertically, so a single scroll feels right. Desktop overrides below
-     hand scroll off to .aura-onb__main so wheeling over the rail doesn't move
-     the right column. */
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* The panel inside owns the scroll (head + foot stay pinned), so the shell
+     itself never scrolls — on every surface. */
+  overflow: hidden;
 }
-@media (min-width: 1024px) {
+/* Tablet/desktop: centre the card in the viewport. */
+@media (min-width: 600px) {
   .aura-onb {
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
   }
 }
 
@@ -42,42 +44,62 @@
   transition: width 320ms cubic-bezier(.2, .7, .2, 1);
 }
 
-/* ─── Two-column shell ─────────────────────────────────────────────── */
-.aura-onb__shell {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 40px;
-  /* Top padding clears the floating MobileTopBar pill (16+52=68) AND
-     the fixed `aura welcomes you!` brand strip below it (~50 incl. its
-     own padding + fade). Bottom padding clears the sticky dock. */
-  padding: 130px max(24px, 5vw) 160px;
-  min-height: 100%;
+/* ─── Card shell ───────────────────────────────────────────────────────
+   Mobile-first base: full-bleed, transparent (the floating pills are the
+   chrome). The ≥600 px block turns it into a bordered surface card. */
+.aura-onb__card {
+  position: relative;
+  z-index: 1;   /* above the ambient backdrop (z-index: 0) */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
 }
-@media (min-width: 1024px) {
-  .aura-onb__shell {
-    grid-template-columns: 420px 1fr;
-    gap: 80px;
-    /* Fill the viewport exactly so the shell becomes the layout grid; rail is
-       static and main owns its own scroll. No more wheel-over-rail moves the
-       page. */
-    height: 100vh;
-    min-height: 0;
-    padding-top: 80px;
-    padding-bottom: 0;  /* main has its own bottom padding now */
-    overflow: hidden;
+@media (min-width: 600px) {
+  .aura-onb__card {
+    width: min(720px, 92vw);
+    height: auto;
+    max-height: min(640px, 88vh);
+    /* Frosted glass — a translucent surface + blur so the mood-tinted backdrop
+       glows through, and a border + outer glow that pick up the live --onb-tint
+       (which crossfades with the chosen mood via @property). Same glass recipe
+       as the foot / dock / landing pills. */
+    background: color-mix(in srgb, var(--color-surface), transparent 26%);
+    -webkit-backdrop-filter: blur(22px) saturate(125%);
+            backdrop-filter: blur(22px) saturate(125%);
+    border: 1px solid color-mix(in srgb, var(--onb-tint), transparent 76%);
+    border-radius: 24px;
+    box-shadow:
+      0 24px 70px rgb(0 0 0 / 0.16),
+      0 10px 50px color-mix(in srgb, var(--onb-tint), transparent 85%),
+      inset 0 1px 0 rgb(255 255 255 / 0.45);
+  }
+  .theme-midnight .aura-onb__card {
+    /* Dark glass needs more opacity to keep text crisp, and a fainter top sheen. */
+    background: color-mix(in srgb, var(--color-surface), transparent 16%);
+    box-shadow:
+      0 24px 70px rgb(0 0 0 / 0.42),
+      0 10px 50px color-mix(in srgb, var(--onb-tint), transparent 82%),
+      inset 0 1px 0 rgb(255 255 255 / 0.1);
   }
 }
 
-/* ─── Left rail (sticky on desktop) ────────────────────────────────── */
-.aura-onb__rail {
+/* ─── Head (brand + stepper + step question) ───────────────────────── */
+.aura-onb__card-head {
+  flex: none;
   display: flex;
   flex-direction: column;
+  gap: 22px;
+  /* Mobile: clear the floating MobileTopBar pill (16+52) AND the fixed
+     `aura welcomes you!` brand pill below it. */
+  padding: 130px max(24px, 5vw) 18px;
 }
-@media (min-width: 1024px) {
-  .aura-onb__rail {
-    align-self: start;
-    max-height: 100%;
-    overflow: hidden;   /* don't let wheel events bubble into the page */
+@media (min-width: 600px) {
+  .aura-onb__card-head {
+    gap: 20px;
+    padding: 30px max(28px, 4vw) 18px;
   }
 }
 
@@ -91,45 +113,12 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-ink-soft);
-  margin-bottom: 28px;
-}
-
-.aura-onb__title {
-  font-family: var(--font-serif);
-  font-size: clamp(34px, 4.5vw, 56px);
-  line-height: 1.04;
-  letter-spacing: -0.022em;
-  color: var(--color-ink);
-  font-weight: 400;
-  text-wrap: pretty;
-  margin: 0;
-}
-.aura-onb__title em {
-  font-style: italic;
-}
-
-.aura-onb__sub {
-  margin-top: 22px;
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--color-ink-soft);
-  max-width: 380px;
-  text-wrap: pretty;
-}
-
-.aura-onb__rail-divider {
-  margin: 36px 0 22px;
-  height: 1px;
-  background: var(--color-line);
-  width: 80%;
 }
 
 /* Horizontal stepper — Language → Mood → Artists. Each node carries a numbered
-   dot (a check once done) and a label, joined by a connector that lights to the
-   accent as steps are reached. Drives off the same lang/mood/artist step states.
-   Sits in the rail: persistent beside the content on desktop, top-of-page on
-   mobile (where the rail stacks above the sections). */
+   dot (a check once that step is satisfied) and a label, joined by a connector
+   that lights to the accent as steps are reached. The whole node is a button so
+   the user can jump back to a completed step. */
 .aura-onb__stepper {
   list-style: none;
   padding: 0;
@@ -140,12 +129,8 @@
 .aura-onb__step-node {
   position: relative;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
-  text-align: center;
   min-width: 0;
+  display: flex;
 }
 /* Connector to the previous node, pinned at the dot's vertical centre. It lights
    for reached steps (active/done both imply the prior step is complete). */
@@ -158,11 +143,26 @@
   height: 2px;
   background: var(--color-line);
   transition: background 240ms ease;
+  z-index: 0;
 }
 .aura-onb__step-node--active::before,
 .aura-onb__step-node--done::before {
   background: var(--color-accent);
 }
+.aura-onb__step-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.aura-onb__step-btn:disabled { cursor: default; }
 .aura-onb__step-dot {
   position: relative;
   z-index: 1;
@@ -179,6 +179,11 @@
   background: var(--color-bg);
   color: var(--color-ink-faint);
   transition: border-color 200ms ease, background 200ms ease, color 200ms ease, box-shadow 200ms ease;
+}
+/* On the card surface the dot's fill should match the surface, not the page bg,
+   so it doesn't read as a hole punched in the card. */
+@media (min-width: 600px) {
+  .aura-onb__step-dot { background: var(--color-surface); }
 }
 .aura-onb__step-node--active .aura-onb__step-dot {
   border-color: var(--color-accent);
@@ -201,56 +206,7 @@
 .aura-onb__step-node--active .aura-onb__step-label { color: var(--color-ink); }
 .aura-onb__step-node--pending .aura-onb__step-label { color: var(--color-ink-faint); }
 
-/* ─── Right column ─────────────────────────────────────────────────── */
-.aura-onb__main {
-  display: flex;
-  flex-direction: column;
-  gap: 56px;
-  min-width: 0;
-}
-@media (min-width: 1024px) {
-  .aura-onb__main {
-    /* Desktop: this column owns the scroll, the shell does not. Wheel events
-       are absorbed here so hovering the rail can't drive scroll. */
-    --top-fade: 40px;
-    overflow-y: auto;
-    max-height: 100%;
-    /* padding-top clears the mask fade region so the first section header
-       isn't washed out at rest (matches DesktopJournal pattern — content
-       starts below the fade and only dissolves as it scrolls past). */
-    padding-top: 56px;
-    padding-bottom: 140px;   /* clears the sticky glass dock */
-    /* GPU-promote the scroll container so the browser composites instead of
-       repainting the artist grid (procedural covers) on every wheel tick. */
-    will-change: transform;
-    transform: translateZ(0);
-    /* Top edge dissolves into the page bg as content scrolls past — matches
-       the pinned-header fade pattern used across the desktop screens
-       (DesktopJournal / DesktopBridges / DesktopDna / etc.). Bottom stays
-       solid; the dock provides its own glass scrim down there. */
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top-fade), #000 100%);
-            mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top-fade), #000 100%);
-    /* Always-visible thin scrollbar — user found the hover-only fade
-       distracting. */
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--color-ink), transparent 75%) transparent;
-  }
-  .aura-onb__main::-webkit-scrollbar { width: 8px; }
-  .aura-onb__main::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--color-ink), transparent 78%);
-    border-radius: 4px;
-    transition: background 160ms ease;
-  }
-  .aura-onb__main::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--color-ink), transparent 60%);
-  }
-}
-
-.aura-onb__step {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
+/* ─── Step question header ─────────────────────────────────────────── */
 .aura-onb__step-header {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -284,17 +240,74 @@
   font-size: 16px;
 }
 
-/* ─── Section 01 — language chips ───────────────────────────────────── */
+/* ─── Panel (the active picker; scrolls if it overflows) ───────────── */
+.aura-onb__panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Mobile: clear the fixed glass foot pill at the bottom. */
+  padding: 8px max(24px, 5vw) 124px;
+  animation: aura-onb-step-fwd 320ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-onb__panel--back { animation-name: aura-onb-step-back; }
+@media (min-width: 600px) {
+  .aura-onb__panel {
+    --top-fade: 22px;
+    padding: 14px max(28px, 4vw) 26px;
+    /* Top edge dissolves into the card as content scrolls past — matches the
+       pinned-header fade used across the desktop screens. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top-fade), #000 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top-fade), #000 100%);
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-ink), transparent 75%) transparent;
+  }
+  .aura-onb__panel::-webkit-scrollbar { width: 8px; }
+  .aura-onb__panel::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-ink), transparent 78%);
+    border-radius: 4px;
+    transition: background 160ms ease;
+  }
+  .aura-onb__panel::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-ink), transparent 60%);
+  }
+}
+@keyframes aura-onb-step-fwd {
+  from { opacity: 0; transform: translateX(22px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes aura-onb-step-back {
+  from { opacity: 0; transform: translateX(-22px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-onb__panel,
+  .aura-onb__panel--back { animation: aura-onb-step-fade 180ms ease; }
+}
+@keyframes aura-onb-step-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── Step 01 — language chips ──────────────────────────────────────────
+   Equal-width pills: a grid of equal columns (auto-fill) so every pill is the
+   same size and they line up in neat rows, instead of each chip hugging its own
+   label. The min column width fits the longest language name. */
 .aura-onb__chiprow {
-  display: flex;
-  flex-wrap: wrap;
+  position: relative;   /* anchors the selection-goo overlay */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 10px;
 }
 .aura-onb__chip {
-  display: inline-flex;
+  position: relative;
+  z-index: 1;           /* crisp pills sit above the goo overlay (z-index: 2 is the overlay, 3 is the melting target) */
+  display: flex;
   align-items: center;
+  justify-content: center;   /* centre dot + label in the equal-width pill */
   gap: 10px;
-  padding: 8px 18px 8px 12px;
+  width: 100%;
+  padding: 8px 12px;
   border-radius: 9999px;
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--color-ink), transparent 70%);
@@ -336,15 +349,122 @@
   color: var(--color-ink);
 }
 
-/* ─── Section 02 — mood cards ───────────────────────────────────────── */
+/* "more languages" expander under the chips — a quiet ghost toggle. */
+.aura-onb__more-langs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;   /* matches the equal-width pill grid */
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 82%);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--color-ink-soft);
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease,
+              transform 420ms cubic-bezier(.2, .7, .2, 1);
+}
+.aura-onb__more-langs:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 60%);
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+
+/* ── Selection goo: a drop flows off the last-picked chip and melts into the new
+   one. The overlay holds the source pill's fill blob, the target's growing fill
+   blob, and the flying drop — all under #aura-goo-strong, so the drop pulls a
+   liquid TAIL off the source and merges into the target. Other pills stay crisp
+   and separate. It sits at z-index 2: ABOVE the normal pills (z 1) so the drop is
+   visible as it flies, but BELOW a ghosted source/target chip (z 3) whose own
+   fill is dropped so its blob reads as the fill while the label rides crisp. ── */
+.aura-onb__chip-goo {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  filter: url(#aura-goo-strong);
+  transition: opacity 200ms ease;
+}
+.aura-onb__chip-goo.is-settle { opacity: 0; }   /* fade out as the crisp pill fills in */
+.aura-onb__goo-blob {
+  position: absolute;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  transform-origin: center;
+}
+/* Solid ink — the same colour as a selected pill's background and the fill blobs,
+   so the drop reads as a piece of the pill's liquid (no shine/gradient). */
+.aura-onb__drop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-ink);
+  transform-origin: center;
+}
+/* Phase-scoped transitions (durations mirror MELT_TRAVEL / MELT_BLOOM in the
+   JSX). `enter` has none, so the drop simply starts on the source pill; `run`
+   glides it the full trajectory; `bloom` lands it + raises the goo with a spring. */
+.aura-onb__chip-goo.is-run .aura-onb__drop {
+  transition: transform 460ms cubic-bezier(.4, .6, .3, 1);
+}
+.aura-onb__chip-goo.is-bloom .aura-onb__drop,
+.aura-onb__chip-goo.is-settle .aura-onb__drop {
+  transition: transform 300ms cubic-bezier(.34, 1.4, .5, 1);
+}
+/* Target chip mid-melt: drop the solid fill so the blob behind shows through, and
+   lift above the overlay so its --on label/check stay crisp on top. On settle the
+   class lifts and the real --on fill fades in (160ms) as the overlay fades out. */
+.aura-onb__chip.is-melting {
+  z-index: 3;
+  background: transparent;
+  border-color: transparent;
+}
+
+/* "more languages" reveals the extra chips inline (right after the primary set):
+   a clean staggered fade + slight rise. No goo here — the metaball is reserved
+   for selection so the two effects never compete. */
+/* Extra chips just FADE in where they sit (no vertical drop) — the motion to
+   notice is the "more languages" toggle gliding to the end, not the chips. */
+.aura-onb__chip--extra {
+  animation: aura-onb-chip-reveal 260ms ease both;
+  animation-delay: calc(var(--gi, 0) * 28ms);
+}
+.aura-onb__chip--extra.is-closing {
+  animation: aura-onb-chip-conceal 200ms ease forwards;
+  animation-delay: calc(var(--gi, 0) * 14ms);
+}
+@keyframes aura-onb-chip-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes aura-onb-chip-conceal {
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-onb__chip-goo { display: none; }
+  .aura-onb__goo-blob,
+  .aura-onb__drop { transition: none; }
+  .aura-onb__chip--extra,
+  .aura-onb__chip--extra.is-closing { animation: none; }
+}
+
+/* ─── Step 02 — mood cards ──────────────────────────────────────────── */
 .aura-onb__moods {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-/* 3-col only when the *right column* has room — 1500 px viewport leaves
-   ~1000 px for the right column on desktop, which is the smallest width
-   each card can sit comfortably without the subtitle wrapping awkwardly. */
+/* 3-col only when the card has room — the card caps at 720 px, so this only
+   kicks in on very wide viewports if the card max-width ever grows. */
 @media (min-width: 1500px) {
   .aura-onb__moods { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -492,7 +612,8 @@
   color: color-mix(in srgb, var(--color-bg), transparent 35%);
 }
 
-/* ─── Section 03 — artist tiles ─────────────────────────────────────── */
+/* ─── Step 03 — artist tiles ────────────────────────────────────────────
+   A square-tile grid (real artist photos), one beside the other. */
 .aura-onb__grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -501,8 +622,7 @@
 @media (min-width: 780px)  { .aura-onb__grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1280px) { .aura-onb__grid { grid-template-columns: repeat(4, 1fr); } }
 
-/* "Load more" — quiet accent-outlined pill under the grid; only renders while
-   more of the pool is hidden. */
+/* "Load more" — quiet accent-outlined pill under the grid. */
 .aura-onb__loadmore {
   display: inline-flex;
   align-items: center;
@@ -524,6 +644,50 @@
   background: color-mix(in srgb, var(--color-accent), transparent 90%);
   border-color: var(--color-accent);
 }
+.aura-onb__loadmore:disabled { cursor: default; }
+
+/* Custom load-more loader — three accent dots ripple while the new tiles' photos
+   are fetched. */
+.aura-onb__loadmore-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.aura-onb__loadmore-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: aura-onb-dot 900ms ease-in-out infinite;
+}
+.aura-onb__loadmore-dots i:nth-child(2) { animation-delay: 150ms; }
+.aura-onb__loadmore-dots i:nth-child(3) { animation-delay: 300ms; }
+@keyframes aura-onb-dot {
+  0%, 100% { opacity: .3; transform: translateY(0); }
+  50%      { opacity: 1; transform: translateY(-3px); }
+}
+
+/* Shimmer placeholder over a tile while its real artist photo loads. Sits above
+   the art but below the name/scrim/check (DOM order), so the name stays readable. */
+.aura-onb__tile-skeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background:
+    linear-gradient(100deg,
+      color-mix(in srgb, var(--color-ink), transparent 92%) 30%,
+      color-mix(in srgb, var(--color-ink), transparent 80%) 50%,
+      color-mix(in srgb, var(--color-ink), transparent 92%) 70%);
+  background-size: 200% 100%;
+  animation: aura-onb-shimmer 1.2s linear infinite;
+}
+@keyframes aura-onb-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-onb__loadmore-dots i,
+  .aura-onb__tile-skeleton { animation: none; }
+}
 
 .aura-onb__tile {
   display: flex;
@@ -535,11 +699,8 @@
   cursor: pointer;
   text-align: left;
   color: var(--color-ink);
-  /* Isolate each tile's repaint scope — changes inside one tile (hover, check
-     badge) no longer invalidate sibling tiles. Major scroll perf win in a
-     12-tile grid of procedural covers. */
+  /* Isolate each tile's repaint scope, and stagger-in by index. */
   contain: layout paint style;
-  /* stagger-in: each tile lifts in after a small delay based on its index */
   opacity: 0;
   transform: translateY(8px);
   animation: aura-onb-tile-rise 380ms cubic-bezier(.2, .7, .2, 1) forwards;
@@ -565,24 +726,6 @@
 .aura-onb__tile:hover .aura-onb__tile-art { transform: translateY(-1px); }
 .aura-onb__tile--on .aura-onb__tile-art::after {
   border-color: var(--color-accent);
-}
-.aura-onb__tile-lang {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  /* solid translucent bg instead of backdrop-filter: blur — blur on N tiles
-     forces a separate compositor pass per tile each scroll frame, which was
-     the main source of jank. The darker solid reads similarly over any
-     cover art. */
-  background: rgb(0 0 0 / 0.62);
-  color: rgb(255 255 255 / 0.95);
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 8.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 .aura-onb__tile-check {
   position: absolute;
@@ -612,23 +755,19 @@
   right: 12px;
   bottom: 10px;
   font-family: var(--font-serif);
-  font-size: 18px;
-  line-height: 1.1;
+  font-size: 15px;
+  line-height: 1.15;
   letter-spacing: -0.01em;
   color: rgb(255 255 255 / 0.96);
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
   text-wrap: pretty;
 }
-.aura-onb__tile-cta {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  letter-spacing: 0;
-  color: var(--color-ink-faint);
-  padding: 2px 2px;
-  transition: color 160ms ease;
+@keyframes aura-onb-tile-rise {
+  to { opacity: 1; transform: translateY(0); }
 }
-.aura-onb__tile-cta--on {
-  color: var(--color-accent);
+@keyframes aura-onb-check-pop {
+  0%   { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .aura-onb__empty {
@@ -640,19 +779,21 @@
   text-align: center;
 }
 
-/* ─── Bottom dock ───────────────────────────────────────────────────── */
-.aura-onb__dock {
+/* ─── Foot (Back · Next) ────────────────────────────────────────────────
+   Mobile-first base: a frosted glass action pill pinned to the bottom of the
+   viewport (same recipe the app's other floating pills use). The ≥600 px block
+   turns it into a static footer row inside the card. */
+.aura-onb__foot {
   position: fixed;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 8px 8px 24px;
-  /* Glass: heavily transparent surface + strong blur + saturation bump so the
-     dock reads as a frosted lens over the bg, not a solid pill. The inset
-     1px highlight on top gives it the "wet glass" edge. */
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 28px);
+  padding: 8px;
   background: color-mix(in srgb, var(--color-surface), transparent 50%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
           backdrop-filter: blur(24px) saturate(180%);
@@ -662,53 +803,58 @@
     0 12px 36px rgb(0 0 0 / 0.14),
     inset 0 1px 0 rgb(255 255 255 / 0.45);
   z-index: 40;
-  max-width: calc(100% - 32px);
 }
-/* Midnight theme reads "glass" differently — flip the inset highlight to a
-   subtler white-on-dark and the bg to a darker translucent surface. */
-.theme-midnight .aura-onb__dock {
+.theme-midnight .aura-onb__foot {
   background: color-mix(in srgb, var(--color-surface), transparent 35%);
   box-shadow:
     0 12px 36px rgb(0 0 0 / 0.32),
     inset 0 1px 0 rgb(255 255 255 / 0.10);
 }
-.aura-onb__dock-skip {
-  background: transparent;
+.aura-onb__foot-spacer { width: 6px; }
+@media (min-width: 600px) {
+  .aura-onb__foot {
+    position: static;
+    transform: none;
+    display: flex;
+    width: auto;
+    max-width: none;
+    gap: 14px;
+    padding: 16px max(28px, 4vw);
+    background: transparent;
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  /* Push Back to the left edge and Next to the right edge of the card. */
+  .aura-onb__foot-spacer { flex: 1; width: auto; }
+}
+
+.aura-onb__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
   border: 0;
+  border-radius: 9999px;
+  background: transparent;
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 500;
   color: var(--color-ink-soft);
-  padding: 8px 10px;
-  transition: color 140ms ease;
+  transition: color 140ms ease, background 140ms ease;
 }
-.aura-onb__dock-skip:hover { color: var(--color-ink); }
-.aura-onb__dock-divider {
-  width: 1px;
-  height: 24px;
-  background: var(--color-line);
+.aura-onb__back:not(:disabled):hover {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink), transparent 92%);
 }
-.aura-onb__dock-progress {
-  width: 80px;
-  height: 3px;
-  border-radius: 9999px;
-  background: var(--color-line);
-  overflow: hidden;
-}
-.aura-onb__dock-progress-fill {
-  height: 100%;
-  background: var(--color-accent);
-  border-radius: 9999px;
-  transition: width 240ms cubic-bezier(.2, .7, .2, 1);
-}
-.aura-onb__dock-count {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--color-ink-faint);
-}
-.aura-onb__dock-count-current { color: var(--color-accent); }
-.aura-onb__dock-submit {
+/* Step 1 has no previous step — drop Back entirely so the pill is just Next. */
+.aura-onb__back:disabled { display: none; }
+
+.aura-onb__next {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -724,38 +870,26 @@
   cursor: pointer;
   transition: filter 140ms ease, opacity 140ms ease;
 }
-.aura-onb__dock-submit:not(:disabled):hover { filter: brightness(1.05); }
-.aura-onb__dock-submit:disabled {
+.aura-onb__next:not(:disabled):hover { filter: brightness(1.05); }
+.aura-onb__next:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-@keyframes aura-onb-tile-rise {
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes aura-onb-check-pop {
-  0%   { transform: scale(0); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
 /* ─── Brand chip text swap ──────────────────────────────────────────────
-   Default (desktop): show the AuraMark + "aura · welcome".
-   Mobile: hide the icon (top pill carries the brand) and swap the text
-   for "aura welcomes you" so the chip reads as a welcome, not a
-   duplicate logo. */
+   Default (≥600): show the AuraMark + "aura welcomes you!".
+   Mobile: hide the icon (top pill carries the brand) and float the welcome
+   text as its own small pill below the top bar. */
 .aura-onb__brand-welcome { display: none; }
 
 /* ─── Mobile polish (<600 px) ───────────────────────────────────────────
-   Brand swap + uniform mood cards + single-line bottom dock. */
+   Float the brand as a pill, fix mood-card heights, tighten the foot pill. */
 @media (max-width: 599px) {
-  /* Brand: drop the icon + desktop mono text, reveal the welcome
-     tagline. Fixed pin below the top pill, glass-pill chrome (same
-     recipe as the top/bottom pills) but width sized to the text so it
-     reads as a small floating tag, not a duplicate full-width bar. */
+  /* Brand: drop the icon + desktop text, reveal the welcome tagline. Fixed
+     pin below the top pill, glass-pill chrome sized to the text. */
   .aura-onb__brand {
     position: fixed;
     top: 80px;
-    /* Center horizontally + width to text content only. */
     left: 50%;
     transform: translateX(-50%);
     width: max-content;
@@ -764,7 +898,6 @@
     display: block;
     text-align: center;
     padding: 8px 20px;
-    margin: 0;
     border-radius: 9999px;
     background: linear-gradient(135deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.02));
     border: 1px solid rgb(255 255 255 / 0.14);
@@ -793,16 +926,12 @@
     text-transform: uppercase;
     color: var(--color-ink-soft);
   }
-  /* Slightly tighten title spacing now the brand row is just text. */
-  .aura-onb__title { margin-top: 8px; }
 
-  /* Mood cards — fixed height + 2-line clamp so all 6 cards line up
-     and the longest sub-text doesn't stretch its card. Trim the swatch
-     + card padding so the body slot has more horizontal room → labels
-     wrap to cleaner two-word groupings. */
+  /* Mood cards — fixed height + trimmed padding so all 6 line up and the
+     longest sub-text doesn't stretch its card. */
   .aura-onb__mood {
     height: 75px;
-    padding: 10px 10px;
+    padding: 10px;
     gap: 10px;
   }
   .aura-onb__mood-swatch {
@@ -813,36 +942,215 @@
     align-self: center;
     min-width: 0;
   }
-  .aura-onb__mood-label {
-    font-size: 14px;
-  }
-  .aura-onb__mood-sub {
-    font-size: 11px;
-  }
+  .aura-onb__mood-label { font-size: 14px; }
+  .aura-onb__mood-sub   { font-size: 10px; }
 
-  /* Bottom dock — single-line layout, tightened so the submit pill
-     doesn't bust out the right edge of the dock chrome. */
-  .aura-onb__dock {
-    padding: 6px 6px 6px 12px;
-    gap: 10px;
+  /* Foot pill — tighten so Back + Next sit comfortably in the glass capsule. */
+  .aura-onb__foot {
+    padding: 6px;
+    gap: 8px;
   }
-  .aura-onb__dock-skip {
+  /* Step 1 has no Back — collapse the spacer (and its flex gap) too, so the glass
+     pill hugs Next instead of leaving empty rounded glass to its left, which reads
+     as a stray frosted blob beside the button. */
+  .aura-onb__back:disabled + .aura-onb__foot-spacer { display: none; }
+  .aura-onb__back {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  .aura-onb__next {
     white-space: nowrap;
     font-size: 13px;
-    padding: 6px 8px;
-  }
-  .aura-onb__dock-divider { height: 18px; }
-  .aura-onb__dock-progress { display: none; }
-  .aura-onb__dock-count {
-    /* nowrap keeps the "0 of 3" text from wrapping onto multiple lines
-       when the inline-flex dock parent shrinks the count container. */
-    white-space: nowrap;
-    font-size: 12px;
-  }
-  .aura-onb__dock-submit {
-    white-space: nowrap;
-    font-size: 13px;
-    padding: 8px 14px;
+    padding: 10px 16px;
     gap: 6px;
   }
+}
+
+/* ─── Ambient "aura" backdrop ────────────────────────────────────────────
+   A calm, alive field behind the card (see OnboardingBackdrop.jsx). Everything
+   is tinted by --onb-tint, set on .aura-onb from the chosen mood. Registering
+   the tint vars with @property lets that colour *interpolate*, so the whole
+   field crossfades when the user picks/changes a mood. (Where @property is
+   unsupported the tint simply snaps — still correct, just not animated.) */
+@property --onb-tint {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #b06a3f;
+}
+@property --onb-tint-soft {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(176, 106, 63, 0.16);
+}
+.aura-onb {
+  transition: --onb-tint 700ms ease, --onb-tint-soft 700ms ease;
+}
+
+.aura-onb__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Base wash — theme-true warm field (never a flat fill), with a faint tinted
+   glow drifting down from the top so even the corners feel intentional. */
+.aura-onb__bd-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 85% at 50% -10%, color-mix(in srgb, var(--onb-tint), transparent 55%), transparent 62%),
+    radial-gradient(140% 120% at 50% 42%, transparent 44%, color-mix(in srgb, var(--color-ink), transparent 84%) 100%),
+    linear-gradient(165deg, var(--color-bg), color-mix(in srgb, var(--color-bg), #000 10%));
+}
+
+/* Colour blooms — big soft radial glows, no blur filter (radial-gradients
+   composite cheaply). Slow drift + opacity breathe on staggered loops. */
+.aura-onb__bd-bloom {
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--onb-tint) 0%, transparent 72%);
+  opacity: 0.42;
+  will-change: transform, opacity;
+}
+.aura-onb__bd-bloom--a {
+  top: -16%;
+  left: -12%;
+  animation: aura-onb-drift-a 26s ease-in-out infinite;
+}
+.aura-onb__bd-bloom--b {
+  right: -14%;
+  bottom: -20%;
+  width: 66vmax;
+  height: 66vmax;
+  animation: aura-onb-drift-b 31s ease-in-out infinite;
+}
+.aura-onb__bd-bloom--c {
+  top: 24%;
+  right: -8%;
+  width: 42vmax;
+  height: 42vmax;
+  animation: aura-onb-drift-c 22s ease-in-out infinite;
+}
+
+/* Breathing orb halo behind the card centre — a CSS echo of the landing HeroOrb. */
+.aura-onb__bd-orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 48vmax;
+  height: 48vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--onb-tint) 0%, var(--onb-tint-soft) 34%, transparent 70%);
+  opacity: 0.32;
+  will-change: transform, opacity;
+  animation: aura-onb-orb 7.5s ease-in-out infinite;
+}
+
+/* Line-art sketches — the SVGs carry the className directly. Hairline strokes in
+   currentColor (= the tint), very low opacity, slow drift/rotate. */
+.aura-onb__bd-sketch {
+  position: absolute;
+  height: auto;
+  color: var(--onb-tint);
+  opacity: 0.22;
+  will-change: transform;
+}
+.aura-onb__bd-sketch--rings {
+  top: 7%;
+  left: 5%;
+  width: clamp(170px, 20vw, 320px);
+  aspect-ratio: 1;
+  animation: aura-onb-spin-cw 72s linear infinite;
+}
+.aura-onb__bd-sketch--orbit {
+  bottom: 8%;
+  left: 7%;
+  width: clamp(200px, 26vw, 420px);
+  aspect-ratio: 1.4;
+  opacity: 0.2;
+  animation: aura-onb-float 56s ease-in-out infinite;
+}
+.aura-onb__bd-sketch--spark {
+  top: 12%;
+  right: 9%;
+  width: clamp(80px, 11vw, 150px);
+  aspect-ratio: 1;
+  opacity: 0.3;
+  animation: aura-onb-spin-ccw 84s linear infinite;
+}
+.aura-onb__bd-sketch--spiral {
+  right: 7%;
+  bottom: 11%;
+  width: clamp(150px, 18vw, 290px);
+  aspect-ratio: 130 / 120;
+  opacity: 0.2;
+  animation: aura-onb-spin-cw 96s linear infinite;
+}
+.aura-onb__bd-sketch--wave {
+  top: 7%;
+  left: 50%;
+  width: clamp(240px, 34vw, 520px);
+  aspect-ratio: 200 / 60;
+  transform: translateX(-50%);   /* opacity-only animation, so this stays put */
+  animation: aura-onb-wave 9s ease-in-out infinite;
+}
+
+/* Grain — faint desaturated noise for texture. Static (rendered once). */
+.aura-onb__bd-grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+@keyframes aura-onb-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1);    opacity: 0.36; }
+  50%      { transform: translate3d(4%, 6%, 0) scale(1.08); opacity: 0.5; }
+}
+@keyframes aura-onb-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.46; }
+  50%      { transform: translate3d(-5%, -4%, 0) scale(0.95); opacity: 0.32; }
+}
+@keyframes aura-onb-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(0.95); opacity: 0.28; }
+  50%      { transform: translate3d(-4%, 5%, 0) scale(1.12); opacity: 0.44; }
+}
+@keyframes aura-onb-orb {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.94); opacity: 0.26; }
+  50%      { transform: translate(-50%, -50%) scale(1.06); opacity: 0.4; }
+}
+@keyframes aura-onb-spin-cw  { to { transform: rotate(360deg); } }
+@keyframes aura-onb-spin-ccw { to { transform: rotate(-360deg); } }
+@keyframes aura-onb-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-6deg); }
+  50%      { transform: translate3d(2%, -3%, 0) rotate(-2deg); }
+}
+@keyframes aura-onb-wave {
+  0%, 100% { opacity: 0.16; }
+  50%      { opacity: 0.24; }
+}
+
+/* Honour reduced-motion — freeze every drift/breathe, but keep the field
+   present (blooms, orb and sketches stay, just still). The tint crossfade is a
+   gentle state change and is left intact. */
+@media (prefers-reduced-motion: reduce) {
+  .aura-onb__bd-bloom,
+  .aura-onb__bd-orb,
+  .aura-onb__bd-sketch {
+    animation: none;
+  }
+}
+
+/* Phones: the card is transparent full-bleed, so content sits directly over the
+   backdrop — ease the sketches/grain back a touch so chips/tiles stay crisp. */
+@media (max-width: 599px) {
+  .aura-onb__bd-sketch { opacity: 0.16; }
+  .aura-onb__bd-sketch--spark { opacity: 0.22; }
+  .aura-onb__bd-grain { opacity: 0.04; }
 }

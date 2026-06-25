@@ -15,10 +15,11 @@ import { SettingsPanel } from '../../components/SettingsPanel';
 import { toast } from '../../lib/toast';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
+import { PRIMARY_LANGUAGES } from '../../data/languages';
 import '../PlaylistsScreen.css';
 import './DesktopLibrary.css';
 
-const HOME_LANGS = ['tamil', 'english', 'hindi', 'malayalam', 'kannada'];
+const HOME_LANGS = PRIMARY_LANGUAGES;
 
 // Which shelf is open survives player round-trips (sessionStorage, not local —
 // fresh visits land on the calm all-closed composition). This also keeps

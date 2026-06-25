@@ -1,3 +1,5 @@
+import { LANGUAGES } from '../../data/languages';
+
 // Bridge builder vocabulary + persisted config. Two DIFFERENT, plain word sets
 // (each maps to a server MOOD_QUERIES bucket): "where you are" (a current
 // feeling) and "where you want to be" (the goal). Colours tint the selected
@@ -16,7 +18,7 @@ export const TO_MOODS = [
   { key: 'energized', hint: 'fired up',    color: '#c47554' },
   { key: 'social',    hint: 'out, lively', color: '#a8556a' },
 ];
-export const BRIDGE_LANGS = ['tamil', 'english', 'hindi', 'malayalam', 'kannada'];
+export const BRIDGE_LANGS = LANGUAGES;
 export const MIN_STEPS = 4;
 export const MAX_STEPS = 8;
 
