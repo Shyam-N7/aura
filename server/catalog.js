@@ -106,6 +106,7 @@ export async function getSongDetails(ids) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog ${res.status}: ${text.slice(0, 200)}`);
     err.statusCode = 502;
+    err.expose = false;   // upstream provider body/status must not reach the client (#27)
     throw err;
   }
   const body = await res.json();
@@ -210,6 +211,7 @@ export async function getCatalogHome({ lang } = {}) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog home ${res.status}: ${text.slice(0, 200)}`);
     err.statusCode = 502;
+    err.expose = false;   // upstream provider body/status must not reach the client (#27)
     throw err;
   }
   const body = await res.json();
@@ -240,6 +242,7 @@ export async function getCatalogPlaylistDetail(id) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog playlist ${res.status}: ${text.slice(0, 200)}`);
     err.statusCode = res.status === 404 ? 404 : 502;
+    err.expose = false;   // hide the raw upstream body even on the 404 path (#27)
     throw err;
   }
   const body = await res.json();
@@ -271,6 +274,7 @@ export async function searchSongs(query, { limit = 20, lang } = {}) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog ${res.status}: ${text.slice(0, 200)}`);
     err.statusCode = 502;
+    err.expose = false;   // upstream provider body/status must not reach the client (#27)
     throw err;
   }
   const body = await res.json();

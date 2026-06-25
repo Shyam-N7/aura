@@ -4,6 +4,9 @@
 // api/[...path].js — with migrations applied once via `npm run migrate`.
 import app from './app.js';
 import { initDb } from './db.js';
+import { installProcessGuards } from './processGuards.js';
+
+installProcessGuards();
 
 const schemaVersion = await initDb();
 console.log(`AURA db ready (schema_version=${schemaVersion})`);

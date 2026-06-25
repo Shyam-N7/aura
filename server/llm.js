@@ -77,6 +77,7 @@ export async function generateJson({
     if (!isUnavailable(err) || model === 'gemini-2.5-flash-lite') {
       const wrapped = new Error(cleanError(err));
       wrapped.statusCode = err?.statusCode ?? 502;
+      wrapped.expose = false;   // Gemini error text (model/quota detail) stays server-side (#27)
       throw wrapped;
     }
     // Retry once on flash-lite (higher quota, less likely to be throttled).
@@ -85,6 +86,7 @@ export async function generateJson({
     } catch (retryErr) {
       const wrapped = new Error(cleanError(retryErr));
       wrapped.statusCode = retryErr?.statusCode ?? 503;
+      wrapped.expose = false;   // Gemini error text (model/quota detail) stays server-side (#27)
       throw wrapped;
     }
   }

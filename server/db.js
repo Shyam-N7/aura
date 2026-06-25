@@ -28,6 +28,16 @@ async function ensureDatabase() {
 // production so those sockets are further multiplexed server-side.
 export const pool = new Pool({ connectionString: TARGET_URL, max: 2, idleTimeoutMillis: 10000 });
 
+// node-postgres REQUIRES a pool 'error' listener: an idle client whose backend
+// socket is dropped out-of-band (routine on Neon's pooled endpoint, which reaps
+// idle connections) emits 'error' on the pool. With no listener the EventEmitter
+// rethrows as an uncaught exception and can take the process down. This converts
+// it to a logged, non-fatal event — the next query re-acquires a fresh client.
+// (security: #25)
+pool.on('error', (err) => {
+  console.error('[db] idle client error (non-fatal):', err?.message ?? err);
+});
+
 const migrations = [
   async function v1_initial(client) {
     await client.query(`
@@ -375,6 +385,20 @@ const migrations = [
         features   JSONB,
         updated_at BIGINT
       );
+    `);
+  },
+  async function v14_security_hardening(client) {
+    // Session revocation + per-account login throttle.
+    // token_version is embedded as a JWT claim and compared on every authed
+    // request; bumping it (password reset / "log out everywhere") invalidates
+    // every outstanding token for that user — the kill switch the stateless JWT
+    // lacked. failed_login_attempts / login_locked_until mirror the family-PIN
+    // throttle so credential guessing is bounded per-ACCOUNT (not just per-IP),
+    // independent of the in-memory rate limiter. (security: M2 / #4)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN token_version INT NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN failed_login_attempts INT NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN login_locked_until BIGINT;
     `);
   },
 ];

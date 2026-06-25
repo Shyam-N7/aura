@@ -3,6 +3,7 @@ import { pool } from './db.js';
 import { requireAuth } from './middleware/auth.js';
 import { isModeKey } from './modes.js';
 import { sanitizeUser } from './auth.js';
+import { clientError } from './middleware/errors.js';
 
 // Listening-mode routes. This slice just switches the active context; the
 // per-mode PIN (lock / unlock / PIN-to-exit) and explicit-override routes land
@@ -20,7 +21,7 @@ router.post('/active', requireAuth, async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'user not found' });
     res.json({ user: sanitizeUser(rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
