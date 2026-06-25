@@ -52,9 +52,13 @@ export default defineConfig({
           // and every call would still hit Gemini. Server-side `why_cache`
           // table in server/index.js gives us the 24h TTL we want.
           {
-            // Catch-all for the remaining /api/* reads — fast cache fallback if
-            // the network is slow/offline.
-            urlPattern: /\/api\/(stats|sonic-dna|journal|discover|library|likes|catalog|artists|albums|tracks)/,
+            // PUBLIC reads only — fast cache fallback if the network is slow/
+            // offline. Per-user authed endpoints (stats, sonic-dna, journal,
+            // library, likes, history) are deliberately EXCLUDED: Workbox keys by
+            // URL (not the session), so caching them would let one user's private
+            // data be served to the next user on a shared device. They now go
+            // straight to the network. (security: M7)
+            urlPattern: /\/api\/(discover|catalog|artists|albums|tracks)/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'aura-api',

@@ -215,6 +215,19 @@ function confidenceFromWhisperX(output) {
 
 // Called by the webhook with the completed Replicate prediction.
 export async function completeFromPrediction(prediction, trackId) {
+  // Bind the callback to the job we actually dispatched: the prediction id must
+  // match this track's stored external_id AND the job must still be 'processing'.
+  // track_id rides the webhook URL (outside the HMAC), so without this a replayed
+  // or forged callback could write attacker-chosen lyrics onto ANY track. A
+  // mismatch is silently ignored (no write, no Replicate retry). (security: M3)
+  const { rows } = await pool.query(
+    'SELECT external_id, status FROM lyric_jobs WHERE track_id = $1',
+    [trackId],
+  );
+  const job = rows[0];
+  if (!job || job.status !== 'processing' || !job.external_id || job.external_id !== prediction?.id) {
+    return { ignored: true };
+  }
   if (prediction?.status !== 'succeeded') {
     await retryOrFail(trackId, prediction?.error ?? 'prediction failed');
     return;

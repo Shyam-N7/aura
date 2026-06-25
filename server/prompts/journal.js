@@ -4,6 +4,7 @@
 
 import { Type } from '@google/genai';
 import { generateJson } from '../llm.js';
+import { sanitizeForPrompt } from '../promptSafe.js';
 
 const SYSTEM = `You are AURA, a music app's quiet listening journal. You read a
 day's listening events and write a short observational entry — 1-2 sentences —
@@ -35,17 +36,19 @@ function formatDateLabel(isoDate) {
 }
 
 export async function generateJournalEntry({ isoDate, plays, skips, distinctTracks, topArtist, topLanguage, dominantMood, samples }) {
+  // Titles/artists/languages (catalog) and dominantMood (from the client-set
+  // event.mood) are free text → flatten through the shared sanitizer. (#6)
   const sampleLines = samples.length
-    ? samples.slice(0, 4).map(s => `- ${s.title} · ${s.artist} (${s.language ?? '?'}) [${s.kind}]`).join('\n')
+    ? samples.slice(0, 4).map(s => `- ${sanitizeForPrompt(s.title)} · ${sanitizeForPrompt(s.artist)} (${sanitizeForPrompt(s.language ?? '?')}) [${s.kind}]`).join('\n')
     : '(no samples)';
   const prompt = [
     `Date: ${isoDate} (${formatDateLabel(isoDate)})`,
     `Plays: ${plays}`,
     `Skips: ${skips}`,
     `Distinct tracks: ${distinctTracks}`,
-    `Top artist: ${topArtist ?? '—'}`,
-    `Top language: ${topLanguage ?? '—'}`,
-    `Dominant mood (from event.mood): ${dominantMood ?? 'unspecified'}`,
+    `Top artist: ${sanitizeForPrompt(topArtist ?? '—')}`,
+    `Top language: ${sanitizeForPrompt(topLanguage ?? '—')}`,
+    `Dominant mood (from event.mood): ${sanitizeForPrompt(dominantMood ?? 'unspecified')}`,
     `Sample plays:`,
     sampleLines,
     ``,

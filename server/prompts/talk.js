@@ -4,6 +4,7 @@
 // query, or nothing) plus 3-4 suggestion chips for the listener's next message.
 
 import { generateJson } from '../llm.js';
+import { flattenForPrompt } from '../promptSafe.js';
 
 const SYSTEM = `you are AURA, an evening AI DJ embedded in a music app for one person.
 you talk like a friend who knows their library inside out — warm, conversational, lowercase,
@@ -95,8 +96,11 @@ export function sanitizeSuggestions(raw) {
 
 function buildPrompt({ message, history, context }) {
   const c = context ?? {};
+  // recentListens/likedSample are already sanitized server-side (context.js);
+  // mood, the dialogue history, and the user message are client-supplied, so
+  // flatten them here to strip injected newlines / instruction breakouts. (#5)
   const ctxLines = [
-    c.mood     ? `current_mood: ${c.mood}`                                     : null,
+    c.mood     ? `current_mood: ${flattenForPrompt(c.mood, 40)}`                : null,
     c.recentListens?.length
       ? `recent_listens (most recent first): ${c.recentListens.slice(0, 8).join('; ')}`
       : null,
@@ -110,13 +114,13 @@ function buildPrompt({ message, history, context }) {
 
   const histLines = (history ?? [])
     .slice(-8) // last 4 turns of dialog
-    .map(m => `${m.who === 'aura' ? 'aura' : 'user'}: ${m.text}`)
+    .map(m => `${m.who === 'aura' ? 'aura' : 'user'}: ${flattenForPrompt(m?.text, 300)}`)
     .join('\n');
 
   return [
     ctxLines && `context:\n${ctxLines}`,
     histLines && `recent dialogue:\n${histLines}`,
-    `user: ${message}`,
+    `user: ${flattenForPrompt(message, 2000)}`,
     'respond as JSON matching the schema.',
   ].filter(Boolean).join('\n\n');
 }

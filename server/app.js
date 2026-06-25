@@ -1,5 +1,7 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
+import { makeRateStore } from './rateLimitStore.js';
 import { pool } from './db.js';
 import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
@@ -12,6 +14,7 @@ import {
 import { recordLyricsMetric, getLyricsStats } from './lyricsMetrics.js';
 import { LYRICS_WEBHOOK_SECRET, REPLICATE_WEBHOOK_SIGNING_SECRET, CRON_SECRET } from './config.js';
 import { verifyWebhookSignature } from './replicateWebhook.js';
+import { safeCompare } from './safeCompare.js';
 import { generateWhy } from './prompts/why.js';
 import { getJournalEntries } from './journal.js';
 import { getSonicDna } from './sonicDna.js';
@@ -27,13 +30,15 @@ import { getBridgeTracks, getBridgeSuggestion } from './bridges.js';
 import { getRelatedTracks } from './related.js';
 import { getArtistDetails, getAlbumDetail } from './artists.js';
 import { generateTalk, sanitizeSuggestions } from './prompts/talk.js';
-import { getCurrentMood, inferMood, inferIfStale } from './mood.js';
+import { inferIfStale, refreshMood } from './mood.js';
 import { buildTalkContext } from './context.js';
+import { normalizeMood } from './moods.js';
 import authRouter from './auth.js';
 import familyRouter from './family.js';
 import modesRouter from './modesRoutes.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
+import { clientError, errorMiddleware, notFound } from './middleware/errors.js';
 
 // The configured Express app, with NO side effects at import time: it neither
 // connects/migrates the database nor starts a listener. The local dev entry
@@ -51,9 +56,18 @@ app.use((req, res, next) => {
   // output) — it has its own higher-limit parser on the route, so skip the
   // 64kb guard here for that path only.
   if (req.path === '/api/lyrics-jobs/webhook') return next();
+  // Enforce the size ceiling from Content-Length too: the express.json limit
+  // below is skipped when the platform pre-parsed the body (exactly the
+  // serverless case it's meant to protect), so guard here unconditionally. (#18)
+  if (Number(req.headers['content-length']) > 64 * 1024) {
+    return res.status(413).json({ error: 'request too large' });
+  }
   if (req.body && typeof req.body === 'object') return next();
   express.json({ limit: '64kb' })(req, res, next);
 });
+
+// Parse cookies so requireAuth can read the httpOnly session cookie. (security: M2)
+app.use(cookieParser());
 
 // ── Rate limiting ───────────────────────────────────────────────────
 // Behind Vercel's edge (a single proxy) — trust ONE hop so req.ip is the real
@@ -61,23 +75,31 @@ app.use((req, res, next) => {
 // X-Forwarded-For. Locally there's no proxy header so req.ip is the socket addr.
 app.set('trust proxy', 1);
 
-const opts = (windowMs, limit, message) => ({
-  windowMs, limit, standardHeaders: true, legacyHeaders: false,
-  message: { error: message },
-});
-// Broad catch-all so one IP can't flood the API (a normal session makes a
-// handful of calls per page, so 600/5min is comfortable for real use).
-const generalLimiter = rateLimit(opts(5 * 60 * 1000, 600, 'too many requests — slow down a moment.'));
-// Tight on auth to blunt credential brute-force + OTP abuse (legit users make
-// only a few auth calls).
-const authLimiter = rateLimit(opts(15 * 60 * 1000, 40, 'too many attempts — try again in a few minutes.'));
-// Protects the unauthenticated, cost-bearing routes (Gemini "why", lyrics
-// provider) from being driven for spend/DoS on cache misses.
-const costLimiter = rateLimit(opts(5 * 60 * 1000, 60, 'too many requests — slow down a moment.'));
+// A prefix opts a limiter into the Upstash shared store (global across serverless
+// instances); without one (or when Upstash isn't configured) it uses the
+// in-memory default. (security: #4)
+function buildLimiter(windowMs, limit, message, prefix) {
+  const base = { windowMs, limit, standardHeaders: true, legacyHeaders: false, message: { error: message } };
+  const store = prefix ? makeRateStore(prefix) : undefined;
+  return rateLimit(store ? { ...base, store } : base);
+}
+// Broad catch-all so one IP can't flood the API. Stays IN-MEMORY: it fires on
+// every /api request, so a shared-store round-trip here would tax the hot path;
+// per-instance flood-guarding is fine for this.
+const generalLimiter = buildLimiter(5 * 60 * 1000, 600, 'too many requests — slow down a moment.');
+// Tight on auth to blunt credential brute-force + OTP abuse — SHARED store so the
+// limit is global across instances (complements the per-account lockout).
+const authLimiter = buildLimiter(15 * 60 * 1000, 40, 'too many attempts — try again in a few minutes.', 'auth');
+// Protects the unauthenticated, cost-bearing routes (Gemini, lyrics, upstream)
+// from spend/DoS on cache misses — SHARED store, global across instances.
+const costLimiter = buildLimiter(5 * 60 * 1000, 60, 'too many requests — slow down a moment.', 'cost');
 
 app.use('/api', generalLimiter);
 app.use('/api/auth', authLimiter);
-app.use(['/api/why', '/api/lyrics'], costLimiter);
+// Cost-bearing routes (Gemini / lyrics provider / Replicate / upstream catalog).
+// Tighter than the broad generalLimiter so cache-miss spend can't be driven.
+// (security: H1 / M4 / M5)
+app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm'], costLimiter);
 
 // ── Auth routes (public) ────────────────────────────────────────────
 app.use('/api/auth', authRouter);
@@ -111,7 +133,7 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
     req.userId ? searchPlaylists(req.userId, q, { limit: 5 }) : Promise.resolve([]),
   ]);
   if (songsRes.status === 'rejected') {
-    return res.status(500).json({ error: songsRes.reason?.message ?? 'search failed' });
+    return res.status(songsRes.reason?.statusCode || 500).json({ error: clientError(songsRes.reason) });
   }
   let songs = songsRes.value;
   const sug = sugRes.status === 'fulfilled' ? sugRes.value : { top: null, artists: [], albums: [], playlists: [] };
@@ -168,7 +190,7 @@ app.get('/api/catalog/track/:id', async (req, res) => {
     res.json(track);
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ error: err.message });
+    res.status(status).json({ error: clientError(err) });
   }
 });
 
@@ -179,7 +201,7 @@ app.get('/api/tracks/:id/related', async (req, res) => {
     const tracks = await getRelatedTracks(req.params.id, { lang, limit });
     res.json({ tracks });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -191,7 +213,7 @@ app.get('/api/artists/lookup', async (req, res) => {
     const artist = await getArtistDetails({ name, id, trackId });
     res.json({ artist });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -200,7 +222,7 @@ app.get('/api/albums/:id', async (req, res) => {
     const album = await getAlbumDetail(req.params.id);
     res.json({ album });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -222,13 +244,13 @@ app.get('/api/catalog/featured', optionalAuth, async (req, res) => {
     cacheTracks(results);
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ error: err.message });
+    res.status(status).json({ error: clientError(err) });
   }
 });
 
 const LYRICS_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
 
-app.get('/api/lyrics/:track_id', async (req, res) => {
+app.get('/api/lyrics/:track_id', optionalAuth, async (req, res) => {
   const { track_id } = req.params;
   const t0 = Date.now();
   // Send the response AND record one timing row. The metric write is
@@ -287,9 +309,11 @@ app.get('/api/lyrics/:track_id', async (req, res) => {
     }
 
     // No lyrics anywhere — not synced, not even plain. If audio generation is
-    // configured, queue a job and tell the client to poll; otherwise it's simply
-    // unavailable.
-    if (generationEnabled()) {
+    // configured AND the caller is authenticated, queue a job and tell the client
+    // to poll; otherwise it's simply unavailable. Requiring auth to DISPATCH a
+    // paid Replicate job stops an unauthenticated visitor from draining the daily
+    // generation budget on arbitrary track ids. (security: M6)
+    if (generationEnabled() && req.userId) {
       await saveLyrics(track_id, { source: 'pending', synced: false, payload: {} });
       const job = await enqueueLyricJob(track_id);
       if (job.status === 'queued') {
@@ -305,7 +329,7 @@ app.get('/api/lyrics/:track_id', async (req, res) => {
       { cacheHit: false, source: 'none', synced: false });
   } catch (err) {
     const status = err.statusCode || 500;
-    await respond({ error: err.message },
+    await respond({ error: clientError(err) },
       { cacheHit: false, source: 'error', synced: false, ok: false, status });
   }
 });
@@ -322,9 +346,16 @@ app.post('/api/lyrics-jobs/webhook',
     // secret in the URL, which Replicate logs); else require the shared token.
     // If NEITHER is configured, reject — an open webhook lets anyone forge lyrics
     // into the cache, so it must never run unauthenticated.
-    const authed = REPLICATE_WEBHOOK_SIGNING_SECRET
-      ? verifyWebhookSignature(req.rawBody, req.headers, REPLICATE_WEBHOOK_SIGNING_SECRET)
-      : (!!LYRICS_WEBHOOK_SECRET && req.query.token === LYRICS_WEBHOOK_SECRET);
+    // Prefer HMAC signature verification (no secret in the URL, which Replicate
+    // logs). The URL-token fallback is DEV-ONLY — in production HMAC is required,
+    // so a leaked/logged token can't authenticate a forged callback. The token
+    // compare is constant-time. (security: #11)
+    let authed = false;
+    if (REPLICATE_WEBHOOK_SIGNING_SECRET) {
+      authed = verifyWebhookSignature(req.rawBody, req.headers, REPLICATE_WEBHOOK_SIGNING_SECRET);
+    } else if (process.env.NODE_ENV !== 'production' && LYRICS_WEBHOOK_SECRET) {
+      authed = safeCompare(req.query.token, LYRICS_WEBHOOK_SECRET);
+    }
     if (!authed) return res.status(401).json({ error: 'unauthorized' });
     const trackId = String(req.query.track_id ?? '');
     if (!trackId) return res.status(400).json({ error: 'missing track_id' });
@@ -333,7 +364,7 @@ app.post('/api/lyrics-jobs/webhook',
       res.json({ ok: true });
     } catch (err) {
       console.warn('[lyrics] webhook handling failed:', err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: clientError(err) });
     }
   });
 
@@ -343,27 +374,29 @@ app.post('/api/lyrics-jobs/webhook',
 // drive the dispatcher. Unreachable until CRON_SECRET is set (i.e. in prod).
 app.get('/api/lyrics-jobs/process', async (req, res) => {
   const bearer = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const authed = !!CRON_SECRET && bearer === CRON_SECRET;
+  const authed = !!CRON_SECRET && safeCompare(bearer, CRON_SECRET);
   if (!authed) return res.status(401).json({ error: 'unauthorized' });
   try {
     res.json(await processQueue());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: clientError(err) });
   }
 });
 
 // Lyrics fetch-time analytics summary (cold p50/p95/avg, cache-hit rate, per
-// source). Open in local dev; once CRON_SECRET is configured (prod) it requires
-// that same bearer. e.g. GET /api/lyrics-jobs/stats?hours=24
+// source). Admin-only: requires the CRON bearer (fail-closed, so unset
+// CRON_SECRET ⇒ unreachable, even locally). e.g. GET /api/lyrics-jobs/stats?hours=24
 app.get('/api/lyrics-jobs/stats', async (req, res) => {
+  // Fail CLOSED: require the CRON bearer (constant-time) even if it means the
+  // endpoint is unreachable when CRON_SECRET is unset. (security: #12 / #7)
   const bearer = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const authed = !CRON_SECRET || bearer === CRON_SECRET;
+  const authed = !!CRON_SECRET && safeCompare(bearer, CRON_SECRET);
   if (!authed) return res.status(401).json({ error: 'unauthorized' });
   try {
     const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 24 * 30);
     res.json(await getLyricsStats({ hours }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: clientError(err) });
   }
 });
 
@@ -372,7 +405,9 @@ const WHY_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
 app.post('/api/why', async (req, res) => {
   const { track_id, mood, recent_track_ids } = req.body ?? {};
   if (!track_id) return res.status(400).json({ error: 'missing track_id' });
-  const moodKey = mood ?? 'any';
+  // Validate mood against the known vocabulary before it becomes a cache key, so
+  // arbitrary strings can't bypass the cache and force a fresh Gemini call. (#14)
+  const moodKey = normalizeMood(mood);
   try {
     const cached = await pool.query(
       `SELECT payload, fetched_at FROM why_cache WHERE track_id = $1 AND mood = $2`,
@@ -394,7 +429,7 @@ app.post('/api/why', async (req, res) => {
       recent = ids.map(id => byId.get(id)).filter(Boolean);
     }
 
-    const reason = await generateWhy({ track, mood, recent });
+    const reason = await generateWhy({ track, mood: moodKey === 'any' ? null : moodKey, recent });
     await pool.query(
       `INSERT INTO why_cache (track_id, mood, payload, fetched_at)
        VALUES ($1, $2, $3, $4)
@@ -405,7 +440,7 @@ app.post('/api/why', async (req, res) => {
     res.json(reason);
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ error: err.message });
+    res.status(status).json({ error: clientError(err) });
   }
 });
 
@@ -414,7 +449,7 @@ app.get('/api/journal', requireAuth, async (req, res) => {
   try {
     res.json(await getJournalEntries(req.userId, { days }));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -422,7 +457,7 @@ app.get('/api/sonic-dna', requireAuth, async (req, res) => {
   try {
     res.json(await getSonicDna(req.userId));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -437,7 +472,7 @@ app.post('/api/greeting', async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -445,7 +480,7 @@ app.get('/api/library/summary', requireAuth, async (req, res) => {
   try {
     res.json(await getLibrarySummary(req.userId));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -455,7 +490,7 @@ app.get('/api/stats/most-played', requireAuth, async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     res.json({ tracks: await getMostPlayed(req.userId, { days, limit }) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -465,7 +500,7 @@ app.get('/api/stats/top-artists', requireAuth, async (req, res) => {
     const limit = Number(req.query.limit) || 8;
     res.json({ artists: await getTopArtists(req.userId, { days, limit }) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -474,7 +509,7 @@ app.get('/api/stats/recently-played', requireAuth, async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     res.json({ tracks: await getRecentlyPlayed(req.userId, { limit }) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -485,7 +520,7 @@ app.get('/api/history', requireAuth, async (req, res) => {
     const before = req.query.before ? Number(req.query.before) : undefined;
     res.json(await getHistory(req.userId, { limit, before }));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -495,7 +530,7 @@ app.get('/api/history/clock', requireAuth, async (req, res) => {
     const days = Math.min(Math.max(Number(req.query.days) || 60, 1), 365);
     res.json({ plays: await getMusicClockPlays(req.userId, { days }) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -504,7 +539,7 @@ app.get('/api/discover/home', async (req, res) => {
     const lang = req.query.lang ? String(req.query.lang) : undefined;
     res.json(await getDiscoverHome({ lang }));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -512,18 +547,18 @@ app.get('/api/discover/playlist/:id', async (req, res) => {
   try {
     res.json(await getCatalogPlaylistDetail(req.params.id));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
 app.get('/api/mood/current', requireAuth, async (req, res) => {
   try {
     const snapshot = req.query.refresh === '1'
-      ? await inferMood(req.userId)
+      ? await refreshMood(req.userId)   // throttled re-infer — bounds forced Gemini spend (M4)
       : await inferIfStale(req.userId);
     res.json(snapshot ?? { mood: null, confidence: 0, drift: 'steady', events_seen: 0 });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -532,12 +567,16 @@ app.post('/api/llm/talk', requireAuth, async (req, res) => {
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'missing message' });
   }
+  // Bound the client-supplied prompt inputs before they reach the LLM — caps
+  // token cost and request size regardless of the body-parser. (security: #18/M5)
+  if (message.length > 2000) return res.status(400).json({ error: 'message too long' });
+  const safeHistory = Array.isArray(history) ? history.slice(-20) : undefined;
   try {
     const enriched = await buildTalkContext(req.userId, context).catch(() => context ?? {});
     const snapshot = await inferIfStale(req.userId).catch(() => null);
     if (snapshot?.mood && snapshot.confidence >= 0.5) enriched.mood = snapshot.mood;
 
-    const result = await generateTalk({ message, history, context: enriched });
+    const result = await generateTalk({ message, history: safeHistory, context: enriched });
     let tracks = [];
     if (result?.action?.kind === 'queue' && result.action.query) {
       // count=1 is allowed (specific-song request); cap at 10.
@@ -571,7 +610,7 @@ app.post('/api/llm/talk', requireAuth, async (req, res) => {
     }
     res.json({ reply: result.reply, action: result.action, tracks, suggestions: sanitizeSuggestions(result.suggestions) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -581,7 +620,7 @@ app.get('/api/bridges/suggest', requireAuth, async (req, res) => {
     const hour = Number.isInteger(h) ? h : new Date().getHours();
     res.json(await getBridgeSuggestion(req.userId, { hour }));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -595,7 +634,7 @@ app.get('/api/bridges/:from/:to', requireAuth, async (req, res) => {
     });
     res.json({ from: req.params.from, to: req.params.to, ...bridge });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -607,7 +646,7 @@ app.get('/api/likes', requireAuth, async (req, res) => {
       res.json({ liked: await listLiked(req.userId) });
     }
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -618,7 +657,7 @@ app.post('/api/likes', requireAuth, async (req, res) => {
     await likeTrack(req.userId, track_id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -627,7 +666,7 @@ app.delete('/api/likes/:track_id', requireAuth, async (req, res) => {
     await unlikeTrack(req.userId, req.params.track_id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -635,7 +674,7 @@ app.get('/api/playlists', requireAuth, async (req, res) => {
   try {
     res.json({ playlists: await listPlaylists(req.userId) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -645,7 +684,7 @@ app.get('/api/playlists/auto', requireAuth, async (req, res) => {
   try {
     res.json({ playlists: await getAutoPlaylists(req.userId) });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -653,7 +692,7 @@ app.get('/api/playlists/:id', requireAuth, async (req, res) => {
   try {
     res.json(await getPlaylist(req.userId, req.params.id));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -663,7 +702,7 @@ app.post('/api/playlists', requireAuth, async (req, res) => {
     const playlist = await createPlaylist(req.userId, { name, description });
     res.json(playlist);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -672,7 +711,7 @@ app.delete('/api/playlists/:id', requireAuth, async (req, res) => {
     await deletePlaylist(req.userId, req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -680,14 +719,16 @@ app.post('/api/playlists/:id/tracks', requireAuth, async (req, res) => {
   const { track_id } = req.body ?? {};
   if (!track_id) return res.status(400).json({ error: 'missing track_id' });
   try {
-    try {
-      const track = await getTrackById(track_id);
-      if (track) await cacheTracks([track]);
-    } catch { /* best-effort */ }
+    // The track must already be in our catalog cache (search/featured/play all
+    // upsert it locally). Check LOCALLY only — never getTrackById here: a miss
+    // there falls through to an upstream provider call, an amplification vector.
+    // Mirrors the /api/events guard. (security: #30)
+    const known = await pool.query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
+    if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
     await addTrackToPlaylist(req.userId, req.params.id, track_id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -696,7 +737,7 @@ app.delete('/api/playlists/:id/tracks/:track_id', requireAuth, async (req, res) 
     await removeTrackFromPlaylist(req.userId, req.params.id, req.params.track_id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -705,7 +746,7 @@ app.get('/api/playlists/:id/rev', requireAuth, async (req, res) => {
   try {
     res.json(await getPlaylistRev(req.userId, req.params.id));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -714,7 +755,7 @@ app.post('/api/playlists/:id/invite', requireAuth, async (req, res) => {
   try {
     res.json(await createInvite(req.userId, req.params.id, { role: req.body?.role }));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -723,7 +764,7 @@ app.post('/api/playlists/invite/:token/accept', requireAuth, async (req, res) =>
   try {
     res.json(await acceptInvite(req.userId, req.params.token));
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -733,7 +774,7 @@ app.delete('/api/playlists/:id/collaborators/:user_id', requireAuth, async (req,
     await removeCollaborator(req.userId, req.params.id, req.params.user_id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -759,7 +800,7 @@ app.post('/api/events', requireAuth, async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: clientError(err) });
   }
 });
 
@@ -773,8 +814,16 @@ app.get('/api/events/recent', requireAuth, async (req, res) => {
     );
     res.json({ events: rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: clientError(err) });
   }
 });
+
+// Terminal handlers, mounted LAST. notFound answers any unmatched /api path with
+// JSON 404; errorMiddleware is the single place that turns a thrown/forwarded
+// error into a scrubbed client response (and logs the full detail server-side).
+// Express 4 routes a rejected async handler here only when it's wrapped with
+// asyncHandler (see ./middleware/errors.js) or calls next(err). (#26/#27)
+app.use(notFound);
+app.use(errorMiddleware);
 
 export default app;

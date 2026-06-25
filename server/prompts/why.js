@@ -3,6 +3,7 @@
 
 import { Type } from '@google/genai';
 import { generateJson } from '../llm.js';
+import { sanitizeForPrompt } from '../promptSafe.js';
 
 const SYSTEM = `You are AURA, an AI DJ. You curate music for a listener across multiple
 languages (Tamil, Kannada, Hindi, Malayalam, English). When asked WHY a specific track
@@ -57,15 +58,17 @@ const SCHEMA = {
 };
 
 export async function generateWhy({ track, mood, recent = [] }) {
+  // Titles/artists/languages are catalog free text — flatten through the shared
+  // sanitizer so they enter the prompt as data, consistent with talk/bridges. (#6)
   const recentLines = recent.length
-    ? recent.map(r => `- ${r.title} · ${r.artist} (${r.language ?? 'unknown'})`).join('\n')
+    ? recent.map(r => `- ${sanitizeForPrompt(r.title)} · ${sanitizeForPrompt(r.artist)} (${sanitizeForPrompt(r.language ?? 'unknown')})`).join('\n')
     : '(no recent plays yet)';
   const prompt = [
     `Track being explained:`,
-    `  title:    ${track.title}`,
-    `  artist:   ${track.artist}`,
-    `  album:    ${track.album ?? 'unknown'}`,
-    `  language: ${track.language ?? 'unknown'}`,
+    `  title:    ${sanitizeForPrompt(track.title)}`,
+    `  artist:   ${sanitizeForPrompt(track.artist)}`,
+    `  album:    ${sanitizeForPrompt(track.album ?? 'unknown')}`,
+    `  language: ${sanitizeForPrompt(track.language ?? 'unknown')}`,
     `  duration: ${track.durationSec ?? 'unknown'} seconds`,
     ``,
     `Listener mood right now: ${mood ?? 'unspecified'}`,

@@ -61,6 +61,17 @@ export async function inferMood(userId) {
   return rows[0];
 }
 
+// Forced refresh (?refresh=1) but throttled per user: if the latest snapshot is
+// younger than REFRESH_MIN_AGE_MS, return it rather than burning another Gemini
+// call. Stops a single account from driving unbounded mood inferences. (security: M4)
+const REFRESH_MIN_AGE_MS = 2 * 60 * 1000;
+
+export async function refreshMood(userId) {
+  const latest = await getCurrentMood(userId);
+  if (latest && Date.now() - Number(latest.ts) < REFRESH_MIN_AGE_MS) return latest;
+  return inferMood(userId);
+}
+
 export async function inferIfStale(userId) {
   const latest = await getCurrentMood(userId);
   if (!(await isStale(userId, latest))) return latest;

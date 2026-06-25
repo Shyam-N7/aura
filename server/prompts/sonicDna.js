@@ -3,6 +3,7 @@
 
 import { Type } from '@google/genai';
 import { generateJson } from '../llm.js';
+import { sanitizeForPrompt } from '../promptSafe.js';
 
 const SYSTEM = `You are AURA's profiler. Given a listener's recent listening — their actual top
 tracks plus aggregate signals — produce two extremely short tag-style strings:
@@ -24,10 +25,12 @@ const SCHEMA = {
 };
 
 export async function generateDnaNarrative({ axes, languageCounts, topArtists, topTracks, plays, skipRate, repeatRate }) {
+  // Catalog free text (languages, artists, tracks) → flatten through the shared
+  // sanitizer for consistent prompt hygiene. (#6)
   const langStr = Object.entries(languageCounts ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4)
-    .map(([k, v]) => `${k}=${v}`).join(', ');
+    .map(([k, v]) => `${sanitizeForPrompt(k)}=${v}`).join(', ');
   const axStr = axes.map(a => `${a.label}:${a.v.toFixed(2)}`).join(' · ');
   const prompt = [
     `Last 30 days summary:`,
@@ -36,8 +39,8 @@ export async function generateDnaNarrative({ axes, languageCounts, topArtists, t
     `  repeat rate: ${(repeatRate * 100).toFixed(0)}%`,
     `  axes:        ${axStr}`,
     `  languages:   ${langStr}`,
-    `  top artists: ${(topArtists ?? []).slice(0, 4).join(', ')}`,
-    `  top tracks:  ${(topTracks ?? []).slice(0, 8).join('; ') || '—'}`,
+    `  top artists: ${(topArtists ?? []).slice(0, 4).map(sanitizeForPrompt).join(', ')}`,
+    `  top tracks:  ${(topTracks ?? []).slice(0, 8).map(sanitizeForPrompt).join('; ') || '—'}`,
     ``,
     `Return JSON grounded in the tracks above, with "signature" and "shift".`,
   ].join('\n');

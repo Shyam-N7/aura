@@ -3,6 +3,7 @@
 // the recent half is hotter, colder, or about the same as the older half.
 
 import { generateJson } from '../llm.js';
+import { sanitizeForPrompt } from '../promptSafe.js';
 
 const MOODS = ['restless', 'focused', 'calm', 'upbeat', 'warm', 'social'];
 
@@ -46,11 +47,12 @@ function buildPrompt({ events }) {
   // events: array of {title, artist, language, kind, position_sec, ts} most-recent first.
   const lines = events.map((e, i) => {
     const meta = [
-      e.language,
+      sanitizeForPrompt(e.language),
       e.kind !== 'play' ? e.kind : null,
       e.position_sec ? `${Math.round(e.position_sec)}s` : null,
     ].filter(Boolean).join(' · ');
-    return `${i + 1}. ${e.title} — ${e.artist}${meta ? ` (${meta})` : ''}`;
+    // Catalog free text → flatten through the shared sanitizer. (#6)
+    return `${i + 1}. ${sanitizeForPrompt(e.title)} — ${sanitizeForPrompt(e.artist)}${meta ? ` (${meta})` : ''}`;
   }).join('\n');
 
   return `recent listening (most recent first, ${events.length} events):

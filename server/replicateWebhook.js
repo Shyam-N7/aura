@@ -21,13 +21,19 @@ function safeEqual(a, b) {
 // rawBody: the exact request body bytes as a string. headers: a lowercase-keyed
 // object (Express req.headers already is). signingSecret: the whsec_ value.
 // Returns true only on a verified signature; false on anything missing/bad.
-export function verifyWebhookSignature(rawBody, headers, signingSecret) {
+export function verifyWebhookSignature(rawBody, headers, signingSecret, { now = Date.now(), toleranceSec = 300 } = {}) {
   try {
     if (!signingSecret || rawBody == null) return false;
     const id = headers['webhook-id'];
     const ts = headers['webhook-timestamp'];
     const sigHeader = headers['webhook-signature'];
     if (!id || !ts || !sigHeader) return false;
+
+    // Replay window: reject timestamps outside ±toleranceSec. The Standard
+    // Webhooks scheme signs the timestamp precisely so a captured-and-replayed
+    // message can be rejected once it's stale. (security: #8 / #10)
+    const tsNum = Number(ts);
+    if (!Number.isFinite(tsNum) || Math.abs(now / 1000 - tsNum) > toleranceSec) return false;
 
     const secret = signingSecret.startsWith('whsec_') ? signingSecret.slice(6) : signingSecret;
     const key = Buffer.from(secret, 'base64');

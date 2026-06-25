@@ -6,6 +6,11 @@ const THEME_KEYS = Object.keys(THEMES);
 const MOOD_OPTIONS = ['calm', 'focused', 'warm', 'restless', 'upbeat', 'social'];
 
 export function TweaksHost({ t, setTweak }) {
+  // Dev/prototyping editor shell only — never ship it (or its cross-origin
+  // postMessage listeners, and dev-only controls like mood override / reset
+  // onboarding) to production. import.meta.env.DEV is statically false in the
+  // prod build, so Vite tree-shakes this whole component out. (security: #21)
+  if (!import.meta.env.DEV) return null;
   return (
     <TweaksPanel>
       <TweakSection label="AI DJ"/>

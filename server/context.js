@@ -3,20 +3,7 @@
 // SQL lives once and bridges.js can reuse it without importing the app.
 
 import { pool } from './db.js';
-
-// Track titles/artists are user-influenced free text that we splice into LLM
-// prompts (TalkAura + Bridges). Flatten each to a single capped line so a crafted
-// title can't inject newlines or run long to fake an instruction / break out of
-// its `;`-joined slot. Defense in depth — the prompts also frame these as data.
-// Control chars (incl. newlines/tabs, code point < 0x20, and DEL 0x7f) become a
-// space — checked by code point so the source carries no literal control bytes.
-function sanitizeForPrompt(s) {
-  const flattened = Array.from(String(s ?? ''), (ch) => {
-    const c = ch.codePointAt(0);
-    return c < 0x20 || c === 0x7f ? ' ' : ch;
-  }).join('');
-  return flattened.replace(/\s+/g, ' ').trim().slice(0, 80);
-}
+import { sanitizeForPrompt } from './promptSafe.js';
 
 // Raw 30-day language affinity rows: [{ language, plays, pct }], ordered by
 // plays desc. pct is a rounded percentage of the window's total plays.
@@ -59,8 +46,11 @@ export async function buildTalkContext(userId, clientContext) {
   const affinity = await getLangAffinity(userId);
   const langAffinity = affinity.map(r => `${r.language} ${r.pct}%`);
 
+  // Pick ONLY the known client key (mood) rather than spreading the untrusted
+  // client context wholesale — everything else the prompt uses is server-derived
+  // below. (security: #5)
   return {
-    ...(clientContext ?? {}),
+    mood: clientContext?.mood,
     recentListens: recentRows.map(r => sanitizeForPrompt(`${r.title} — ${r.artist}`)),
     likedSample:   likedRows.map(r => sanitizeForPrompt(`${r.title} — ${r.artist}`)),
     langAffinity,
