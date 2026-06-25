@@ -1040,25 +1040,28 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const saveQueueAsPlaylist = async () => {
     const tracksToSave = viewRef.current.tracks.length ? viewRef.current.tracks : pool;
     if (!tracksToSave.length) return;
-    const name = await prompt({
+    await prompt({
       title:       'save queue as playlist',
       body:        `${tracksToSave.length} ${tracksToSave.length === 1 ? 'track' : 'tracks'}`,
       placeholder: 'playlist name',
       submitLabel: 'save',
       cancelLabel: 'cancel',
+      busyLabel:   (name) => `saving to ${name}`,
+      // Runs with the dialog held open + the loader showing; owns its own toasts.
+      onSubmit: async (name) => {
+        try {
+          const playlist = await createPlaylist({ name });
+          const results = await Promise.allSettled(
+            tracksToSave.map(tk => addToPlaylist(playlist.id, tk.id)),
+          );
+          const ok = results.filter(r => r.status === 'fulfilled').length;
+          toast(ok === tracksToSave.length ? 'saved.' : `saved ${ok} of ${tracksToSave.length}.`);
+        } catch (err) {
+          toast("couldn't save.");
+          console.warn('[save-queue]', err);
+        }
+      },
     });
-    if (!name) return;
-    try {
-      const playlist = await createPlaylist({ name });
-      const results = await Promise.allSettled(
-        tracksToSave.map(tk => addToPlaylist(playlist.id, tk.id)),
-      );
-      const ok = results.filter(r => r.status === 'fulfilled').length;
-      toast(ok === tracksToSave.length ? 'saved.' : `saved ${ok} of ${tracksToSave.length}.`);
-    } catch (err) {
-      toast("couldn't save.");
-      console.warn('[save-queue]', err);
-    }
   };
 
   // The sleep sheet lives on its own bus, so it could stack with the why /

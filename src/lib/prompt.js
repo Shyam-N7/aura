@@ -24,6 +24,10 @@ export function prompt(opts) {
       submitLabel:  opts.submitLabel ?? 'ok',
       cancelLabel:  opts.cancelLabel ?? 'cancel',
       variant:      opts.variant ?? null,
+      // Optional: keep the dialog open with a loader while an async submit runs,
+      // closing only once it resolves. Backward-compatible — unset = old behavior.
+      onSubmit:     opts.onSubmit ?? null,    // async (value) => any
+      busyLabel:    opts.busyLabel ?? null,   // string | (value) => string
       resolve,
     };
     pending = event;
