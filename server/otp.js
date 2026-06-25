@@ -88,8 +88,14 @@ export async function verifyOtp(email, code, { purpose = 'signup', consume = tru
   const match = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 
   if (!match) {
-    const attempts = row.attempts + 1;
-    await pool.query('UPDATE email_otps SET attempts = $1 WHERE id = $2', [attempts, row.id]);
+    // Atomic increment gated on the current value: concurrent wrong guesses are
+    // serialized by the DB, so the attempt cap can't be raced past. Zero rows
+    // updated means the cap was already reached → locked. (security: #3)
+    const { rows: bumped } = await pool.query(
+      'UPDATE email_otps SET attempts = attempts + 1 WHERE id = $1 AND attempts < $2 RETURNING attempts',
+      [row.id, MAX_ATTEMPTS],
+    );
+    const attempts = bumped.length ? bumped[0].attempts : MAX_ATTEMPTS;
     if (attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'locked' };
     return { ok: false, reason: 'mismatch', attemptsLeft: MAX_ATTEMPTS - attempts };
   }

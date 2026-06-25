@@ -63,16 +63,21 @@ router.post('/disable', requireAuth, async (req, res) => {
 
     const ok = u.family_pin_hash && await bcrypt.compare(pin, u.family_pin_hash);
     if (!ok) {
-      const attempts = (u.family_pin_attempts ?? 0) + 1;
-      if (attempts >= MAX_ATTEMPTS) {
-        await pool.query(
-          'UPDATE users SET family_pin_attempts = 0, family_pin_locked_until = $1 WHERE id = $2',
-          [now + LOCK_MS, req.userId],
-        );
+      // Atomic increment + conditional lock so concurrent guesses can't race past
+      // the cap (this route isn't behind authLimiter). attempts reset to 0 on
+      // lock; zero left after a failed attempt means we just locked. (security: #28)
+      const { rows: [r] } = await pool.query(
+        `UPDATE users SET
+           family_pin_attempts     = CASE WHEN family_pin_attempts + 1 >= $2 THEN 0 ELSE family_pin_attempts + 1 END,
+           family_pin_locked_until = CASE WHEN family_pin_attempts + 1 >= $2 THEN $3 ELSE family_pin_locked_until END
+         WHERE id = $1
+         RETURNING family_pin_attempts`,
+        [req.userId, MAX_ATTEMPTS, now + LOCK_MS],
+      );
+      if (r && r.family_pin_attempts === 0) {
         return res.status(429).json({ error: 'too many attempts — try again later', code: 'locked', retryAfterSec: Math.ceil(LOCK_MS / 1000) });
       }
-      await pool.query('UPDATE users SET family_pin_attempts = $1 WHERE id = $2', [attempts, req.userId]);
-      return res.status(401).json({ error: "that PIN isn't right", code: 'mismatch', attemptsLeft: MAX_ATTEMPTS - attempts });
+      return res.status(401).json({ error: "that PIN isn't right", code: 'mismatch', attemptsLeft: MAX_ATTEMPTS - (r?.family_pin_attempts ?? MAX_ATTEMPTS) });
     }
 
     const upd = await pool.query(

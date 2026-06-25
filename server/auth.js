@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
-import { signToken, requireAuth } from './middleware/auth.js';
+import { signToken, requireAuth, setSessionCookie, clearSessionCookie } from './middleware/auth.js';
+import { asyncHandler, clientError } from './middleware/errors.js';
 import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
 import { adminBlocked } from './adminGate.js';
 import { buildModesView } from './modes.js';
@@ -85,27 +86,60 @@ router.post('/signup', async (req, res) => {
     await issueOtp(e, { purpose: 'signup' });
     res.json({ pendingVerification: true, email: e });
   } catch (err) {
-    if (err.statusCode === 429) return res.status(429).json({ error: err.message, code: 'cooldown', retryAfterSec: err.retryAfterSec });
-    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err.statusCode === 429) return res.status(429).json({ error: clientError(err), code: 'cooldown', retryAfterSec: err.retryAfterSec });
+    if (err.statusCode) return res.status(err.statusCode).json({ error: clientError(err) });
     console.error('[auth/signup]', err);
     res.status(500).json({ error: 'signup failed' });
   }
 });
 
 // ── Sign in ──────────────────────────────────────────────────────────
-router.post('/login', async (req, res) => {
+// Per-account lockout bounds credential guessing even from rotating IPs (the
+// per-IP limiter is in-memory + per serverless instance, so it can't). Wrapped
+// in asyncHandler so a transient DB/bcrypt rejection reaches the error
+// middleware instead of crashing the instance. (security: #4 / #26)
+const LOGIN_MAX_ATTEMPTS = 8;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   if (adminBlocked(email)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
 
-  const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+  const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [norm(email)]);
   if (!rows.length) return res.status(401).json({ error: 'invalid credentials' });
 
   const user = rows[0];
+  const now = Date.now();
+
+  // Locked? Reject before doing the (expensive) bcrypt compare.
+  if (user.login_locked_until && Number(user.login_locked_until) > now) {
+    return res.status(429).json({
+      error: 'too many attempts — try again later', code: 'locked',
+      retryAfterSec: Math.ceil((Number(user.login_locked_until) - now) / 1000),
+    });
+  }
+
   if (!user.password_hash) return res.status(401).json({ error: 'this account uses social login — try Google' });
 
   const ok = await bcrypt.compare(password, user.password_hash);
-  if (!ok) return res.status(401).json({ error: 'invalid credentials' });
+  if (!ok) {
+    // Atomic increment + conditional lock so concurrent guesses can't race past
+    // the cap; attempts reset to 0 on lock (mirrors the family-PIN counter).
+    const { rows: [r] } = await pool.query(
+      `UPDATE users SET
+         failed_login_attempts = CASE WHEN failed_login_attempts + 1 >= $2 THEN 0 ELSE failed_login_attempts + 1 END,
+         login_locked_until    = CASE WHEN failed_login_attempts + 1 >= $2 THEN $3 ELSE login_locked_until END
+       WHERE id = $1
+       RETURNING failed_login_attempts`,
+      [user.id, LOGIN_MAX_ATTEMPTS, now + LOGIN_LOCK_MS],
+    );
+    // attempts === 0 after a *failed* attempt means we just hit the cap → locked.
+    if (r && r.failed_login_attempts === 0) {
+      return res.status(429).json({ error: 'too many attempts — try again later', code: 'locked', retryAfterSec: Math.ceil(LOGIN_LOCK_MS / 1000) });
+    }
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
 
   // Gate unverified accounts AFTER the password check (so verification status
   // never leaks to password guessers). Re-arm a code and route to the OTP step.
@@ -114,10 +148,14 @@ router.post('/login', async (req, res) => {
     return res.status(403).json({ error: 'please verify your email first', pendingVerification: true, email: user.email });
   }
 
-  await pool.query('UPDATE users SET last_login_at = $1 WHERE id = $2', [Date.now(), user.id]);
-  const token = signToken(user.id);
-  res.json({ token, user: sanitizeUser(user) });
-});
+  // Success — clear the throttle + stamp last login, then set the session cookie.
+  await pool.query(
+    'UPDATE users SET last_login_at = $1, failed_login_attempts = 0, login_locked_until = NULL WHERE id = $2',
+    [now, user.id],
+  );
+  setSessionCookie(res, signToken(user.id, user.token_version ?? 0));
+  res.json({ user: sanitizeUser(user) });
+}));
 
 // ── Google OAuth ─────────────────────────────────────────────────────
 let _googleClient = null;
@@ -141,6 +179,12 @@ router.post('/google', async (req, res) => {
   try {
     const payload = await verifyGoogleToken(idToken);
     const { sub, email, name } = payload;
+    // Only trust a Google email that Google itself reports as verified — else an
+    // attacker asserting an unverified address (the Workspace/custom-domain case)
+    // could link to or pre-squat someone's account. (security: M1)
+    if (payload.email_verified !== true) {
+      return res.status(401).json({ error: 'your Google email is not verified', code: 'email_unverified' });
+    }
     if (adminBlocked(email)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
 
     const existing = await pool.query('SELECT * FROM users WHERE google_sub = $1', [sub]);
@@ -168,8 +212,8 @@ router.post('/google', async (req, res) => {
       }
     }
 
-    const token = signToken(user.id);
-    res.json({ token, user: sanitizeUser(user) });
+    setSessionCookie(res, signToken(user.id, user.token_version ?? 0));
+    res.json({ user: sanitizeUser(user) });
   } catch (err) {
     console.warn('[auth/google]', err.message);
     res.status(401).json({ error: 'google token verification failed' });
@@ -196,8 +240,8 @@ router.post('/verify-otp', async (req, res) => {
     );
     if (!upd.rowCount) return res.status(409).json({ error: 'account no longer exists — sign up again', code: 'signup_expired' });
 
-    const token = signToken(upd.rows[0].id);
-    res.json({ token, user: sanitizeUser(upd.rows[0]) });
+    setSessionCookie(res, signToken(upd.rows[0].id, upd.rows[0].token_version ?? 0));
+    res.json({ user: sanitizeUser(upd.rows[0]) });
   } catch (err) {
     console.error('[auth/verify-otp]', err);
     res.status(500).json({ error: 'verification failed' });
@@ -219,8 +263,8 @@ router.post('/resend-otp', async (req, res) => {
     }
     res.json({ ok: true, cooldownSec: 60 });
   } catch (err) {
-    if (err.statusCode === 429) return res.status(429).json({ error: err.message, code: 'cooldown', retryAfterSec: err.retryAfterSec });
-    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err.statusCode === 429) return res.status(429).json({ error: clientError(err), code: 'cooldown', retryAfterSec: err.retryAfterSec });
+    if (err.statusCode) return res.status(err.statusCode).json({ error: clientError(err) });
     console.error('[auth/resend-otp]', err);
     res.status(500).json({ error: 'could not resend code' });
   }
@@ -246,8 +290,8 @@ router.post('/forgot', async (req, res) => {
     }
     res.json({ ok: true, cooldownSec: 60 });
   } catch (err) {
-    if (err.statusCode === 429) { trace('[forgot] cooldown → 429, retryAfter', err.retryAfterSec, 's'); return res.status(429).json({ error: err.message, code: 'cooldown', retryAfterSec: err.retryAfterSec }); }
-    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err.statusCode === 429) { trace('[forgot] cooldown → 429, retryAfter', err.retryAfterSec, 's'); return res.status(429).json({ error: clientError(err), code: 'cooldown', retryAfterSec: err.retryAfterSec }); }
+    if (err.statusCode) return res.status(err.statusCode).json({ error: clientError(err) });
     console.error('[auth/forgot]', err);
     res.status(500).json({ error: 'request failed' });
   }
@@ -295,8 +339,13 @@ router.post('/reset-password', async (req, res) => {
     trace('[reset] code ok → updating password');
 
     const hash = await bcrypt.hash(password, 12);
+    // Bump token_version → every previously-issued session token for this user
+    // stops verifying (the reset is now a real "log out everywhere" kill switch),
+    // and clear any login lockout. (security: M2)
     const upd = await pool.query(
-      'UPDATE users SET password_hash = $1, email_verified = TRUE, last_login_at = $2 WHERE email = $3',
+      `UPDATE users SET password_hash = $1, email_verified = TRUE, last_login_at = $2,
+         token_version = token_version + 1, failed_login_attempts = 0, login_locked_until = NULL
+       WHERE email = $3`,
       [hash, Date.now(), e],
     );
     if (!upd.rowCount) { trace('[reset] no matching account row'); return res.status(409).json({ error: 'account not found', code: 'no_account' }); }
@@ -313,25 +362,67 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+// ── Logout ───────────────────────────────────────────────────────────
+// Clears the session cookie for THIS device. (A full "log out everywhere" is
+// the token_version bump on password reset.) No auth required — clearing a
+// cookie must work even when the current session is already invalid.
+router.post('/logout', (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
 // ── Current user ─────────────────────────────────────────────────────
-router.get('/me', requireAuth, async (req, res) => {
+router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.userId]);
   if (!rows.length) return res.status(404).json({ error: 'user not found' });
   res.json({ user: sanitizeUser(rows[0]) });
-});
+}));
 
 // ── Update preferences ───────────────────────────────────────────────
-router.patch('/me/preferences', requireAuth, async (req, res) => {
+// Validate + bound every field before it reaches the JSONB columns. Unbounded
+// arrays / strings here would grow rows without limit and inflate every /me +
+// sanitizeUser response (storage + read-amplification). (security: #29)
+const MAX_SEED_ARTISTS = 100;
+const MAX_SEED_LANGS = 50;
+const MAX_DJ_NAME = 60;
+const MAX_MOOD = 50;
+const MAX_PREF_BYTES = 16 * 1024; // serialized ceiling per seed array
+
+function boundedJsonArray(value, maxLen) {
+  if (!Array.isArray(value) || value.length > maxLen) return null;
+  const json = JSON.stringify(value);
+  if (json.length > MAX_PREF_BYTES) return null;
+  return json;
+}
+
+router.patch('/me/preferences', requireAuth, asyncHandler(async (req, res) => {
   const { hasOnboarded, seedArtists, seedLanguages, seedMood, djName } = req.body ?? {};
+  const bad = (msg) => res.status(400).json({ error: msg, code: 'bad_input' });
   const sets = [];
   const vals = [];
   let i = 1;
 
-  if (hasOnboarded !== undefined)  { sets.push(`has_onboarded = $${i++}`);  vals.push(!!hasOnboarded); }
-  if (seedArtists !== undefined)   { sets.push(`seed_artists = $${i++}`);   vals.push(JSON.stringify(seedArtists)); }
-  if (seedLanguages !== undefined) { sets.push(`seed_languages = $${i++}`); vals.push(JSON.stringify(seedLanguages)); }
-  if (seedMood !== undefined)      { sets.push(`seed_mood = $${i++}`);      vals.push(seedMood); }
-  if (djName !== undefined)        { sets.push(`dj_name = $${i++}`);        vals.push(djName); }
+  if (hasOnboarded !== undefined) { sets.push(`has_onboarded = $${i++}`); vals.push(!!hasOnboarded); }
+  if (seedArtists !== undefined) {
+    const json = boundedJsonArray(seedArtists, MAX_SEED_ARTISTS);
+    if (json === null) return bad('invalid seedArtists');
+    sets.push(`seed_artists = $${i++}`); vals.push(json);
+  }
+  if (seedLanguages !== undefined) {
+    const json = boundedJsonArray(seedLanguages, MAX_SEED_LANGS);
+    if (json === null) return bad('invalid seedLanguages');
+    sets.push(`seed_languages = $${i++}`); vals.push(json);
+  }
+  if (seedMood !== undefined) {
+    if (seedMood !== null && (typeof seedMood !== 'string' || seedMood.length > MAX_MOOD)) return bad('invalid seedMood');
+    sets.push(`seed_mood = $${i++}`); vals.push(seedMood);
+  }
+  if (djName !== undefined) {
+    if (typeof djName !== 'string') return bad('invalid djName');
+    const name = djName.trim();
+    if (!name || name.length > MAX_DJ_NAME) return bad('invalid djName');
+    sets.push(`dj_name = $${i++}`); vals.push(name);
+  }
 
   if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
 
@@ -340,7 +431,7 @@ router.patch('/me/preferences', requireAuth, async (req, res) => {
 
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.userId]);
   res.json({ user: sanitizeUser(rows[0]) });
-});
+}));
 
 // ── GDPR: export all of my data ──────────────────────────────────────
 // Returns one JSON bundle of everything we hold for this user. Account row is
@@ -379,7 +470,7 @@ router.get('/me/export', exportLimiter, requireAuth, async (req, res) => {
       journal: journal.rows,
     });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
@@ -393,7 +484,7 @@ router.delete('/me', requireAuth, async (req, res) => {
     if (!rowCount) return res.status(404).json({ error: 'user not found' });
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
 
