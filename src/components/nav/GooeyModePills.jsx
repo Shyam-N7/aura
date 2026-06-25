@@ -6,7 +6,7 @@ import './GooeyModePills.css';
 // filter. On switch the fill flows from the old pill's box to the new and settles
 // in — a liquid drop that empties the old pill and fills the target. Labels stay
 // crisp (outside the goo). Solid fill so the metaball threshold preserves it.
-export function GooeyModePills({ modes = [], activeMode = 'everyday', onSelect }) {
+export function GooeyModePills({ modes = [], activeMode = 'everyday', onSelect, loading = false }) {
   const idx = Math.max(0, modes.findIndex(m => m.key === activeMode));
   const pillRefs = useRef([]);
   const [fill, setFill] = useState(null);   // { x, y, w, h } of the active pill, in wrapper coords
@@ -41,7 +41,7 @@ export function GooeyModePills({ modes = [], activeMode = 'everyday', onSelect }
       {modes.map((m, i) => (
         <button key={m.key} type="button" role="radio" aria-checked={i === idx}
           ref={(el) => { pillRefs.current[i] = el; }}
-          className={`aura-goopills__pill${i === idx ? ' is-active' : ''}`}
+          className={`aura-goopills__pill${i === idx ? ' is-active' : ''}${loading && i === idx ? ' is-loading' : ''}`}
           onClick={() => onSelect?.(m.key)}>
           {m.label}
         </button>

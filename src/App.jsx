@@ -1465,7 +1465,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             the full surface. */}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileTopBar djName={t.djName} t={t} setTweak={setTweak}
           onOpenProfile={() => onNav('library')}
-          activeMode={activeMode} modes={user?.modes} onSetMode={switchMode}
+          activeMode={activeMode} modes={user?.modes} onSetMode={switchMode} loading={featured.status === 'loading'}
           onOpenSearch={openSearch} searching={screen === 'search'} onCloseSearch={closeSearch}/>}
         {isMobile && !overlay && !talkOpen && screen !== 'player' && <MobileDock
           track={track} playing={playing} progress={progress}

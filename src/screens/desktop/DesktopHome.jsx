@@ -67,13 +67,19 @@ export function DesktopHome({
   return (
     <div ref={scrollRef} className="aura-dh">
       <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}
-        activeMode={activeMode} modes={modes} onSetMode={onSetMode}/>
+        activeMode={activeMode} modes={modes} onSetMode={onSetMode} loading={loading}/>
 
-      {/* {Mode} mix — one tap to play the active context's whole station-seeded
-          pool. Leads the page when you're in a mode; Everyday has no mix, so Quick
-          Picks stays the top there. Gated on !loading so a mode switch never shows
-          the PREVIOUS mode's pool under the new mode's label (the pool lags the
-          label by one fetch). */}
+      {/* {Mode} mix — while the new pool curates (the pool lags the label by one
+          fetch), a "curating your {mode} mix…" banner; then the one-tap play-all
+          card. Everyday has no mix, so Quick Picks stays the top there. */}
+      {activeMode !== 'everyday' && loading && (
+        <section className="aura-dh__modemix">
+          <div className="aura-dh__modemix-curating" role="status">
+            <span className="aura-dh__modemix-curating-dot" aria-hidden="true"/>
+            curating your {activeLabel.toLowerCase()} mix…
+          </div>
+        </section>
+      )}
       {activeMode !== 'everyday' && !loading && tracks.length > 0 && (
         <section className="aura-dh__modemix">
           <button type="button" className="aura-dh__modemix-card"
@@ -132,7 +138,11 @@ export function DesktopHome({
         <h1 className="aura-dh__mood-hero">music that gets your mood</h1>
       </section>
 
-      {heroTrack && (
+      {loading ? (
+        <section className="aura-dh__hero-band-wrap" aria-hidden="true">
+          <div className="aura-dh__skel aura-dh__skel-hero"/>
+        </section>
+      ) : heroTrack && (
         <section className="aura-dh__hero-band-wrap">
           <HeroBand track={heroTrack} djName={djName} onPick={() => onPick?.(heroTrack.id)}/>
         </section>
@@ -172,11 +182,15 @@ export function DesktopHome({
         ))}
       </div>
 
-      {stations.length > 0 && (
+      {(loading || stations.length > 0) && (
         <>
           <SectionHeader title="Stations" sub="One-tap playlists" large/>
           <div className="aura-dh__stations">
-            {stations.map(s => (
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={`skel-${i}`} className="aura-dh__skel aura-dh__skel-station" aria-hidden="true"/>
+              ))
+              : stations.map(s => (
               <button key={s.id} onClick={() => onPick?.(s.id)} className="aura-dh__station">
                 {s.imageUrl
                   ? <img src={s.imageUrl} alt="" loading="lazy" className="aura-dh__station-bg"/>
@@ -237,11 +251,18 @@ export function DesktopHome({
         </>
       )}
 
-      {newPicks.length > 0 && (
+      {(loading || newPicks.length > 0) && (
         <>
           <SectionHeader title="New for you" sub="Fresh this week" large/>
           <div className="aura-dh__new-picks">
-            {newPicks.map(t => (
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={`skel-${i}`} className="aura-dh__pick aura-dh__pick--skel" aria-hidden="true">
+                  <span className="aura-dh__skel aura-dh__skel-pick-art"/>
+                  <span className="aura-dh__skel aura-dh__skel-pick-line"/>
+                </div>
+              ))
+              : newPicks.map(t => (
               <button key={t.id} onClick={() => onPick?.(t.id)} onContextMenu={ctxOpen(t)} className="aura-dh__pick">
                 <span className="aura-dh__pick-art">
                   <AlbumArt track={t} radius={6}

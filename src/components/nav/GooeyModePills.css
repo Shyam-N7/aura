@@ -59,11 +59,14 @@
   color: var(--color-bg);          /* reads on the accent fill behind it */
   border-color: transparent;
 }
+/* While the new mode's pool curates, the just-picked pill softly pulses. */
+.aura-goopills__pill.is-loading { animation: aura-soft 1.4s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .aura-goopills__goo { filter: none; }
   .aura-goopills__fill,
   .aura-goopills__pill { transition: none; }
+  .aura-goopills__pill.is-loading { animation: none; }
 }
 
 /* The AnchoredMenu hosting this opts out of the glass backdrop-filter: an SVG filter

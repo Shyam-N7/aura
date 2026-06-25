@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AuraMark } from '../primitives';
+import { AuraMark, BreathingDot } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
 import { ProfileButton } from './ProfileButton';
 import { AnchoredMenu } from '../AnchoredMenu';
@@ -25,7 +25,7 @@ import './MobileTopBar.css';
 export function MobileTopBar({
   djName = 'aura', t, setTweak, showAccount = true, onOpenProfile,
   onOpenSearch, searching = false, onCloseSearch,
-  activeMode = 'everyday', modes = [], onSetMode,
+  activeMode = 'everyday', modes = [], onSetMode, loading = false,
 }) {
   const { query, setQuery } = useSearchQuery();
   const inputRef = useRef(null);
@@ -133,8 +133,9 @@ export function MobileTopBar({
           {onSetMode && modes.length > 0 && (
             <button type="button" className="aura-mobile-top__mode"
               onClick={(e) => { const el = e.currentTarget; setModeMenuEl(prev => (prev ? null : el)); }}
-              aria-haspopup="menu" aria-label={`Listening mode: ${activeLabel}`}>
+              aria-haspopup="menu" aria-label={`Listening mode: ${activeLabel}${loading ? ' (curating…)' : ''}`}>
               {activeLabel}
+              {loading && <BreathingDot color="var(--color-accent)" size={6} style={{ marginLeft: 6 }}/>}
             </button>
           )}
           {onOpenSearch && (
@@ -189,7 +190,7 @@ export function MobileTopBar({
       <AnchoredMenu anchorEl={modeMenuEl} onClose={() => setModeMenuEl(null)} className="aura-pl-menu--goo">
         {/* Keep the menu open on select so the liquid ball-slide is visible;
             outside-tap / Esc closes it. */}
-        <GooeyModePills modes={modes} activeMode={activeMode} onSelect={(k) => onSetMode?.(k)}/>
+        <GooeyModePills modes={modes} activeMode={activeMode} onSelect={(k) => onSetMode?.(k)} loading={loading}/>
       </AnchoredMenu>
     )}
     </>

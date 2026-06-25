@@ -894,3 +894,66 @@
   background: var(--color-accent);
   color: var(--color-bg);   /* theme-aware: readable on the accent disc in every theme */
 }
+
+/* ── Mode-mix "curating" banner — shown while the new mode's pool loads ──── */
+.aura-dh__modemix-curating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-accent), transparent 92%);
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 84%);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.aura-dh__modemix-curating-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 12px var(--color-accent);
+  animation: aura-soft 1.6s ease-in-out infinite;
+}
+
+/* ── Loading skeletons (shimmer) for the pool-derived shelves ───────────────
+   While a mode switch / first load curates the pool, the hero / stations /
+   new-for-you render shimmer placeholders of the same shape instead of the
+   previous mode's stale content. Reuses the app's shimmer recipe. */
+.aura-dh__skel {
+  background: linear-gradient(100deg,
+    color-mix(in srgb, var(--color-ink), transparent 93%) 30%,
+    color-mix(in srgb, var(--color-ink), transparent 84%) 50%,
+    color-mix(in srgb, var(--color-ink), transparent 93%) 70%);
+  background-size: 200% 100%;
+  animation: aura-dh-shimmer 1.3s linear infinite;
+}
+@keyframes aura-dh-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.aura-dh__skel-hero    { height: 240px; border-radius: 18px; }
+.aura-dh__skel-station { height: 160px; border-radius: 14px; }
+.aura-dh__pick--skel   { cursor: default; }
+.aura-dh__skel-pick-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+}
+.aura-dh__skel-pick-line {
+  display: block;
+  height: 13px;
+  width: 70%;
+  margin-top: 10px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-dh__skel,
+  .aura-dh__modemix-curating-dot { animation: none; }
+}
