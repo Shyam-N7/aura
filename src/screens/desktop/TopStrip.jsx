@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AuraMark, ICON } from '../../components/primitives';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
-import { GooeyModeRadio } from '../../components/nav/GooeyModeRadio';
+import { GooeyModePills } from '../../components/nav/GooeyModePills';
 
 export function TopStrip({ djName, onOpenSearch, t, setTweak, activeMode = 'everyday', modes = [], onSetMode }) {
   // Listening-mode switcher (desktop) — mirrors the mobile chip. anchorEl in state
@@ -35,7 +35,7 @@ export function TopStrip({ djName, onOpenSearch, t, setTweak, activeMode = 'ever
         <AnchoredMenu anchorEl={modeMenuEl} onClose={() => setModeMenuEl(null)} className="aura-pl-menu--goo">
           {/* Keep the menu open on select so the liquid ball-slide is visible;
               outside-click / Esc closes it. */}
-          <GooeyModeRadio modes={modes} activeMode={activeMode} onSelect={(k) => onSetMode?.(k)}/>
+          <GooeyModePills modes={modes} activeMode={activeMode} onSelect={(k) => onSetMode?.(k)}/>
         </AnchoredMenu>
       )}
     </div>
