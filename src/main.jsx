@@ -41,6 +41,9 @@ const AuthPage    = lazy(() => import('./screens/AuthPage').then(m => ({ default
 // view machine below.
 const PrivacyPage = lazy(() => import('./screens/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 const TermsPage   = lazy(() => import('./screens/TermsPage').then(m => ({ default: m.TermsPage })));
+// Public view-only playlist page — opens for anyone at /p/:publicId, signed in or
+// out, so it sits above the auth gate alongside the legal pages.
+const PublicPlaylistScreen = lazy(() => import('./screens/PublicPlaylistScreen').then(m => ({ default: m.PublicPlaylistScreen })));
 
 // Body background while a pre-auth page is on screen, so the viewport edges
 // match the theme during the page's own scroll/reflow.
@@ -101,6 +104,8 @@ function AppRoot() {
   const view = useMemo(() => {
     if (loc.path === '/privacy') return 'privacy';
     if (loc.path === '/terms')   return 'terms';
+    // Public share links open for everyone, signed in or out — before the auth gate.
+    if (loc.path.startsWith('/p/')) return 'public-playlist';
     if (isAuthed) return 'app';
     if (loc.path === '/auth') return 'auth';
     return 'landing';
@@ -176,7 +181,9 @@ function AppRoot() {
     <>
       <div className={`theme-${theme}`}>
         <Suspense fallback={null}>
-          {view === 'privacy'
+          {view === 'public-playlist'
+            ? <PublicPlaylistScreen publicId={decodeURIComponent(loc.path.slice(3))} isAuthed={isAuthed} onNavigate={navigate} />
+            : view === 'privacy'
             ? <PrivacyPage onBack={() => navigate('/')} />
             : view === 'terms'
             ? <TermsPage onBack={() => navigate('/')} />

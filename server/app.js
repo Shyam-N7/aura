@@ -19,7 +19,7 @@ import { generateWhy } from './prompts/why.js';
 import { getJournalEntries } from './journal.js';
 import { getSonicDna } from './sonicDna.js';
 import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
-import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator } from './playlists.js';
+import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, getPublicPlaylist } from './playlists.js';
 import { getLibrarySummary } from './library.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
@@ -773,6 +773,28 @@ app.delete('/api/playlists/:id/collaborators/:user_id', requireAuth, async (req,
   try {
     await removeCollaborator(req.userId, req.params.id, req.params.user_id);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Owner toggles public view-only sharing. body: { public: boolean }. Returns
+// { isPublic, publicId } — publicId feeds the /p/:publicId share link.
+app.post('/api/playlists/:id/visibility', requireAuth, async (req, res) => {
+  try {
+    res.json(await setPlaylistVisibility(req.userId, req.params.id, !!req.body?.public));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// PUBLIC, view-only read by share id — intentionally NO requireAuth so a shared
+// link opens for anyone in any browser. Reads only local rows (no upstream
+// catalog calls → no amplification). 404s when the id is unknown or not public.
+app.get('/api/public/playlists/:publicId', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(await getPublicPlaylist(req.params.publicId));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

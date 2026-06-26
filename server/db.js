@@ -410,6 +410,19 @@ const migrations = [
       ALTER TABLE users ADD COLUMN show_sensing BOOLEAN NOT NULL DEFAULT TRUE;
     `);
   },
+  async function v16_playlist_public_links(client) {
+    // Public, view-only sharing. is_public gates anonymous read access; public_id
+    // is a SEPARATE unguessable CSPRNG token used in the share URL (/p/:public_id)
+    // so the weak internal pl_ id is never exposed and links can't be enumerated.
+    // public_id is minted lazily the first time a playlist is made public and kept
+    // on toggle-off so re-enabling revives the same link. This is independent of
+    // the collaborator/invite model (v12) — a playlist can be publicly viewable
+    // AND have editor collaborators.
+    await client.query(`
+      ALTER TABLE playlists ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE playlists ADD COLUMN public_id TEXT UNIQUE;
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

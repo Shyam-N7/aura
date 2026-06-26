@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
-import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite } from '../../api/playlists';
+import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility } from '../../api/playlists';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
@@ -20,6 +20,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   const [hit, setHit]     = useState({ data: null, error: null });
   const [menu, setMenu] = useState(null);
   const [shareEl, setShareEl] = useState(null);   // Share button → options menu anchor
+  const [shareBusy, setShareBusy] = useState(false); // public-link toggle in flight
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`playlist:${playlistId}`, { ready: status === 'ok' });
 
@@ -40,6 +41,8 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   const shared = hit.data?.shared ?? false;
   const collaborators = hit.data?.collaborators ?? [];
   const updatedAt = hit.data?.updatedAt;
+  const isPublic = hit.data?.isPublic ?? false;
+  const publicId = hit.data?.publicId ?? null;
 
   // Live sync for shared playlists — poll the cheap rev cursor while the screen
   // is open + visible, and refetch the full playlist when a collaborator changed
@@ -60,7 +63,35 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
     return () => { stop = true; clearInterval(id); };
   }, [playlistId, shared, updatedAt]);
 
-  // Mint a fresh collaborate invite link (anyone with it can edit).
+  // ── View-only public link (anyone with it can open, no account needed) ──
+  const publicLink = (pid) => `${window.location.origin}/p/${pid}`;
+  const togglePublic = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      const { isPublic: nowPublic, publicId: pid } = await setPlaylistVisibility(playlistId, !isPublic);
+      setHit(h => ({ ...h, data: { ...h.data, isPublic: nowPublic, publicId: pid } }));
+      if (nowPublic) {
+        const link = publicLink(pid);
+        try { await navigator.clipboard.writeText(link); toast('Public view link copied — anyone can open it.'); }
+        catch { toast(link); }
+      } else {
+        toast('Public link is off.');
+      }
+    } catch (err) {
+      toast(`Couldn’t update — ${err.message}`);
+    } finally {
+      setShareBusy(false);
+    }
+  };
+  const copyPublicLink = async () => {
+    setShareEl(null);
+    const link = publicLink(publicId);
+    try { await navigator.clipboard.writeText(link); toast('View link copied — anyone can open it.'); }
+    catch { toast(link); }
+  };
+
+  // ── Collaborate invite link (anyone with it can EDIT, after signing in) ──
   const makeShareLink = async () => {
     const { token } = await createPlaylistInvite(playlistId);
     return `${window.location.origin}/playlists?join=${token}`;
@@ -129,7 +160,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
         )}
         {status === 'error' && (
           <div className="aura-dpd__error">
-            Couldn’t load — {hit.error}
+            This playlist is private or unavailable. If someone shared it, ask them for a public view link.
           </div>
         )}
         {status === 'ok' && (
@@ -163,11 +194,17 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                     Share
                   </button>
                   {shareEl && (
-                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={104}>
-                      {typeof navigator !== 'undefined' && navigator.share && (
-                        <button onClick={shareVia} className="aura-pl-menu-item">share via…</button>
+                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={176}>
+                      <button onClick={togglePublic} disabled={shareBusy} className="aura-pl-menu-item">
+                        {isPublic ? 'turn off public link' : 'make a public view link'}
+                      </button>
+                      {isPublic && publicId && (
+                        <button onClick={copyPublicLink} className="aura-pl-menu-item">copy view link</button>
                       )}
-                      <button onClick={copyShareLink} className="aura-pl-menu-item">copy link</button>
+                      {typeof navigator !== 'undefined' && navigator.share && (
+                        <button onClick={shareVia} className="aura-pl-menu-item">invite someone to edit…</button>
+                      )}
+                      <button onClick={copyShareLink} className="aura-pl-menu-item">copy edit-invite link</button>
                     </AnchoredMenu>
                   )}
                 </>

@@ -1,0 +1,59 @@
+/* Public, view-only playlist page (/p/:publicId). Standalone full-bleed page —
+   rendered outside the authed app shell, so it carries its own minimal styling. */
+
+.aura-pub__brand {
+  display: inline-flex;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.aura-pub__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+.aura-pub__cta:hover { opacity: 0.92; }
+
+.aura-pub__banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-line);
+}
+
+.aura-pub__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.aura-pub__idx {
+  width: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--color-ink-faint);
+}
+
+@media (max-width: 480px) {
+  .aura-pub__banner { flex-direction: column; align-items: stretch; }
+  .aura-pub__banner .aura-pub__cta { width: 100%; }
+}

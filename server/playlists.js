@@ -12,6 +12,12 @@ function newToken() {
   return 'inv_' + crypto.randomBytes(18).toString('base64url');
 }
 
+// Public share id — an unguessable CSPRNG token for the /p/:public_id link, kept
+// distinct from the weak internal `pl_` id so it can't be enumerated.
+function newPublicId() {
+  return 'pub_' + crypto.randomBytes(12).toString('base64url');
+}
+
 function notFound() {
   const err = new Error('playlist not found');
   err.statusCode = 404;
@@ -128,10 +134,16 @@ export async function searchPlaylists(userId, q, { limit = 5 } = {}) {
   }));
 }
 
-export async function getPlaylist(userId, id) {
-  const role = await requireView(userId, id);
+// Load a playlist's meta + tracks (+ optionally collaborators) into the response
+// shape, AFTER access has been decided by the caller. `role` is the viewer's role
+// (owner | editor | viewer | null for an anonymous public viewer). Shared by the
+// authed getPlaylist and the anonymous getPublicPlaylist so the shape stays in
+// one place. The public path passes includeCollaborators:false — member identities
+// are never exposed on a public link.
+async function loadPlaylistView(id, { role = null, includeCollaborators = true } = {}) {
   const { rows: meta } = await pool.query(
     `SELECT p.id, p.name, p.description, p.cover_track_id, p.updated_at, p.user_id AS owner_id,
+            p.is_public, p.public_id,
             t.raw AS cover_raw, ou.name AS owner_name
      FROM playlists p
      LEFT JOIN tracks t ON t.id = p.cover_track_id
@@ -149,12 +161,6 @@ export async function getPlaylist(userId, id) {
      ORDER BY pt.position ASC`,
     [id],
   );
-  const { rows: collabRows } = await pool.query(
-    `SELECT c.user_id, c.role, u.name
-     FROM playlist_collaborators c JOIN users u ON u.id = c.user_id
-     WHERE c.playlist_id = $1 ORDER BY c.added_at ASC`,
-    [id],
-  );
   const tracks = trackRows
     .filter(r => r.id != null)
     .map(r => ({
@@ -164,11 +170,22 @@ export async function getPlaylist(userId, id) {
       album:       r.album,
       language:    r.language,
       durationSec: r.duration_sec,
-      streamUrl:   r.stream_url,
+      // Anonymous public viewers (role null) get NO stream URL — the public link
+      // is a view-only teaser, not free unauthenticated streaming.
+      streamUrl:   role ? r.stream_url : null,
       imageUrl:    r.raw?.imageUrl ?? null,
     }));
   const row = meta[0];
-  const collaborators = collabRows.map(c => ({ userId: c.user_id, name: c.name, role: c.role }));
+  let collaborators = [];
+  if (includeCollaborators) {
+    const { rows: collabRows } = await pool.query(
+      `SELECT c.user_id, c.role, u.name
+       FROM playlist_collaborators c JOIN users u ON u.id = c.user_id
+       WHERE c.playlist_id = $1 ORDER BY c.added_at ASC`,
+      [id],
+    );
+    collaborators = collabRows.map(c => ({ userId: c.user_id, name: c.name, role: c.role }));
+  }
   return {
     id:            row.id,
     name:          row.name,
@@ -176,13 +193,52 @@ export async function getPlaylist(userId, id) {
     trackCount:    tracks.length,
     coverImageUrl: row.cover_raw?.imageUrl ?? null,
     updatedAt:     Number(row.updated_at),
-    role,                                   // the caller's role: owner | editor | viewer
+    role,                                   // the caller's role: owner | editor | viewer | null
     canEdit:       canEdit(role),
-    shared:        collaborators.length > 0 || role !== 'owner',
+    shared:        collaborators.length > 0 || (!!role && role !== 'owner'),
     ownerName:     row.owner_name ?? null,
+    isPublic:      row.is_public ?? false,
+    publicId:      row.public_id ?? null,
     collaborators,
     tracks,
   };
+}
+
+export async function getPlaylist(userId, id) {
+  const role = await requireView(userId, id);
+  return loadPlaylistView(id, { role });
+}
+
+// Anonymous, view-only fetch by the public share id. 404s (not 403) when the id
+// is unknown OR the playlist isn't public — same "hide existence" posture as
+// requireView. No auth, no collaborator list, role null (→ canEdit false).
+export async function getPublicPlaylist(publicId) {
+  const { rows } = await pool.query(
+    `SELECT id FROM playlists WHERE public_id = $1 AND is_public = TRUE`,
+    [String(publicId ?? '')],
+  );
+  if (!rows.length) notFound();
+  return loadPlaylistView(rows[0].id, { role: null, includeCollaborators: false });
+}
+
+// Owner toggles public visibility. Enabling mints a public_id on first use and
+// reuses it on re-enable (old links revive); disabling keeps the id but the
+// public fetch requires is_public = TRUE, so the link 404s while off.
+export async function setPlaylistVisibility(userId, id, isPublic) {
+  const access = await getAccess(userId, id);
+  if (!access.exists) notFound();
+  if (access.role !== 'owner') forbidden('only the owner can change who can see this playlist');
+  const { rows } = isPublic
+    ? await pool.query(
+        `UPDATE playlists SET is_public = TRUE, public_id = COALESCE(public_id, $2)
+         WHERE id = $1 RETURNING is_public, public_id`,
+        [id, newPublicId()],
+      )
+    : await pool.query(
+        `UPDATE playlists SET is_public = FALSE WHERE id = $1 RETURNING is_public, public_id`,
+        [id],
+      );
+  return { isPublic: rows[0].is_public, publicId: rows[0].public_id };
 }
 
 // Cheap change cursor for collaboration polling — just the updated_at timestamp.

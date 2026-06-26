@@ -85,3 +85,25 @@ export async function removePlaylistCollaborator(id, userId) {
   const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/collaborators/${encodeURIComponent(userId)}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`remove failed (${res.status})`);
 }
+
+// ── Public view-only sharing ─────────────────────────────────────────
+// Owner toggles whether anyone with the link can view. Returns { isPublic, publicId }.
+export async function setPlaylistVisibility(id, isPublic) {
+  const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/visibility`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ public: isPublic }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `couldn't update sharing (${res.status})`);
+  return body;   // { isPublic, publicId }
+}
+
+// PUBLIC read by share id — no auth, plain fetch (works signed-out). Returns the
+// read-only playlist view, or throws on 404 (unknown / not public).
+export async function getPublicPlaylist(publicId, { signal } = {}) {
+  const res = await fetch(`/api/public/playlists/${encodeURIComponent(publicId)}`, { signal });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `playlist not found (${res.status})`);
+  return body;
+}
