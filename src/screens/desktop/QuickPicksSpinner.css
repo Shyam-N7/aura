@@ -136,11 +136,18 @@
   background: var(--color-accent);
   opacity: .9;
 }
+/* "flick to spin" hint — directional arrows flanking the label. Hidden by default;
+   the spinner toggles .is-on whenever the wheel scrolls into view (replays each
+   time), then drops it after a few seconds. The arrows nudge in their spin
+   direction to suggest the gesture. */
 .aura-qps__hub-hint {
   position: absolute;
   top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
   font-family: var(--font-sans);
   font-size: 9px;
@@ -148,13 +155,23 @@
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--color-ink-faint);
-  animation: aura-qps-hint 1s ease 5s forwards;   /* fade out after a few seconds */
+  opacity: 0;
+  transition: opacity 500ms ease;
 }
-@keyframes aura-qps-hint { to { opacity: 0; } }
+.aura-qps__hub-hint.is-on { opacity: 1; }
+.aura-qps__hint-arrow {
+  flex: none;
+  color: var(--color-accent);
+  opacity: .85;
+}
+.aura-qps__hint-arrow--l { animation: aura-qps-nudge-l 1.5s ease-in-out infinite; }
+.aura-qps__hint-arrow--r { animation: aura-qps-nudge-r 1.5s ease-in-out infinite; }
+@keyframes aura-qps-nudge-l { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-26deg); } }
+@keyframes aura-qps-nudge-r { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(26deg); } }
 
 @media (prefers-reduced-motion: reduce) {
   .aura-qps__card { animation: none; opacity: 1; }
   .aura-qps__aura i { animation: none; opacity: .4; }
   .aura-qps__hub-ring { animation: none; }
-  .aura-qps__hub-hint { animation: none; }
+  .aura-qps__hint-arrow { animation: none; }
 }

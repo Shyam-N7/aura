@@ -23,15 +23,23 @@
    in/out + the back-to-top contraction). At rest there is no filter. */
 .aura-dock--morphing { filter: url(#aura-goo); }
 /* During the goo window, drop the backdrop-filter and switch the bead + capsule
-   to an opaque-ish theme fill so the metaball has solid alpha to merge (`filter`
-   and `backdrop-filter` fight, and the goo's alpha threshold erases near-
-   transparent glass). Restored at rest. --color-surface is theme-aware, so this
-   one rule covers dusk/midnight/bloom. */
-.aura-dock--morphing .aura-dock__capsule,
-.aura-dock--morphing .aura-dock__bead {
+   to a solid fill so the metaball has opaque alpha to merge (`filter` and
+   `backdrop-filter` fight, and the goo's alpha threshold erases near-transparent
+   glass). Two things made midnight show only the bead: (1) the `.theme-midnight`
+   capsule/bead rules below have equal specificity but come LATER, so they won the
+   `background` cascade and left the capsule on its faint 7%-white glass gradient
+   with the backdrop-filter stripped → see-through; (2) --color-surface ≈ --color-bg
+   in midnight, so even the intended surface fill barely separated from the page.
+   Fix: out-specify the theme rules (`.aura-dock.aura-dock--morphing` = 3 classes),
+   lift the fill a few % toward white (imperceptible in light, lifts the near-black
+   surface clear of the dark page), and add a theme-aware hairline so the contracting
+   silhouette + melting blobs read in every theme. Restored at rest. */
+.aura-dock.aura-dock--morphing .aura-dock__capsule,
+.aura-dock.aura-dock--morphing .aura-dock__bead {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background: color-mix(in srgb, var(--color-surface), transparent 6%);
+  background: color-mix(in srgb, var(--color-surface), white 9%);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 80%);
 }
 
 /* ── Nav capsule (the glass pill) ─────────────────────────────────────────── */

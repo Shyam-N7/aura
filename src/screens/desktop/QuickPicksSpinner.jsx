@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { cleanTitle } from '../../utils/title';
 import './QuickPicksSpinner.css';
@@ -11,10 +11,12 @@ import './QuickPicksSpinner.css';
 //
 // The ring is `touch-action: none` so the angular spin is butter-smooth (the
 // browser never claims the gesture mid-flick → no pointercancel stutter). To
-// keep the page scrollable, the gesture's INTENT is locked on the first ~6px:
-// horizontal → spin (angular), vertical → we scroll the page ourselves (the
-// .aura-dh container) with matching fling momentum. A flick spins, a vertical
-// drag scrolls, a tap plays the disc (morphing the cover up into the player).
+// keep the page scrollable, the gesture's INTENT is locked on the first ~10px:
+// a clearly VERTICAL drag scrolls the page ourselves (the .aura-dh container)
+// with matching fling momentum — reliable even on the wheel's sides, where the
+// tangent runs vertical; any other drag falls to a tangential test, so a
+// curved/sideways flick spins the wheel. A tap plays the disc (morphing the
+// cover up into the player).
 const FRICTION   = 0.96;   // velocity retained per frame while coasting/flinging
 const MIN_VEL    = 0.08;   // deg/frame below which the spin coast stops
 const MAX_VEL    = 46;     // deg/frame cap so a hard flick can't go wild
@@ -22,6 +24,8 @@ const TAP_SLOP   = 7;      // total deg of travel under which the gesture is a t
 const INTENT_PX  = 10;     // px of travel before spin-vs-scroll is decided (also the tap slop:
                            //   under this, the gesture stays a tap so a slightly-sloppy tap still plays)
 const SCROLL_MAX = 60;     // px/frame cap for the scroll fling
+const VERT_SCROLL_RATIO = 1.3;  // at intent-lock, |dy| ≥ |dx|*this ⇒ always scroll: a deliberate
+                                //   vertical drag beats the wheel's tangent so scrolling up is reliable
 
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -56,17 +60,22 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
       const dx = e.clientX - start.current.x;
       const dy = e.clientY - start.current.y;
       if (Math.hypot(dx, dy) <= INTENT_PX) return;
-      // Spin vs scroll by whether the drag ORBITS the centre (tangential =
-      // rotation), not by horizontal-vs-vertical. To rotate a wheel you drag
-      // along its tangent, and at the sides/diagonals (e.g. the bottom-right)
-      // that tangent is vertical-ish — so the old |dx|>=|dy| test misread those
-      // rotations as a page scroll (the dead zone). `tang` is the share of the
-      // move that runs along the tangent at the grab point; ≥ half → spin.
-      const px = start.current.x - center.current.x;
-      const py = start.current.y - center.current.y;
-      const plen = Math.hypot(px, py) || 1;
-      const tang = Math.abs(dx * (-py / plen) + dy * (px / plen));
-      intent.current = tang >= Math.hypot(dx, dy) * 0.5 ? 'spin' : 'scroll';
+      // A clearly VERTICAL drag always scrolls the page — even on the wheel's
+      // left/right, where the tangent runs vertical and would otherwise read as a
+      // spin. This makes scrolling up past the wheel reliable everywhere; spinning
+      // still comes from a sideways or curved/circular flick (the tangential test
+      // below). `tang` is the share of the move that runs along the tangent at the
+      // grab point; ≥ half → spin (this catches the side/diagonal rotations the old
+      // |dx|>=|dy| test misread as scroll).
+      if (Math.abs(dy) >= Math.abs(dx) * VERT_SCROLL_RATIO) {
+        intent.current = 'scroll';
+      } else {
+        const px = start.current.x - center.current.x;
+        const py = start.current.y - center.current.y;
+        const plen = Math.hypot(px, py) || 1;
+        const tang = Math.abs(dx * (-py / plen) + dy * (px / plen));
+        intent.current = tang >= Math.hypot(dx, dy) * 0.5 ? 'spin' : 'scroll';
+      }
       // Do NOT re-seed last.current here — the pointer-down angle (seeded in
       // onDown) is the correct reference, so the first spin delta captures the
       // rotation from finger-down to this lock point instead of dropping it
@@ -154,6 +163,27 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
     ctrl.current?.abort();
   }, []);
 
+  // Replay the "flick to spin" hint whenever the wheel scrolls into view — not
+  // just on mount. Shows on enter, fades after a few seconds, and re-arms each
+  // time it re-enters so it greets the user every time they come back to it.
+  const [hinting, setHinting] = useState(false);
+  useEffect(() => {
+    const el = ringRef.current;
+    if (!el) return undefined;
+    let timer = 0;
+    const io = new IntersectionObserver(([entry]) => {
+      clearTimeout(timer);
+      if (entry.isIntersecting) {
+        setHinting(true);
+        timer = setTimeout(() => setHinting(false), 4200);
+      } else {
+        setHinting(false);   // reset so the next entry replays
+      }
+    }, { threshold: 0.4 });
+    io.observe(el);
+    return () => { io.disconnect(); clearTimeout(timer); };
+  }, []);
+
   const n = tracks.length;
   if (!n) return null;
 
@@ -189,7 +219,21 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
           <span className="aura-qps__hub-ring aura-qps__hub-ring--a"/>
           <span className="aura-qps__hub-ring aura-qps__hub-ring--b"/>
           <span className="aura-qps__hub-dot"/>
-          <span className="aura-qps__hub-hint">flick to spin</span>
+          <span className={`aura-qps__hub-hint${hinting ? ' is-on' : ''}`}>
+            <svg className="aura-qps__hint-arrow aura-qps__hint-arrow--l"
+              width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 9a9 9 0 1 1 2.13 9.36L1 14"/>
+            </svg>
+            flick to spin
+            <svg className="aura-qps__hint-arrow aura-qps__hint-arrow--r"
+              width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </span>
         </div>
       </div>
     </div>
