@@ -265,6 +265,14 @@ export function getActiveExplicitOff() {
   return m ? !!m.explicitOff : !!u.familyMode;
 }
 
+// Whether the "sensing" welcome intro is enabled for this user. Reads the cached
+// identity synchronously (mirrors hasOnboarded) so App.jsx's screen initializer
+// can decide before first paint. Defaults to ON when the field is absent (a
+// session cached before this preference existed) so behaviour is unchanged.
+export function showSensing() {
+  return _user?.showSensing !== false;
+}
+
 export function logout() {
   // Clear the cached identity immediately (UI returns to sign-in), then tell the
   // server to clear the httpOnly session cookie so a reload can't re-auth.

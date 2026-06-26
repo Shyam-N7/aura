@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { logout, useAuth, enableFamilyMode, disableFamilyMode } from '../lib/auth';
+import { logout, useAuth, enableFamilyMode, disableFamilyMode, updatePreferences } from '../lib/auth';
 import { confirm } from '../lib/confirm';
 import { clearPostAuthPath } from '../lib/routes';
 import { exportMyData, deleteMyAccount } from '../api/account';
@@ -39,6 +39,24 @@ export function SettingsPanel({ t, setTweak }) {
   const [pinOpen, setPinOpen] = useState(false);
   const [pin, setPin] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
+
+  // Welcome-screen (the "sensing" intro) toggle. Default on for accounts cached
+  // before this preference existed. When on, the intro still shows at most once a
+  // day and is tap-to-skip — this is the hard on/off.
+  const sensingOn = user?.showSensing !== false;
+  const [sensingBusy, setSensingBusy] = useState(false);
+  const toggleSensing = async () => {
+    if (sensingBusy) return;
+    setSensingBusy(true);
+    try {
+      await updatePreferences({ showSensing: !sensingOn });
+      toast(sensingOn ? 'welcome screen is off.' : 'welcome screen is on.');
+    } catch (err) {
+      toast(`couldn't update — ${err.message}`);
+    } finally {
+      setSensingBusy(false);
+    }
+  };
 
   const submitFamily = async (e) => {
     e.preventDefault();
@@ -188,6 +206,22 @@ export function SettingsPanel({ t, setTweak }) {
             </button>
           </form>
         )}
+      </div>
+
+      <p className="aura-set__group-label">welcome screen</p>
+      <div className="aura-set__group">
+        <button type="button" role="switch" aria-checked={sensingOn}
+          className="aura-set__row" disabled={sensingBusy} onClick={toggleSensing}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">welcome screen</span>
+            <span className="aura-set__row-caption">
+              {sensingOn
+                ? 'a short intro reads your mood when you open aura. shows once a day — tap it to skip.'
+                : 'skipped — you go straight to your home.'}
+            </span>
+          </span>
+          <span className={`aura-set__switch ${sensingOn ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
       </div>
 
       <p className="aura-set__group-label">privacy & data</p>

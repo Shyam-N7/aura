@@ -1,46 +1,64 @@
 import { useState, useEffect } from 'react';
 import { MonoLabel, BreathingDot } from '../components/primitives';
-import { formatLongStamp, partOfDay } from '../hooks/useNow';
+import { partOfDay } from '../hooks/useNow';
 import { getCurrentMood } from '../api/mood';
+import { getTopArtists } from '../api/stats';
 import './SensingScreen.css';
 
-export function SensingScreen({ mood, onReady }) {
-  // Snapshot the stamp + time-of-day at mount so the scripted intro doesn't
-  // rewind if the minute rolls over mid-animation, and the copy matches the
-  // actual hour (morning / afternoon / evening / night), not a fixed word.
+export function SensingScreen({ name, djName, mood, onReady }) {
+  // Snapshot the greeting at mount so the part-of-day / name don't shift if the
+  // clock rolls over mid-animation. First name only — the greeting stays short.
   const [intro] = useState(() => {
-    const d = new Date();
-    return { stamp: formatLongStamp(d), part: partOfDay(d) };
+    const part = partOfDay();
+    const who = (name || djName || '').trim().split(/\s+/)[0];
+    return { greeting: who ? `Good ${part}, ${who}` : `Good ${part}`, part };
   });
+  // Live mood (with its song-grounded reason) + a one-line listening recap. Both
+  // are best-effort: the intro never waits on the network, and a new account with
+  // no history simply shows the neutral fallback line — no invented copy.
+  const [snapshot, setSnapshot] = useState(null);
+  const [recap, setRecap] = useState(null);
+  useEffect(() => {
+    const ctl = new AbortController();
+    getCurrentMood({ signal: ctl.signal }).then(setSnapshot).catch(() => {});
+    getTopArtists({ limit: 1, days: 30, signal: ctl.signal })
+      .then(list => { const top = list?.[0]?.artist; if (top) setRecap(`back on a ${top} run`); })
+      .catch(() => {});
+    return () => ctl.abort();
+  }, []);
+  // Only trust a confident read (same threshold NavRail uses); else fall back to
+  // the provided default mood and show no reason.
+  const confident = snapshot?.mood && snapshot.confidence >= 0.5;
+  const liveMood = confident ? snapshot.mood : mood;
+  const reason   = confident ? snapshot.reason : null;
+
+  // The recap line slots in when it's ready; until then (and for no-history
+  // accounts) the time-of-day line holds its place. Recomputed each render so a
+  // late recap upgrades the line in place.
   const lines = [
-    { t: 200,  text: intro.stamp },
+    { t: 200,  text: intro.greeting },
     { t: 1100, text: 'Reading the moment' },
-    { t: 2000, text: `Matching tracks to your ${intro.part}` },
+    { t: 2000, text: recap || `Matching tracks to your ${intro.part}` },
     { t: 2900, text: 'Almost there' },
   ];
   const [shown, setShown] = useState(0);
   const [reveal, setReveal] = useState(false);
-  // Reflect the actually-sensed mood when we have a confident read (same source
-  // NavRail uses); fall back to the provided default for new accounts with no
-  // listening history yet — so this never shows a non-mood placeholder.
-  const [snapshot, setSnapshot] = useState(null);
-  useEffect(() => {
-    const ctl = new AbortController();
-    getCurrentMood({ signal: ctl.signal }).then(setSnapshot).catch(() => {});
-    return () => ctl.abort();
-  }, []);
-  const liveMood = (snapshot?.mood && snapshot.confidence >= 0.5) ? snapshot.mood : mood;
   useEffect(() => {
     const tt = lines.map((l, i) => setTimeout(() => setShown(i + 1), l.t));
     const r = setTimeout(() => setReveal(true), 3700);
     const d = setTimeout(onReady, 5900);
     return () => { tt.forEach(clearTimeout); clearTimeout(r); clearTimeout(d); };
-    // One-shot mount effect — lines/onReady are stable for this component's lifetime.
+    // One-shot mount effect — line timings/onReady are stable for this component's
+    // lifetime; line TEXT is read from the live render, not this closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tap (or Enter/Space) anywhere skips straight to home. The mount effect's
+  // cleanup clears the pending timers when this unmounts, so onReady fires once.
   return (
-    <div className="absolute inset-0 bg-bg text-ink flex flex-col pt-[72px] pb-10 px-8">
+    <div className="absolute inset-0 bg-bg text-ink flex flex-col pt-[72px] pb-10 px-8 cursor-pointer"
+      onClick={onReady} role="button" tabIndex={0} aria-label="Skip intro"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onReady(); } }}>
       <span className="inline-flex items-center gap-2">
         <span className="aura-sensing-dot-wrap">
           <span className="aura-sensing-dot-ring"/>
@@ -68,8 +86,9 @@ export function SensingScreen({ mood, onReady }) {
         >{liveMood}.</div>
         <div
           className={`aura-sensing-tagline ${reveal ? 'aura-sensing-tagline--revealed' : ''} mt-3.5 font-sans text-[13px] text-ink-faint`}
-        >Setting up your home…</div>
+        >{reveal && reason ? reason : 'Setting up your home…'}</div>
       </div>
+      <MonoLabel className="text-ink-faint text-center mt-4" size={9}>tap to skip</MonoLabel>
     </div>
   );
 }

@@ -110,7 +110,8 @@ import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
-import { useAuth, setActiveMode } from './lib/auth';
+import { useAuth, setActiveMode, showSensing } from './lib/auth';
+import { sensingShownToday, markSensingShown } from './lib/sensing';
 import { dropExplicit } from './lib/explicit';
 import { toast } from './lib/toast';
 import { confirm } from './lib/confirm';
@@ -174,8 +175,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     setRailCollapsed = () => {},
   } = rails;
   // SensingScreen is a 402×874 mobile-first welcome — looks lost on desktop
-  // viewports where the orb floats in empty space. Skip it at desktop+.
-  const shouldSkipSensing = t.skipSensing || isDesktop;
+  // viewports where the orb floats in empty space. Skip it at desktop+. Also
+  // skip when the user has turned it off (a real preference) or has already seen
+  // it today (once-per-day cadence) — that fixed ~6s intro on every cold load was
+  // the frustration. The dev `skipSensing` tweak still forces it off everywhere.
+  const shouldSkipSensing = t.skipSensing || isDesktop || !showSensing() || sensingShownToday();
   const isOnboarded = hasOnboarded();
   // If the user lands on a deep link, parse it so route params survive even
   // when the sensing/onboarding gate redirects them first. (Legacy `#/...`
@@ -286,6 +290,14 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     return m ? !!m.explicitOff : !!user?.familyMode;
   }, [user, activeMode]);
   const pool = useMemo(() => dropExplicit(featured.tracks, explicitOff), [featured.tracks, explicitOff]);
+
+  // Record that the welcome intro played today, so the once-per-day cadence skips
+  // it on subsequent cold loads (see shouldSkipSensing). Runs once on mount,
+  // reading the initial screen decision.
+  useEffect(() => {
+    if (screen === 'sensing') markSensingShown();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // If an explicit-off mode is switched on mid-session (or restored on load),
   // prune explicit tracks already sitting in the live queue — keep the current
@@ -1163,7 +1175,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   if (screen === 'sensing') {
     return (
       <>
-        <SensingScreen djName={t.djName} mood={t.mood} onReady={() => setScreen(hasOnboarded() ? 'home' : 'onboarding')}/>
+        <SensingScreen name={user?.name} djName={user?.djName || t.djName} mood={t.mood} onReady={() => setScreen(hasOnboarded() ? 'home' : 'onboarding')}/>
         <TweaksHost t={t} setTweak={setTweak}/>
       </>
     );

@@ -401,6 +401,15 @@ const migrations = [
       ALTER TABLE users ADD COLUMN login_locked_until BIGINT;
     `);
   },
+  async function v15_sensing_preference(client) {
+    // User toggle for the "sensing" welcome intro (the animated mood-reveal shown
+    // before home on mobile/tablet). DEFAULT TRUE preserves today's behaviour for
+    // every existing account; the client adds a once-per-day + tap-to-skip cadence
+    // on top of this on/off flag.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN show_sensing BOOLEAN NOT NULL DEFAULT TRUE;
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

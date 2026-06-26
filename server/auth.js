@@ -37,6 +37,7 @@ export function sanitizeUser(row) {
     familyMode:     row.family_mode ?? false,
     activeMode:     row.active_mode ?? 'everyday',
     modes:          buildModesView(row.modes_state ?? {}),
+    showSensing:    row.show_sensing ?? true,
   };
 }
 
@@ -396,7 +397,7 @@ function boundedJsonArray(value, maxLen) {
 }
 
 router.patch('/me/preferences', requireAuth, asyncHandler(async (req, res) => {
-  const { hasOnboarded, seedArtists, seedLanguages, seedMood, djName } = req.body ?? {};
+  const { hasOnboarded, seedArtists, seedLanguages, seedMood, djName, showSensing } = req.body ?? {};
   const bad = (msg) => res.status(400).json({ error: msg, code: 'bad_input' });
   const sets = [];
   const vals = [];
@@ -423,6 +424,7 @@ router.patch('/me/preferences', requireAuth, asyncHandler(async (req, res) => {
     if (!name || name.length > MAX_DJ_NAME) return bad('invalid djName');
     sets.push(`dj_name = $${i++}`); vals.push(name);
   }
+  if (showSensing !== undefined) { sets.push(`show_sensing = $${i++}`); vals.push(!!showSensing); }
 
   if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
 
