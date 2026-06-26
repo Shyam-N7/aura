@@ -840,6 +840,60 @@ app.get('/api/events/recent', requireAuth, async (req, res) => {
   }
 });
 
+// ── Open Graph for public playlist links (/p/:publicId) ──────────────────
+// vercel.json rewrites /p/* to this function (NOT to the static index.html), so
+// link-preview crawlers (WhatsApp/Discord/Slack/iMessage/Twitter) get
+// per-playlist OG tags instead of the generic landing card. Real browsers get
+// the SAME built SPA shell (with its hashed bootstrap) and hydrate into
+// PublicPlaylistScreen — only the <title>/og:*/twitter:* meta differ. Dev is
+// unaffected: Vite serves /p/* as the SPA, so this route is reached only in prod.
+const escAttr = (s) =>
+  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function injectPlaylistOg(html, { title, description, image, url }) {
+  const t = escAttr(title), d = escAttr(description), img = escAttr(image), u = escAttr(url);
+  return html
+    .replace(/<title>[^<]*<\/title>/, `<title>${t}</title>`)
+    .replace(/(<meta name="description" content=")[^"]*(")/, `$1${d}$2`)
+    .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${u}$2`)
+    .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${t}$2`)
+    .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${d}$2`)
+    .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${u}$2`)
+    .replace(/(<meta property="og:image" content=")[^"]*(")/, `$1${img}$2`)
+    .replace(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${t}$2`)
+    .replace(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${d}$2`)
+    .replace(/(<meta name="twitter:image" content=")[^"]*(")/, `$1${img}$2`);
+}
+
+app.get('/p/:publicId', async (req, res) => {
+  // Fixed origin (PUBLIC_BASE_URL) to fetch the built shell — avoids trusting a
+  // spoofable Host header; falls back to the request host if unset (local/preview).
+  const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
+  try {
+    // The built SPA shell uses absolute /assets/ paths, so it boots fine at /p/:id.
+    const html = await fetch(`${base}/index.html`).then(r => r.text());
+    let pl = null;
+    try { pl = await getPublicPlaylist(req.params.publicId); }
+    catch { /* unknown / private → serve the generic card, not a 404 page */ }
+    const out = pl
+      ? injectPlaylistOg(html, {
+          title:       `${pl.name} · AURA`,
+          description: `${pl.name}${pl.ownerName ? ` · a playlist by ${pl.ownerName}` : ''} on AURA${pl.trackCount ? ` · ${pl.trackCount} tracks` : ''}.`,
+          image:       pl.coverImageUrl || `${base}/og.png`,
+          url:         `${base}/p/${req.params.publicId}`,
+        })
+      : html;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(out);
+  } catch (err) {
+    // Shell fetch failed (rare) — bounce to the SPA root (NOT back to /p/:id,
+    // which would re-enter this handler and loop) so the app still loads.
+    console.error('[og] shell fetch failed:', err?.message ?? err);
+    res.redirect(302, '/');
+  }
+});
+
 // Terminal handlers, mounted LAST. notFound answers any unmatched /api path with
 // JSON 404; errorMiddleware is the single place that turns a thrown/forwarded
 // error into a scrubbed client response (and logs the full detail server-side).
