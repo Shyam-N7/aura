@@ -1,6 +1,6 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { makeRateStore } from './rateLimitStore.js';
 import { pool } from './db.js';
 import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
@@ -9,7 +9,7 @@ import { getFeatured } from './featured.js';
 import { getLyricsForTrack } from './lyrics.js';
 import {
   generationEnabled, saveLyrics, enqueueLyricJob, dispatchJob,
-  completeFromPrediction, processQueue,
+  completeFromPrediction, processQueue, reserveUserGenSlot,
 } from './lyricsJobs.js';
 import { recordLyricsMetric, getLyricsStats } from './lyricsMetrics.js';
 import { LYRICS_WEBHOOK_SECRET, REPLICATE_WEBHOOK_SIGNING_SECRET, CRON_SECRET } from './config.js';
@@ -21,13 +21,14 @@ import { getSonicDna } from './sonicDna.js';
 import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
 import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, getPublicPlaylist } from './playlists.js';
 import { getLibrarySummary } from './library.js';
+import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getAutoPlaylists } from './autoPlaylists.js';
 import { getDiscoverHome } from './discover.js';
 import { getCatalogPlaylistDetail } from './catalog.js';
 import { getBridgeTracks, getBridgeSuggestion } from './bridges.js';
-import { getRelatedTracks } from './related.js';
+import { getRelatedTracks, demoteSkipped } from './related.js';
 import { getArtistDetails, getAlbumDetail } from './artists.js';
 import { generateTalk, sanitizeSuggestions } from './prompts/talk.js';
 import { inferIfStale, refreshMood } from './mood.js';
@@ -37,7 +38,7 @@ import authRouter from './auth.js';
 import familyRouter from './family.js';
 import modesRouter from './modesRoutes.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
-import { requireAuth, optionalAuth } from './middleware/auth.js';
+import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middleware/auth.js';
 import { clientError, errorMiddleware, notFound } from './middleware/errors.js';
 
 // The configured Express app, with NO side effects at import time: it neither
@@ -78,11 +79,21 @@ app.set('trust proxy', 1);
 // A prefix opts a limiter into the Upstash shared store (global across serverless
 // instances); without one (or when Upstash isn't configured) it uses the
 // in-memory default. (security: #4)
-function buildLimiter(windowMs, limit, message, prefix) {
+function buildLimiter(windowMs, limit, message, prefix, keyGenerator) {
   const base = { windowMs, limit, standardHeaders: true, legacyHeaders: false, message: { error: message } };
+  if (keyGenerator) base.keyGenerator = keyGenerator;
   const store = prefix ? makeRateStore(prefix) : undefined;
   return rateLimit(store ? { ...base, store } : base);
 }
+// Cost routes are keyed by ACCOUNT when signed in (else per-IP) so one account
+// can't multiply its paid-LLM budget across many IPs/devices — the per-IP key let
+// a shared/leaked account drive N× the spend. peekUserId only verifies the token
+// signature (no DB), so this stays cheap on the hot path. (security: per-account cost)
+const accountOrIpKey = (req) => {
+  const uid = peekUserId(req);
+  if (uid) return `u:${uid}`;
+  return req.ip ? ipKeyGenerator(req.ip) : 'ip:unknown';
+};
 // Broad catch-all so one IP can't flood the API. Stays IN-MEMORY: it fires on
 // every /api request, so a shared-store round-trip here would tax the hot path;
 // per-instance flood-guarding is fine for this.
@@ -92,7 +103,7 @@ const generalLimiter = buildLimiter(5 * 60 * 1000, 600, 'too many requests — s
 const authLimiter = buildLimiter(15 * 60 * 1000, 40, 'too many attempts — try again in a few minutes.', 'auth');
 // Protects the unauthenticated, cost-bearing routes (Gemini, lyrics, upstream)
 // from spend/DoS on cache misses — SHARED store, global across instances.
-const costLimiter = buildLimiter(5 * 60 * 1000, 60, 'too many requests — slow down a moment.', 'cost');
+const costLimiter = buildLimiter(5 * 60 * 1000, 60, 'too many requests — slow down a moment.', 'cost', accountOrIpKey);
 
 app.use('/api', generalLimiter);
 app.use('/api/auth', authLimiter);
@@ -194,11 +205,14 @@ app.get('/api/catalog/track/:id', async (req, res) => {
   }
 });
 
-app.get('/api/tracks/:id/related', async (req, res) => {
+app.get('/api/tracks/:id/related', optionalAuth, async (req, res) => {
   try {
     const lang = req.query.lang ? String(req.query.lang) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const tracks = await getRelatedTracks(req.params.id, { lang, limit });
+    let tracks = await getRelatedTracks(req.params.id, { lang, limit });
+    // Car Mode smart queue: bias away from songs this user skips (per-user,
+    // post-cache). Other modes are unchanged.
+    if (req.query.mode === 'car' && req.userId) tracks = await demoteSkipped(req.userId, tracks);
     res.json({ tracks });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -314,14 +328,22 @@ app.get('/api/lyrics/:track_id', optionalAuth, async (req, res) => {
     // paid Replicate job stops an unauthenticated visitor from draining the daily
     // generation budget on arbitrary track ids. (security: M6)
     if (generationEnabled() && req.userId) {
-      await saveLyrics(track_id, { source: 'pending', synced: false, payload: {} });
-      const job = await enqueueLyricJob(track_id);
-      if (job.status === 'queued') {
-        try { await dispatchJob(track_id); }
-        catch (err) { console.warn('[lyrics] dispatch failed; reaper will retry:', err.message); }
+      // Per-user daily ceiling on DISTINCT tracks sent to generation, so one account
+      // can't drain the global daily cap. Reserve BEFORE writing the shared 'pending'
+      // row — a capped request must not poison the cache (another, under-cap user
+      // should still be able to trigger this track). (security: per-account cost)
+      if (await reserveUserGenSlot(req.userId, track_id)) {
+        await saveLyrics(track_id, { source: 'pending', synced: false, payload: {} });
+        const job = await enqueueLyricJob(track_id);
+        if (job.status === 'queued') {
+          try { await dispatchJob(track_id); }
+          catch (err) { console.warn('[lyrics] dispatch failed; reaper will retry:', err.message); }
+        }
+        return respond({ available: false, synced: false, pending: true },
+          { cacheHit: false, source: 'pending', synced: false });
       }
-      return respond({ available: false, synced: false, pending: true },
-        { cacheHit: false, source: 'pending', synced: false });
+      return respond({ available: false, synced: false, capped: true },
+        { cacheHit: false, source: 'capped', synced: false });
     }
 
     await saveLyrics(track_id, { source: 'none', synced: false, payload: {} });
@@ -377,6 +399,9 @@ app.get('/api/lyrics-jobs/process', async (req, res) => {
   const authed = !!CRON_SECRET && safeCompare(bearer, CRON_SECRET);
   if (!authed) return res.status(401).json({ error: 'unauthorized' });
   try {
+    // Daily housekeeping — prune expired/revoked sessions (independent of lyrics
+    // generation). Best-effort: never let it fail the reaper.
+    await sweepSessions().catch((e) => console.warn('[sessions] sweep failed:', e?.message ?? e));
     res.json(await processQueue());
   } catch (err) {
     res.status(500).json({ error: clientError(err) });
@@ -508,6 +533,37 @@ app.get('/api/stats/recently-played', requireAuth, async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 10;
     res.json({ tracks: await getRecentlyPlayed(req.userId, { limit }) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// ── Multi-device playback awareness (near-real-time via heartbeat + poll) ──
+// Cheap DB-only routes (generalLimiter, not the LLM cost limiter). The playing
+// device heartbeats its current track into its own session row; other devices
+// poll /now to show a passive "playing on <device>" note; /resume powers
+// cross-device "continue where you left off". (parallel-usage awareness)
+app.post('/api/playback/heartbeat', requireAuth, async (req, res) => {
+  try {
+    const { track, isPlaying, progress } = req.body ?? {};
+    await recordHeartbeat(req.sessionId, req.userId, { track, isPlaying, progress });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.get('/api/playback/now', requireAuth, async (req, res) => {
+  try {
+    res.json({ playing: await getNowPlaying(req.userId, req.sessionId) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.get('/api/playback/resume', requireAuth, async (req, res) => {
+  try {
+    res.json({ resume: await getResume(req.userId, req.sessionId) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
@@ -803,10 +859,12 @@ app.get('/api/public/playlists/:publicId', async (req, res) => {
 const EVENT_KINDS = new Set(['play', 'pause', 'skip', 'seek', 'end']);
 
 app.post('/api/events', requireAuth, async (req, res) => {
-  const { track_id, kind, position_sec, mood, language, mode } = req.body ?? {};
+  const { track_id, kind, position_sec, mood, language, mode, source } = req.body ?? {};
   if (!track_id || !EVENT_KINDS.has(kind)) {
     return res.status(400).json({ error: 'invalid track_id or kind' });
   }
+  // Provenance for the future reco engine: the queue's source label. Bounded.
+  const src = source != null ? String(source).slice(0, 80) : null;
   try {
     // The track must already be in our catalog cache (it's upserted whenever a
     // track is loaded/played). Check LOCALLY only — never getTrackById here: a
@@ -816,9 +874,9 @@ app.post('/api/events', requireAuth, async (req, res) => {
     const known = await pool.query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
     if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
     await pool.query(
-      `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language, mode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood ?? null, language ?? null, mode ?? null],
+      `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language, mode, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood ?? null, language ?? null, mode ?? null, src],
     );
     res.json({ ok: true });
   } catch (err) {

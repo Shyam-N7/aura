@@ -10,6 +10,6 @@ export async function exportMyData({ signal } = {}) {
 
 export async function deleteMyAccount() {
   const res = await fetchAuthed('/api/auth/me', { method: 'DELETE' });
-  if (!res.ok) throw new Error(`delete failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(`delete failed (${res.status})`), { status: res.status });
   return res.json();
 }

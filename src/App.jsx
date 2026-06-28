@@ -49,6 +49,7 @@ const lazyNamed = (loader, name) => lazy(() => loader().then(m => ({ default: m[
 const DesktopHome               = lazyNamed(() => import('./screens/desktop/DesktopHome'),               'DesktopHome');
 const DesktopPlayer             = lazyNamed(() => import('./screens/desktop/DesktopPlayer'),             'DesktopPlayer');
 const MobilePlayer              = lazyNamed(() => import('./screens/mobile/MobilePlayer'),               'MobilePlayer');
+const CarPlayer                 = lazyNamed(() => import('./screens/mobile/CarPlayer'),                  'CarPlayer');
 const DesktopJournal            = lazyNamed(() => import('./screens/desktop/DesktopJournal'),            'DesktopJournal');
 const DesktopDna                = lazyNamed(() => import('./screens/desktop/DesktopDna'),                'DesktopDna');
 const DesktopBridges            = lazyNamed(() => import('./screens/desktop/DesktopBridges'),            'DesktopBridges');
@@ -89,6 +90,11 @@ const SCREEN_LABELS = {
 
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useListeningRecorder } from './hooks/useListeningRecorder';
+import { usePlaybackPresence } from './hooks/usePlaybackPresence';
+import { useLikes } from './hooks/useLikes';
+import { useVoiceControl } from './hooks/useVoiceControl';
+import { NowPlayingElsewhere } from './components/NowPlayingElsewhere';
+import { onBroadcast } from './lib/broadcast';
 import { useMediaSession } from './hooks/useMediaSession';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
@@ -103,6 +109,10 @@ import { parsePath, pathIsActive } from './lib/routes';
 import { loadQueue, saveQueueSoon } from './lib/persistentQueue';
 import { savePosition, flush as flushPosition, loadPosition, clearPosition } from './lib/persistPosition';
 import { getTrack } from './api/catalog';
+import { getResume } from './lib/playback';
+import { talk } from './api/talk';
+import { matchLocalIntent } from './lib/voiceIntents';
+import { EQ_CLARITY } from './audio/eqConfig';
 import { getRelated } from './api/related';
 import { prefetchLyrics } from './api/lyrics';
 import { titleKey, cleanTitle } from './utils/title';
@@ -110,7 +120,7 @@ import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
-import { useAuth, setActiveMode, showSensing } from './lib/auth';
+import { useAuth, setActiveMode, showSensing, clearSession, applyBroadcastMode } from './lib/auth';
 import { sensingShownToday, markSensingShown } from './lib/sensing';
 import { dropExplicit } from './lib/explicit';
 import { toast } from './lib/toast';
@@ -323,7 +333,16 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // → activeMode changes → the featured pool refetches (re-seeded server-side).
   const switchMode = async (key) => {
     if (!key || key === activeMode) return;
-    try { await setActiveMode(key); }
+    try {
+      await setActiveMode(key);
+      // Switching to Car Mode jumps straight to the driving dashboard (big controls
+      // + hands-free) when there's something to play. The other entry — picking a
+      // song while already in car mode — opens it via the normal play/morph flow.
+      if (key === 'car' && isMobile && track && screen !== 'player') {
+        setPlayerReturn(screen);
+        setScreen('player');
+      }
+    }
     catch (err) { toast(err.message || 'could not switch mode'); }
   };
 
@@ -417,7 +436,54 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   viewRef.current = { tracks: viewTracks, idx: viewIdx, source: viewSource };
 
   const player = useAudioPlayer();
-  useListeningRecorder({ player, track, mood: t.mood, language: track?.language, mode: activeMode });
+  useListeningRecorder({ player, track, mood: t.mood, language: track?.language, mode: activeMode, source: queue.source });
+  // Near-real-time multi-device awareness — heartbeat this device + poll the others.
+  const othersPlaying = usePlaybackPresence({ track, playing, progress });
+  const { like } = useLikes();   // for hands-free "like" voice commands (Car Mode)
+
+  // Cross-tab sync on this device: a logout / mode-switch in one tab reflects here.
+  useEffect(() => onBroadcast((type, payload) => {
+    if (type === 'logout') clearSession();
+    else if (type === 'mode') applyBroadcastMode(payload);
+  }), []);
+
+  // Car Mode audio profile: force loudness leveling on + a vocal-presence EQ so
+  // music is loud AND vocals cut over car speakers. Transient — restored when you
+  // leave car mode (never overwrites the user's saved EQ / leveling preference).
+  useEffect(() => {
+    if (!player) return;
+    const car = activeMode === 'car';
+    player.setLevelForce?.(car);
+    player.setEqOverride?.(car ? EQ_CLARITY : null);
+  }, [player, activeMode]);
+
+  // Cross-device resume: on cold boot, if another device was recently playing a
+  // DIFFERENT track than this device's saved spot, offer to pick it up. Accepting
+  // writes the position (the load effect auto-seeks) and plays it.
+  const [resumeOffer, setResumeOffer] = useState(null);
+  useEffect(() => {
+    let stop = false;
+    getResume().then((r) => {
+      if (stop || !r?.track?.id) return;
+      const local = loadPosition();
+      const fresh = Date.now() - Number(r.at) < 24 * 60 * 60 * 1000;
+      const worthIt = r.progress > 0.02 && r.progress < 0.98;
+      if (fresh && worthIt && r.track.id !== local?.trackId && r.track.id !== track?.id) {
+        setResumeOffer(r);
+      }
+    });
+    return () => { stop = true; };
+    // one-shot on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const acceptResume = () => {
+    const r = resumeOffer;
+    setResumeOffer(null);
+    if (!r?.track?.id) return;
+    savePosition(r.track.id, r.progress);   // the load effect seeks to this on load
+    flushPosition();                        // write now so the load effect sees it
+    pickLiveTrack(r.track);
+  };
   useMediaSession({ track, playing, player, setPlaying, goNext: () => goNext(), goPrev: () => goPrev() });
   useKeyboardShortcuts({
     enabled: isDesktop,
@@ -1076,6 +1142,56 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     });
   };
 
+  // ── Hands-free voice (Car Mode) ───────────────────────────────────────
+  // A spoken phrase → an action. Instant LOCAL commands (next/pause/louder/like…)
+  // run immediately and offline; anything else is sent to the SAME /api/llm/talk
+  // brain that powers typed TalkAura, which handles "play <song / vibe>". The mic
+  // lives in the CarPlayer dashboard; voiceHint echoes the result back on-screen.
+  const [voiceHint, setVoiceHint] = useState('');
+  const voiceHintTimer = useRef(null);
+  const flashHint = (msg) => {
+    setVoiceHint(msg);
+    clearTimeout(voiceHintTimer.current);
+    voiceHintTimer.current = setTimeout(() => setVoiceHint(''), 4000);
+  };
+  const runVoiceCommand = async (transcript) => {
+    if (!transcript) return;
+    const local = matchLocalIntent(transcript);
+    if (local) {
+      const vol = player?.getVolume?.() ?? 1;
+      switch (local.kind) {
+        case 'next':    goNext();                                     flashHint('Next'); break;
+        case 'prev':    goPrev();                                     flashHint('Previous'); break;
+        case 'pause':   setPlaying(false);                            flashHint('Paused'); break;
+        case 'play':    setPlaying(true);                             flashHint('Playing'); break;
+        case 'louder':  player?.setVolume?.(Math.min(1, vol + 0.15)); flashHint('Louder'); break;
+        case 'softer':  player?.setVolume?.(Math.max(0, vol - 0.15)); flashHint('Softer'); break;
+        case 'mute':    player?.setMuted?.(true);                     flashHint('Muted'); break;
+        case 'unmute':  player?.setMuted?.(false);                    flashHint('Unmuted'); break;
+        case 'restart': player?.seek?.(0);                            flashHint('From the top'); break;
+        case 'shuffle': shuffleQueue();                               flashHint('Shuffled'); break;
+        case 'repeat':  cycleRepeat();                                flashHint('Repeat'); break;
+        case 'like':    if (track?.id) { like(track.id).catch(() => {}); flashHint('Liked'); } break;
+        default: break;
+      }
+      return;
+    }
+    // Not a local command → the LLM brain (same pipeline as typed TalkAura).
+    flashHint('Thinking…');
+    try {
+      const { reply, tracks } = await talk({ message: transcript });
+      if (tracks?.length) {
+        pickLiveSequence(tracks, 0, 'voice command');
+        flashHint(`Playing ${cleanTitle(tracks[0].title)}`);
+      } else {
+        flashHint(reply || 'No song matched.');
+      }
+    } catch {
+      flashHint('Voice search failed.');
+    }
+  };
+  const voice = useVoiceControl({ onResult: runVoiceCommand });
+
   // The sleep sheet lives on its own bus, so it could stack with the why /
   // lyrics / crowd panels. Opening either side closes the other.
   const openOverlay = (name) => { closeSleepTimer(); setOverlay(name); };
@@ -1247,6 +1363,17 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
 
   return (
     <>
+      <NowPlayingElsewhere devices={othersPlaying}/>
+      {resumeOffer && (
+        <div className={`aura-npe ${othersPlaying.length > 0 ? 'aura-npe--resume' : ''}`} role="status">
+          <span className="aura-npe__dot" aria-hidden="true"/>
+          <span className="aura-npe__text">
+            Pick up{resumeOffer.track?.title ? ` “${resumeOffer.track.title}”` : ''} from your other device?
+          </span>
+          <button type="button" className="aura-npe__action" onClick={acceptResume}>Resume</button>
+          <button type="button" className="aura-npe__x" aria-label="Dismiss" onClick={() => setResumeOffer(null)}>×</button>
+        </div>
+      )}
       <div className="absolute inset-0 bg-bg text-ink overflow-hidden"
         style={bottomChrome ? { '--aura-bottom-chrome': bottomChrome } : undefined}>
         <Suspense fallback={<ScreenSkeleton label={skeletonLabel}/>}>
@@ -1279,19 +1406,30 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             slide-out on dismiss. */}
         {isMobile && track && (
           <PlayerDrawer open={screen === 'player'} instant={instantPlayer} closing={closingMorph && screen !== 'player'} bloomOrigin={bloomOrigin} onClose={() => leavePlayer(playerReturn)}>
-            <MobilePlayer
-              open={screen === 'player'}
-              track={track} progress={progress} playing={playing}
-              nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidates[0] : null)}
-              nextLoading={autoNextLoading}
-              mood={t.mood} djName={t.djName}
-              repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
-              onShuffle={shuffleQueue} shuffleActive={shuffleActive}
-              onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
-              onSeek={(p) => player.seek(p)} player={player}
-              onBack={() => leavePlayer(playerReturn)}
-              openWhy={() => openOverlay('why')} openLyrics={() => openOverlay('lyrics')}
-              openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}/>
+            {activeMode === 'car' ? (
+              <CarPlayer
+                track={track} progress={progress} playing={playing}
+                onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
+                onSeek={(p) => player.seek(p)}
+                onBack={() => leavePlayer(playerReturn)}
+                djName={t.djName}
+                voiceSupported={voice.supported} voiceListening={voice.listening}
+                onTalkStart={voice.start} onTalkEnd={voice.stop} voiceHint={voiceHint}/>
+            ) : (
+              <MobilePlayer
+                open={screen === 'player'}
+                track={track} progress={progress} playing={playing}
+                nextTrack={next ?? (autoNextDisplay?.seedId === track.id ? autoNextDisplay.candidates[0] : null)}
+                nextLoading={autoNextLoading}
+                mood={t.mood} djName={t.djName}
+                repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
+                onShuffle={shuffleQueue} shuffleActive={shuffleActive}
+                onTogglePlay={() => setPlaying(p => !p)} onNext={goNext} onPrev={goPrev}
+                onSeek={(p) => player.seek(p)} player={player}
+                onBack={() => leavePlayer(playerReturn)}
+                openWhy={() => openOverlay('why')} openLyrics={() => openOverlay('lyrics')}
+                openQueue={() => { setQueueReturn('player'); setScreen('queue'); }}/>
+            )}
           </PlayerDrawer>
         )}
         {/* Desktop / tablet now-playing: full-screen route with screen-out anim. */}

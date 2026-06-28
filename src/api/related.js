@@ -1,10 +1,14 @@
-import { fetchAuthed, getActiveExplicitOff } from '../lib/auth';
+import { fetchAuthed, getActiveExplicitOff, getUser } from '../lib/auth';
 import { dropExplicit } from '../lib/explicit';
 
 export async function getRelated(trackId, { lang, limit, signal } = {}) {
   const url = new URL(`/api/tracks/${encodeURIComponent(trackId)}/related`, window.location.origin);
   if (lang) url.searchParams.set('lang', lang);
   if (limit) url.searchParams.set('limit', String(limit));
+  // Tell the server the active mode so Car Mode can bias the auto-radio away from
+  // songs the user skips (the server only acts on 'car'). (smart queue)
+  const mode = getUser()?.activeMode;
+  if (mode) url.searchParams.set('mode', mode);
   const res = await fetchAuthed(url, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

@@ -1,3 +1,5 @@
+import { broadcast } from './broadcast';
+
 const TOKEN_KEY = 'aura.authToken';
 const USER_KEY  = 'aura.authUser';
 
@@ -79,29 +81,37 @@ export async function signup({ email, name, password }) {
   return data;
 }
 
-export async function login({ email, password }) {
+export async function login({ email, password, evictSessionId } = {}) {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, evictSessionId }),
   });
   const data = await res.json();
   // Unverified account isn't an error — route the caller to the OTP step.
   if (res.status === 403 && data.pendingVerification) {
     return { pendingVerification: true, email: data.email };
   }
+  // Hard device cap hit — hand the caller the device list so it can let the user
+  // remove one and retry (with evictSessionId). Not an error to surface.
+  if (res.status === 403 && data.code === 'device_limit') {
+    return { deviceLimit: true, sessions: data.sessions ?? [], limit: data.limit };
+  }
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'login failed'), { status: res.status, code: data.code });
   setSession(data.user);
   return data.user;
 }
 
-export async function googleLogin(idToken) {
+export async function googleLogin(idToken, { evictSessionId } = {}) {
   const res = await fetch('/api/auth/google', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
+    body: JSON.stringify({ idToken, evictSessionId }),
   });
   const data = await res.json();
+  if (res.status === 403 && data.code === 'device_limit') {
+    return { deviceLimit: true, sessions: data.sessions ?? [], limit: data.limit };
+  }
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'google login failed'), { status: res.status });
   setSession(data.user);
   return data.user;
@@ -109,13 +119,16 @@ export async function googleLogin(idToken) {
 
 // Verify the signup code. On success the account activates and a session is
 // created — the only session-creating call on the signup path.
-export async function verifyOtp({ email, code }) {
+export async function verifyOtp({ email, code, evictSessionId } = {}) {
   const res = await fetch('/api/auth/verify-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, code }),
+    body: JSON.stringify({ email, code, evictSessionId }),
   });
   const data = await res.json();
+  if (res.status === 403 && data.code === 'device_limit') {
+    return { deviceLimit: true, sessions: data.sessions ?? [], limit: data.limit };
+  }
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'verification failed'), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft });
   setSession(data.user);
   return data.user;
@@ -206,6 +219,24 @@ export async function updatePreferences(prefs) {
   return data.user;
 }
 
+// ── Devices / sessions ───────────────────────────────────────────────
+export async function listDevices() {
+  const res = await fetchAuthed('/api/auth/sessions');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'could not load devices');
+  return data;   // { sessions, currentId, limit }
+}
+
+export async function revokeDevice(id) {
+  const res = await fetchAuthed(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('could not remove that device');
+}
+
+export async function logoutOtherDevices() {
+  const res = await fetchAuthed('/api/auth/sessions?scope=others', { method: 'DELETE' });
+  if (!res.ok) throw new Error('could not log out other devices');
+}
+
 // ── Family mode ──────────────────────────────────────────────────────
 // Enable (set a PIN) / disable (verify the PIN). Both return the refreshed user
 // (with `familyMode`) and update the in-memory session so the UI reacts at once.
@@ -251,6 +282,7 @@ export async function setActiveMode(key) {
   _user = data.user;
   try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
   notify();
+  broadcast('mode', key);   // keep other tabs on this device in sync
   return data.user;
 }
 
@@ -277,15 +309,65 @@ export function logout() {
   // Clear the cached identity immediately (UI returns to sign-in), then tell the
   // server to clear the httpOnly session cookie so a reload can't re-auth.
   clearSession();
+  // Tell other tabs on this device to clear too (they call clearSession, which
+  // does NOT re-broadcast — no loop).
+  broadcast('logout');
   return fetch('/api/auth/logout', { method: 'POST' }).catch(() => { /* best-effort */ });
 }
 
+// Apply a mode switch that happened in ANOTHER tab — patch the cached user so this
+// tab's home/featured react, without a network call or a re-broadcast.
+export function applyBroadcastMode(key) {
+  if (!_user || !key || _user.activeMode === key) return;
+  _user = { ..._user, activeMode: key };
+  try { localStorage.setItem(USER_KEY, JSON.stringify(_user)); } catch { /* ignore */ }
+  notify();
+}
+
+// A 401 from an authed call does NOT directly tear down the session — a transient
+// or endpoint-specific 401 shouldn't sign you out (security: #22). Instead it
+// hands off to the authoritative session check: fetchMe() re-validates against the
+// server and clearSession()s iff the session is truly gone (deleted user, revoked
+// or expired token). De-duped so a burst of 401s = one check; only fires when we
+// currently believe we're authed.
+let revalidating = false;
+function revalidateSession() {
+  if (revalidating || !_user) return;
+  revalidating = true;
+  fetchMe()
+    .then(u => { if (!u) redirectToAuth(); })   // confirmed invalid → already cleared; show login
+    .catch(() => { /* network blip — keep the session, re-check later */ })
+    .finally(() => { revalidating = false; });
+}
+
+// Send a just-signed-out user to the login form (the gate would otherwise drop
+// them on the landing page). Uses history + popstate so the in-app router picks
+// it up without a full reload.
+function redirectToAuth() {
+  try {
+    if (window.location.pathname !== '/auth') {
+      window.history.pushState(null, '', '/auth');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  } catch { /* ignore */ }
+}
+
 // The session cookie is httpOnly and same-origin, so it rides every fetch
-// automatically — no Authorization header to attach. Individual call failures
-// are handled by their callers (a single 401 must NOT tear down the session —
-// that's fetchMe's job, the explicit session check). (security: #22)
+// automatically — no Authorization header to attach. A 401 hands off to the
+// session re-check above instead of failing silently. (security: #22)
 export function fetchAuthed(path, opts = {}) {
-  return fetch(path, opts);
+  return fetch(path, opts).then(res => {
+    if (res.status === 401) revalidateSession();
+    return res;
+  });
+}
+
+// Catch a session invalidated while the tab was backgrounded (e.g. the account
+// was deleted elsewhere): re-validate on refocus when we think we're authed.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && _user) revalidateSession();
+  });
 }
 
 import { useState, useEffect } from 'react';

@@ -51,6 +51,12 @@ export const PRESETS = [
       { id: 'P3rRobMI', lang: 'english', label: 'River Flows in You' },
     ],
     seedArtists: ['Ludovico Einaudi', 'Yiruma', 'Hariprasad Chaurasia'] },
+  // Car is an EXPERIENCE layer, not a vibe: drive-safe UI + a loud/vocal-clear
+  // audio profile + a continue-the-current-song queue + hands-free voice. It
+  // carries no seed (home stays your normal mix, like everyday) — the value is
+  // continuing whatever you're already playing, not imposing a new vibe.
+  { key: 'car', label: 'Car', icon: 'car', explicitOff: false, lockable: false,
+    seedTracks: [], seedArtists: [] },
 ];
 
 export const MODE_KEYS = PRESETS.map((p) => p.key);

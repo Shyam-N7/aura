@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { signup, login, verifyOtp, resendOtp, requestReset, verifyResetCode, resetPassword } from '../lib/auth';
+import { relTime } from '../lib/time';
 import { toast } from '../lib/toast';
 import { AuraMark } from '../components/primitives/AuraMark';
 import './AuthPage.css';
@@ -89,6 +90,9 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
+  // Hard device-cap picker: the active devices to choose from + the cap.
+  const [deviceSessions, setDeviceSessions] = useState([]);
+  const [deviceLimitN, setDeviceLimitN] = useState(0);
 
   // Social sign-in is not live yet — clicking a provider shows a note above the
   // buttons instead of starting an auth flow. Auto-clears after a few seconds.
@@ -165,6 +169,7 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
       } else {
         const r = await login({ email: email.trim(), password });
         if (r?.pendingVerification) { goToOtp(r.email); return; }
+        if (r?.deviceLimit) { setDeviceSessions(r.sessions); setDeviceLimitN(r.limit); setStep('device-limit'); return; }
         onAuthed?.(r);
       }
     } catch (err) {
@@ -176,6 +181,23 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     }
   }, [validate, isSignup, email, name, password, onAuthed, goToOtp]);
 
+  /* ── Device-cap picker: remove a device, then sign in here ──────────── */
+  const handleEvict = useCallback(async (sessionId) => {
+    setFormError('');
+    setPending(true);
+    try {
+      const r = await login({ email: email.trim(), password, evictSessionId: sessionId });
+      if (r?.deviceLimit) { setDeviceSessions(r.sessions); setDeviceLimitN(r.limit); toast('still at the limit — remove another.'); return; }
+      if (r?.pendingVerification) { goToOtp(r.email); return; }
+      onAuthed?.(r);
+    } catch (err) {
+      const m = err?.message || 'could not sign in.';
+      toast(m); setFormError(m);
+    } finally {
+      setPending(false);
+    }
+  }, [email, password, onAuthed, goToOtp]);
+
   /* ── Verify signup code ─────────────────────────────────────────────── */
   const handleVerify = useCallback(async (e) => {
     e.preventDefault();
@@ -183,8 +205,9 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
     setFormError('');
     setPending(true);
     try {
-      const user = await verifyOtp({ email: pendingEmail, code: otpCode });
-      onAuthed?.(user);
+      const r = await verifyOtp({ email: pendingEmail, code: otpCode });
+      if (r?.deviceLimit) { setDeviceSessions(r.sessions); setDeviceLimitN(r.limit); setStep('device-limit'); return; }
+      onAuthed?.(r);
     } catch (err) {
       setFormError((err?.message || 'verification failed.') + attemptsSuffix(err?.attemptsLeft));
       // Stale/locked code → let them resend right away.
@@ -587,6 +610,44 @@ export function AuthPage({ initialMode = 'signin', onAuthed, onBack }) {
 
                 <div className="form-foot">
                   <a href="#" onClick={(e) => { e.preventDefault(); backToForm(); }}>Wrong email? Go back.</a>
+                </div>
+              </>
+            )}
+
+            {/* ──────────── Device limit — pick one to remove ──────────── */}
+            {step === 'device-limit' && (
+              <>
+                <header className="form-head">
+                  <span className="mono">device limit · {deviceLimitN} max</span>
+                  <h2>too many <em>devices.</em></h2>
+                  <p className="sub">
+                    Your account is signed in on {deviceSessions.length} device{deviceSessions.length === 1 ? '' : 's'}.
+                    Remove one to sign in here.
+                  </p>
+                </header>
+
+                <div className="auth-devices">
+                  {deviceSessions.map((s) => (
+                    <div key={s.id} className="auth-device">
+                      <div className="auth-device__info">
+                        <span className="auth-device__label">{s.deviceLabel || 'Unknown device'}</span>
+                        <span className="auth-device__meta">
+                          {[s.city, s.country].filter(Boolean).join(', ') || 'location unknown'} · active {relTime(s.lastSeenAt)}
+                        </span>
+                      </div>
+                      <button type="button" className="auth-device__remove" disabled={pending}
+                        aria-label={`remove ${s.deviceLabel || 'unknown device'} and sign in here`}
+                        onClick={() => handleEvict(s.id)}>
+                        remove &amp; sign in
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {formError && <p className="form-error">{formError}</p>}
+
+                <div className="form-foot">
+                  <a href="#" onClick={(e) => { e.preventDefault(); backToForm(); }}>Back to sign in.</a>
                 </div>
               </>
             )}

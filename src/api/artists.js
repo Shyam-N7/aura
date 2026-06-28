@@ -7,7 +7,7 @@ export async function getArtist({ name, id, trackId } = {}, { signal } = {}) {
   const res = await fetchAuthed(url, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `artist failed (${res.status})`);
+    throw Object.assign(new Error(body.error || `artist failed (${res.status})`), { status: res.status });
   }
   const data = await res.json();
   return data.artist ?? null;

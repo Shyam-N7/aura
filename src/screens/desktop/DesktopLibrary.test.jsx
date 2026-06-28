@@ -5,6 +5,12 @@ import { DesktopLibrary } from './DesktopLibrary';
 vi.mock('../../lib/auth', () => ({
   useAuth: () => ({ user: { name: 'shyam', email: 's@x.com' }, isAuthed: true }),
   logout: vi.fn(),
+  enableFamilyMode: vi.fn(),
+  disableFamilyMode: vi.fn(),
+  updatePreferences: vi.fn().mockResolvedValue({}),
+  listDevices: vi.fn().mockResolvedValue({ sessions: [], currentId: null, limit: 3 }),
+  revokeDevice: vi.fn().mockResolvedValue(),
+  logoutOtherDevices: vi.fn().mockResolvedValue(),
 }));
 vi.mock('../../lib/confirm', () => ({ confirm: vi.fn().mockResolvedValue(false) }));
 vi.mock('../../api/account', () => ({ exportMyData: vi.fn(), deleteMyAccount: vi.fn() }));

@@ -40,10 +40,10 @@ describe('HtmlAudioPlayer — quality-ladder probe error suppression', () => {
   });
 });
 
-// The makeup gain is the EQ's anti-clip headroom: boosts get pre-attenuated so a
-// hot master can't overflow ctx.destination (the crackle bug). jsdom has no Web
-// Audio, so the graph never builds — but _makeupGain() is pure math over the
-// stored gains, which is exactly the contract worth pinning.
+// The makeup gain is the EQ's anti-clip headroom, but it now leans on the 0 dBFS
+// limiter: modest boosts (≤ threshold) stay at UNITY so presets keep full loudness,
+// and only the EXCESS of an extreme boost is pre-trimmed. jsdom has no Web Audio, so
+// the graph never builds — but _makeupGain() is pure math worth pinning.
 describe('HtmlAudioPlayer — EQ makeup gain (clipping headroom)', () => {
   it('is unity (1.0) when flat — nothing boosted, nothing to clip', () => {
     const p = new HtmlAudioPlayer();
@@ -59,18 +59,22 @@ describe('HtmlAudioPlayer — EQ makeup gain (clipping headroom)', () => {
     p.destroy();
   });
 
-  it('attenuates by the loudest positive band + 3 dB margin (Upbeat preset)', () => {
+  it('stays UNITY for modest boosts (≤ threshold) so presets keep full loudness', () => {
     const p = new HtmlAudioPlayer();
-    p._eqGains = [3, 2, 0, -1, 0, 2, 3, 3];                  // peak boost = +3 dB
-    expect(p._makeupGain()).toBeCloseTo(dbToGain(-6), 10);   // -(3 + 3)
-    expect(p._makeupGain()).toBeLessThan(1);
+    p._eqGains = [4, 2, 0, -0.5, 1, 2.5, 3.5, 4];   // +4 peak (Upbeat) — limiter handles it
+    expect(p._makeupGain()).toBe(1);
+    p._eqGains = [0, 0, 0, 0, 6, 0, 0, 0];           // exactly at the 6 dB threshold
+    expect(p._makeupGain()).toBe(1);
     p.destroy();
   });
 
-  it('keys off the single loudest band regardless of cuts elsewhere', () => {
+  it('trims only the EXCESS above the threshold for extreme boosts', () => {
     const p = new HtmlAudioPlayer();
-    p._eqGains = [-6, -6, 12, -6, -6, -6, -6, -6];           // one +12 spike
-    expect(p._makeupGain()).toBeCloseTo(dbToGain(-15), 10);  // -(12 + 3)
+    p._eqGains = [-6, -6, 12, -6, -6, -6, -6, -6];           // +12 peak → -(12 - 6)
+    expect(p._makeupGain()).toBeCloseTo(dbToGain(-6), 10);
+    expect(p._makeupGain()).toBeLessThan(1);
+    p._eqGains = [0, 0, 0, 0, 7, 0, 0, 0];                   // just over → -(7 - 6)
+    expect(p._makeupGain()).toBeCloseTo(dbToGain(-1), 10);
     p.destroy();
   });
 });

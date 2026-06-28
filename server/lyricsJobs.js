@@ -35,6 +35,37 @@ import {
 const MAX_ATTEMPTS = 3;
 const STUCK_MS     = 15 * 60 * 1000;   // a 'processing' job older than this lost its webhook
 const DAY_MS       = 24 * 60 * 60 * 1000;
+// Per-USER daily ceiling on distinct tracks sent to generation. The global
+// LYRICS_GEN_DAILY_CAP is shared by everyone, so without this one account could
+// drain the whole day's budget; lyric_jobs is per-track (shared) and can't
+// attribute spend to a user, hence the separate lyric_gen_attempts ledger.
+const LYRICS_GEN_USER_DAILY = Math.max(1, Number(process.env.LYRICS_GEN_USER_DAILY) || 50);
+
+// Reserve a per-user generation slot for `trackId`. Returns true (recording the
+// attempt) when the user is under their 24h DISTINCT-track cap, false when at it.
+// Re-requesting a track already attempted in-window doesn't consume a new slot
+// (PK dedup). Soft cap — a small race can let a couple extra through; the global
+// cap is the hard backstop.
+export async function reserveUserGenSlot(userId, trackId) {
+  const since = Date.now() - DAY_MS;
+  const already = await pool.query(
+    `SELECT 1 FROM lyric_gen_attempts WHERE user_id = $1 AND track_id = $2 AND ts > $3`,
+    [userId, trackId, since],
+  );
+  if (!already.rowCount) {
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM lyric_gen_attempts WHERE user_id = $1 AND ts > $2`,
+      [userId, since],
+    );
+    if ((rows[0]?.n ?? 0) >= LYRICS_GEN_USER_DAILY) return false;
+  }
+  await pool.query(
+    `INSERT INTO lyric_gen_attempts (user_id, track_id, ts) VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, track_id) DO UPDATE SET ts = EXCLUDED.ts`,
+    [userId, trackId, Date.now()],
+  );
+  return true;
+}
 
 // Full language name (catalog) → Whisper ISO code. Unknown ⇒ let Whisper detect.
 const LANG_ISO = {
@@ -255,6 +286,10 @@ export async function completeFromPrediction(prediction, trackId) {
 // over the daily cap).
 export async function processQueue({ batch = 10 } = {}) {
   if (!generationEnabled()) return { dispatched: 0, recovered: 0 };
+
+  // Housekeeping: drop per-user generation-attempt rows past the 24h cap window
+  // so the ledger stays bounded (the cap COUNT only ever looks back 24h).
+  await pool.query('DELETE FROM lyric_gen_attempts WHERE ts < $1', [Date.now() - DAY_MS]).catch(() => {});
 
   const stuck = await pool.query(
     `SELECT track_id FROM lyric_jobs WHERE status='processing' AND updated_at < $1`,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { logout, useAuth, enableFamilyMode, disableFamilyMode, updatePreferences } from '../lib/auth';
+import { logout, useAuth, enableFamilyMode, disableFamilyMode, updatePreferences, listDevices, revokeDevice, logoutOtherDevices } from '../lib/auth';
+import { relTime } from '../lib/time';
 import { confirm } from '../lib/confirm';
 import { clearPostAuthPath } from '../lib/routes';
 import { exportMyData, deleteMyAccount } from '../api/account';
@@ -7,6 +8,8 @@ import { toast } from '../lib/toast';
 import { getConsent, setConsent, subscribeConsent } from '../lib/consent';
 import { QUALITIES } from '../lib/audioQuality';
 import { useAudioQuality } from '../hooks/useAudioQuality';
+import { getLeveling, setLeveling } from '../lib/audioLeveling';
+import { isIOS } from '../lib/platform';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
 
@@ -30,6 +33,17 @@ export function SettingsPanel({ t, setTweak }) {
 
   const [quality, setQuality] = useAudioQuality();
   const qualityCaption = QUALITIES.find(q => q.id === quality)?.caption ?? '';
+
+  // Volume leveling — even out loudness across songs (the YouTube-style "boosted/
+  // balanced" feel). Off by default on iOS (the Web Audio tap it needs would
+  // forfeit lock-screen playback there).
+  const [leveling, setLevelingState] = useState(getLeveling());
+  const toggleLeveling = () => {
+    const next = !leveling;
+    setLeveling(next);
+    setLevelingState(next);
+    toast(next ? 'volume leveling on.' : 'volume leveling off.');
+  };
 
   // Family mode — a PIN-gated toggle. Off → reveal a "set a PIN" field; on →
   // reveal an "enter your PIN to turn off" field. The switch reads from the live
@@ -76,6 +90,45 @@ export function SettingsPanel({ t, setTweak }) {
     }
   };
 
+  // Devices: the user's active sessions (this device flagged). Loaded when the
+  // settings shelf mounts; pruned locally after a revoke so the list reacts at once.
+  const [devices, setDevices] = useState([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [devicesError, setDevicesError] = useState(false);
+  const [currentDeviceId, setCurrentDeviceId] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    listDevices()
+      .then(({ sessions, currentId }) => { if (alive) { setDevices(sessions); setCurrentDeviceId(currentId); } })
+      .catch(() => { if (alive) setDevicesError(true); })   // distinct from a genuinely-empty list
+      .finally(() => { if (alive) setDevicesLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const removeDevice = async (id) => {
+    try {
+      await revokeDevice(id);
+      setDevices(ds => ds.filter(d => d.id !== id));
+      toast('device logged out.');
+    } catch (err) { toast(err.message); }
+  };
+
+  const logOutOthers = async () => {
+    const ok = await confirm({
+      title: 'log out other devices?',
+      body: 'every other signed-in device is logged out. this device stays signed in.',
+      confirmLabel: 'log out others',
+      cancelLabel: 'cancel',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await logoutOtherDevices();
+      setDevices(ds => ds.filter(d => d.id === currentDeviceId));
+      toast('other devices logged out.');
+    } catch (err) { toast(err.message); }
+  };
+
   const handleSignOut = async () => {
     const ok = await confirm({
       title: 'sign out?',
@@ -110,7 +163,17 @@ export function SettingsPanel({ t, setTweak }) {
       clearPostAuthPath();
       toast('your account has been deleted.');
     } catch (err) {
-      toast(`couldn't delete — ${err.message}`);
+      // 401/404 = the account is already gone (e.g. deleted on the server) — the
+      // delete "failing" is the desired end state, so sign out cleanly instead of
+      // showing a scary error.
+      if (err.status === 401 || err.status === 404) {
+        logout();
+        try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
+        clearPostAuthPath();
+        toast('your account has been deleted.');
+      } else {
+        toast(`couldn't delete — ${err.message}`);
+      }
     }
   };
 
@@ -179,6 +242,20 @@ export function SettingsPanel({ t, setTweak }) {
         ))}
       </div>
       <p className="aura-set__caption">{qualityCaption}</p>
+      <div className="aura-set__group">
+        <button type="button" role="switch" aria-checked={leveling}
+          className="aura-set__row" onClick={toggleLeveling}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">volume leveling</span>
+            <span className="aura-set__row-caption">
+              {leveling
+                ? `evens out loudness across songs so nothing plays too quiet.${isIOS() ? ' on iphone this can pause lock-screen playback.' : ''}`
+                : 'plays each song at its original loudness.'}
+            </span>
+          </span>
+          <span className={`aura-set__switch ${leveling ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
+      </div>
 
       <p className="aura-set__group-label">family mode</p>
       <div className="aura-set__group">
@@ -222,6 +299,41 @@ export function SettingsPanel({ t, setTweak }) {
           </span>
           <span className={`aura-set__switch ${sensingOn ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
         </button>
+      </div>
+
+      <p className="aura-set__group-label">your devices</p>
+      <div className="aura-set__group">
+        {devicesLoading && <p className="aura-set__caption">loading…</p>}
+        {!devicesLoading && devicesError && <p className="aura-set__caption">couldn’t load your devices — try reopening settings.</p>}
+        {!devicesLoading && !devicesError && devices.length === 0 && (
+          <p className="aura-set__caption">
+            {currentDeviceId
+              ? 'no other devices.'
+              : 'sign out and back in to manage this device here.'}
+          </p>
+        )}
+        {devices.map((d) => (
+          <div key={d.id} className="aura-set__device">
+            <span className="aura-set__row-text">
+              <span className="aura-set__row-label">
+                {d.deviceLabel || 'Unknown device'}{d.id === currentDeviceId ? ' · this device' : ''}
+              </span>
+              <span className="aura-set__row-caption">
+                {[d.city, d.country].filter(Boolean).join(', ') || 'location unknown'} · active {relTime(d.lastSeenAt)}
+              </span>
+            </span>
+            {d.id !== currentDeviceId && (
+              <button type="button" className="aura-set__device-remove"
+                aria-label={`log out ${d.deviceLabel || 'unknown device'}`}
+                onClick={() => removeDevice(d.id)}>log out</button>
+            )}
+          </div>
+        ))}
+        {devices.length > 1 && (
+          <button type="button" className="aura-set__row aura-set__row--accent" onClick={logOutOthers}>
+            log out everywhere else
+          </button>
+        )}
       </div>
 
       <p className="aura-set__group-label">privacy & data</p>

@@ -88,4 +88,16 @@ describe('OnboardingScreen (stepper)', () => {
     // English is still selected, so Next is immediately enabled again.
     expect(next()).toBeEnabled();
   });
+
+  it('Skip for now finishes onboarding immediately, at any step', async () => {
+    const onDone = vi.fn();
+    render(<OnboardingScreen pool={POOL} onDone={onDone}/>);
+    await screen.findByRole('button', { name: 'English' });
+
+    // No selections made — skipping still completes the flow (partial/empty seeds
+    // are safe; home degrades gracefully).
+    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
+    expect(markOnboarded).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
 });

@@ -8,6 +8,7 @@ import { OnboardingBackdrop } from './OnboardingBackdrop';
 import { GooFilter } from '../components/GooFilter';
 import { getDiscoverHome } from '../api/discover';
 import { getArtist } from '../api/artists';
+import { withRetry } from '../lib/retry';
 import './OnboardingScreen.css';
 
 const MIN_PICKS = 3;   // minimum artists to finish; no upper cap
@@ -133,6 +134,11 @@ export function OnboardingScreen({ pool = [], onDone }) {
   // `pool` prop is a fallback while trending loads (and if it fails).
   const [trending, setTrending] = useState([]);
   const [artistImages, setArtistImages] = useState(() => new Map());
+  // Trending failed even after retries — only surfaced if the grid is also empty
+  // (the seed fallback normally keeps it full). `reloadNonce` re-runs the fetch
+  // when the user taps "Try again".
+  const [loadError, setLoadError] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Which step is on screen (0 language · 1 mood · 2 artists), and the last
   // navigation direction so the panel slides in from the correct side.
   const [step, setStep] = useState(0);
@@ -157,11 +163,19 @@ export function OnboardingScreen({ pool = [], onDone }) {
 
   useEffect(() => {
     const ctl = new AbortController();
-    getDiscoverHome({ signal: ctl.signal })
-      .then(data => setTrending(Array.isArray(data?.trending) ? data.trending : []))
-      .catch(() => { /* fall through to pool */ });
+    withRetry(() => getDiscoverHome({ signal: ctl.signal }), { retries: 2, signal: ctl.signal })
+      .then(data => {
+        setTrending(Array.isArray(data?.trending) ? data.trending : []);
+        setLoadError(false);
+      })
+      .catch(err => {
+        if (err?.name === 'AbortError') return;
+        // The seed fallback still fills the grid; only flag an error so the
+        // (defensive) empty state can offer "Try again".
+        setLoadError(true);
+      });
     return () => ctl.abort();
-  }, []);
+  }, [reloadNonce]);
 
   // Both trending and the featured pool are popularity signals — combine them so
   // the picker has a deep bench of recognizable artists (buildTiles dedups +
@@ -195,7 +209,7 @@ export function OnboardingScreen({ pool = [], onDone }) {
     let cancelled = false;
     pending.forEach(t => artistImgCache.set(t.name, undefined));   // mark in-flight
     Promise.allSettled(pending.map(t =>
-      getArtist(t.sampleTrackId ? { trackId: t.sampleTrackId } : { name: t.name })
+      withRetry(() => getArtist(t.sampleTrackId ? { trackId: t.sampleTrackId } : { name: t.name }), { retries: 1 })
         .then(a => { artistImgCache.set(t.name, a?.image || null); })
         .catch(() => { artistImgCache.set(t.name, null); }),
     )).then(() => { if (!cancelled) setArtistImages(new Map(artistImgCache)); });
@@ -356,6 +370,10 @@ export function OnboardingScreen({ pool = [], onDone }) {
     markOnboarded();
     onDone?.(pickMeta);
   };
+  // "Skip for now" — same persistence as a normal finish, but callable at any step
+  // with whatever's chosen so far (partial/empty seeds are safe; home degrades
+  // gracefully via useSeedShelf → idle).
+  const skip = submit;
 
   // Top strip reflects position in the flow (step N of 3), advancing on Next.
   const progressPct = ((step + 1) / STEPS.length) * 100;
@@ -520,7 +538,13 @@ export function OnboardingScreen({ pool = [], onDone }) {
                   );
                 })}
                 {tiles.length === 0 && (
-                  <div className="aura-onb__empty">No artists to show yet.</div>
+                  <div className="aura-onb__empty">
+                    <span>{loadError ? "Couldn't load artists." : 'No artists to show yet.'}</span>
+                    <button type="button" className="aura-onb__retry"
+                      onClick={() => setReloadNonce(n => n + 1)}>
+                      Try again
+                    </button>
+                  </div>
                 )}
               </div>
               {canLoadMore && (
@@ -553,6 +577,10 @@ export function OnboardingScreen({ pool = [], onDone }) {
               <path d="M13 5 H2 M6 1 L2 5 L6 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             Back
+          </button>
+          <span className="aura-onb__foot-spacer"/>
+          <button type="button" onClick={skip} className="aura-onb__skip">
+            Skip for now
           </button>
           <span className="aura-onb__foot-spacer"/>
           <button type="button" onClick={goNext} disabled={!valid[step]} className="aura-onb__next">

@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
-import { signToken, requireAuth, setSessionCookie, clearSessionCookie } from './middleware/auth.js';
+import {
+  requireAuth, optionalAuth, setSessionCookie, clearSessionCookie,
+  createSessionWithCap, listSessions,
+  revokeSession, revokeOtherSessions, revokeAllSessions,
+} from './middleware/auth.js';
 import { asyncHandler, clientError } from './middleware/errors.js';
 import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
 import { adminBlocked } from './adminGate.js';
@@ -102,6 +106,35 @@ router.post('/signup', async (req, res) => {
 const LOGIN_MAX_ATTEMPTS = 8;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
+// HARD device cap: block the (N+1)th concurrent login rather than evicting the
+// oldest. The user clears room by removing a device — either in Settings, or, when
+// the cap blocks a sign-in, by re-submitting with `evictSessionId` (the credential
+// just verified on THIS request authorizes that removal). Env-tunable.
+const MAX_ACTIVE_SESSIONS = Math.max(1, Number(process.env.MAX_DEVICES) || 3);
+
+// Shared by every session-creating path (login / google / verify-otp). Honors an
+// `evictSessionId` the client supplies after the user picks a device to drop, then
+// enforces the cap. Returns true if it already sent a 403 device_limit response
+// (caller must return); false means a session + cookie were set. The caller has
+// ALREADY proven identity (password / Google token / OTP) before calling this.
+async function startSession(req, res, user) {
+  // Atomic cap + (optional) eviction in one transaction — see createSessionWithCap.
+  const r = await createSessionWithCap(
+    req, user.id, user.token_version ?? 0, MAX_ACTIVE_SESSIONS, req.body?.evictSessionId,
+  );
+  if (r.capped) {
+    res.status(403).json({
+      error: 'device limit reached — remove a device to sign in here',
+      code: 'device_limit',
+      limit: MAX_ACTIVE_SESSIONS,
+      sessions: await listSessions(user.id),
+    });
+    return true;
+  }
+  setSessionCookie(res, r.token);
+  return false;
+}
+
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
@@ -149,12 +182,14 @@ router.post('/login', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'please verify your email first', pendingVerification: true, email: user.email });
   }
 
-  // Success — clear the throttle + stamp last login, then set the session cookie.
+  // Password is correct — clear the login throttle NOW (proven identity), then
+  // enforce the device cap (which may 403 with the device list). Resetting first
+  // means a correct-password user who hits the cap doesn't keep a stale counter.
   await pool.query(
     'UPDATE users SET last_login_at = $1, failed_login_attempts = 0, login_locked_until = NULL WHERE id = $2',
     [now, user.id],
   );
-  setSessionCookie(res, signToken(user.id, user.token_version ?? 0));
+  if (await startSession(req, res, user)) return;
   res.json({ user: sanitizeUser(user) });
 }));
 
@@ -213,7 +248,7 @@ router.post('/google', async (req, res) => {
       }
     }
 
-    setSessionCookie(res, signToken(user.id, user.token_version ?? 0));
+    if (await startSession(req, res, user)) return;
     res.json({ user: sanitizeUser(user) });
   } catch (err) {
     console.warn('[auth/google]', err.message);
@@ -241,7 +276,7 @@ router.post('/verify-otp', async (req, res) => {
     );
     if (!upd.rowCount) return res.status(409).json({ error: 'account no longer exists — sign up again', code: 'signup_expired' });
 
-    setSessionCookie(res, signToken(upd.rows[0].id, upd.rows[0].token_version ?? 0));
+    if (await startSession(req, res, upd.rows[0])) return;
     res.json({ user: sanitizeUser(upd.rows[0]) });
   } catch (err) {
     console.error('[auth/verify-otp]', err);
@@ -346,10 +381,14 @@ router.post('/reset-password', async (req, res) => {
     const upd = await pool.query(
       `UPDATE users SET password_hash = $1, email_verified = TRUE, last_login_at = $2,
          token_version = token_version + 1, failed_login_attempts = 0, login_locked_until = NULL
-       WHERE email = $3`,
+       WHERE email = $3
+       RETURNING id`,
       [hash, Date.now(), e],
     );
     if (!upd.rowCount) { trace('[reset] no matching account row'); return res.status(409).json({ error: 'account not found', code: 'no_account' }); }
+    // The token_version bump already invalidates every outstanding token; also
+    // revoke the session rows so stale devices drop out of the device list.
+    await revokeAllSessions(upd.rows[0].id);
 
     // Password committed — now retire the code so it can't be replayed.
     await consumeOtp(e, 'reset');
@@ -364,13 +403,40 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // ── Logout ───────────────────────────────────────────────────────────
-// Clears the session cookie for THIS device. (A full "log out everywhere" is
-// the token_version bump on password reset.) No auth required — clearing a
-// cookie must work even when the current session is already invalid.
-router.post('/logout', (_req, res) => {
+// Clears the session cookie AND revokes this device's session row so it drops
+// out of the device list + frees a slot under the cap. optionalAuth resolves the
+// current sid without rejecting an already-invalid cookie (clearing must always
+// work). "Log out everywhere else" is DELETE /sessions?scope=others below.
+router.post('/logout', optionalAuth, asyncHandler(async (req, res) => {
+  // Clearing the cookie must ALWAYS succeed — never let a transient DB error on the
+  // revoke 500 the request and leave the session cookie (and row) live.
+  if (req.userId && req.sessionId) await revokeSession(req.userId, req.sessionId).catch(() => {});
   clearSessionCookie(res);
   res.json({ ok: true });
-});
+}));
+
+// ── Devices / sessions ───────────────────────────────────────────────
+router.get('/sessions', requireAuth, asyncHandler(async (req, res) => {
+  res.json({ sessions: await listSessions(req.userId), currentId: req.sessionId, limit: MAX_ACTIVE_SESSIONS });
+}));
+
+// Revoke one device (owner-scoped — a foreign id is a silent no-op).
+router.delete('/sessions/:id', requireAuth, asyncHandler(async (req, res) => {
+  await revokeSession(req.userId, req.params.id);
+  res.json({ ok: true });
+}));
+
+// Revoke other devices (?scope=others, keeps the current one) or every device.
+router.delete('/sessions', requireAuth, asyncHandler(async (req, res) => {
+  if (req.query.scope === 'others') {
+    await revokeOtherSessions(req.userId, req.sessionId);
+  } else {
+    // Revokes THIS device too — clear its cookie so it isn't left on a dead session.
+    await revokeAllSessions(req.userId);
+    clearSessionCookie(res);
+  }
+  res.json({ ok: true });
+}));
 
 // ── Current user ─────────────────────────────────────────────────────
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {

@@ -590,6 +590,41 @@
   .aura-auth-page .form-head h2 { font-size: clamp(30px, 8.5vw, 40px); }
 }
 
+/* ─── Device-limit picker ─────────────────────────────────────────────── */
+.aura-auth-page .auth-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+.aura-auth-page .auth-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.aura-auth-page .auth-device__info { display: flex; flex-direction: column; min-width: 0; }
+.aura-auth-page .auth-device__label { font-size: 14px; color: var(--ink); }
+.aura-auth-page .auth-device__meta { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+.aura-auth-page .auth-device__remove {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.aura-auth-page .auth-device__remove:hover:not(:disabled) { background: var(--ink); color: var(--bg); }
+.aura-auth-page .auth-device__remove:disabled { opacity: 0.5; cursor: default; }
+
 /* ─── Reduced motion — silence every infinite animation ───────────────── */
 @media (prefers-reduced-motion: reduce) {
   .aura-auth-page .composition .ring-bg,

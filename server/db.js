@@ -26,7 +26,9 @@ async function ensureDatabase() {
 // concurrency (many instances) doesn't exhaust Postgres' connection limit.
 // Point DATABASE_URL at a pooled endpoint (e.g. Neon's `-pooler` host) in
 // production so those sockets are further multiplexed server-side.
-export const pool = new Pool({ connectionString: TARGET_URL, max: 2, idleTimeoutMillis: 10000 });
+// keepAlive lets the OS probe the socket so a connection Neon reaped out-of-band
+// is detected sooner (fewer dead-socket handoffs); max:2 + idleTimeout unchanged.
+export const pool = new Pool({ connectionString: TARGET_URL, max: 2, idleTimeoutMillis: 10000, keepAlive: true });
 
 // node-postgres REQUIRES a pool 'error' listener: an idle client whose backend
 // socket is dropped out-of-band (routine on Neon's pooled endpoint, which reaps
@@ -37,6 +39,42 @@ export const pool = new Pool({ connectionString: TARGET_URL, max: 2, idleTimeout
 pool.on('error', (err) => {
   console.error('[db] idle client error (non-fatal):', err?.message ?? err);
 });
+
+// ── Transient-error resilience ───────────────────────────────────────
+// pool.on('error') only catches drops on IDLE clients. When a query grabs a
+// socket Neon already reaped, the query itself rejects (ECONNRESET / ETIMEDOUT)
+// straight to the caller — which, on an authed request, becomes a 500. These are
+// blips, not real failures: a retry re-acquires a fresh client and succeeds.
+const TRANSIENT_CODES = new Set([
+  'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENETUNREACH', 'EHOSTUNREACH', 'ENOTFOUND',
+]);
+
+// True for a dropped/timed-out connection — NEVER for a SQL or constraint error
+// (those carry a Postgres `code` like '23505'/'42601' and are deterministic, so
+// retrying just burns time and re-trips the same fault). Node may also surface the
+// connect timeout as an AggregateError whose `.errors[]` hold the real codes.
+export function isTransient(err) {
+  if (!err) return false;
+  if (TRANSIENT_CODES.has(err.code) || TRANSIENT_CODES.has(err.errno)) return true;
+  if (Array.isArray(err.errors) && err.errors.some(isTransient)) return true;
+  return /Connection terminated|terminating connection|server closed the connection|Client has encountered a connection error/i
+    .test(String(err.message ?? ''));
+}
+
+// Drop-in for pool.query that retries ONLY transient connection drops with a short
+// exponential backoff. Safe for idempotent reads and single-statement writes (the
+// heartbeat UPDATE is idempotent). Multi-statement transactions must retry at the
+// transaction boundary instead (see createSessionWithCap), not here.
+export async function query(text, params, { retries = 2 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await pool.query(text, params);
+    } catch (err) {
+      if (!isTransient(err) || attempt >= retries) throw err;
+      await new Promise((r) => setTimeout(r, 100 * 2 ** attempt));
+    }
+  }
+}
 
 const migrations = [
   async function v1_initial(client) {
@@ -422,6 +460,65 @@ const migrations = [
       ALTER TABLE playlists ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE playlists ADD COLUMN public_id TEXT UNIQUE;
     `);
+  },
+  async function v17_user_sessions(client) {
+    // Per-login session rows so the stateless JWT gains a server-side handle: the
+    // token now carries a `sid` claim validated against this table, enabling device
+    // listing, per-device logout, and a hard concurrent-device CAP (none possible
+    // before). token_version stays the global "log out everywhere" kill switch;
+    // deleting/revoking a row kills exactly one device. Tokens minted before this
+    // (no sid) keep working via the token_version check alone until they expire.
+    // The now-playing columns (playing_*) back Wave 2's cross-device awareness +
+    // resume, so the device row doubles as the per-device now-playing registry —
+    // no separate table or push channel. city/country come from Vercel's
+    // x-vercel-ip-* headers (no external geo dependency).
+    await client.query(`
+      CREATE TABLE user_sessions (
+        id            TEXT PRIMARY KEY,
+        user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        device_label  TEXT,
+        user_agent    TEXT,
+        ip            TEXT,
+        city          TEXT,
+        country       TEXT,
+        created_at    BIGINT NOT NULL,
+        last_seen_at  BIGINT NOT NULL,
+        revoked_at    BIGINT,
+        playing_track JSONB,
+        is_playing    BOOLEAN NOT NULL DEFAULT FALSE,
+        playing_at    BIGINT,
+        position_sec  REAL
+      );
+      CREATE INDEX idx_user_sessions_user ON user_sessions(user_id) WHERE revoked_at IS NULL;
+    `);
+  },
+  async function v18_lyric_gen_attempts(client) {
+    // Per-user daily ceiling on lyric-generation dispatches so one account can't
+    // drain the GLOBAL daily cap (lyric_jobs is per-track/shared, so it can't
+    // attribute spend to a user on its own). One row per (user, track); the 24h
+    // COUNT bounds how many DISTINCT tracks a user can trigger generation for.
+    await client.query(`
+      CREATE TABLE lyric_gen_attempts (
+        user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL,
+        ts       BIGINT NOT NULL,
+        PRIMARY KEY (user_id, track_id)
+      );
+      CREATE INDEX idx_lyric_gen_user_ts ON lyric_gen_attempts(user_id, ts);
+    `);
+  },
+  async function v19_listening_event_source(client) {
+    // Capture WHERE a play came from (the queue's source label — "tonight's set",
+    // a playlist name, search, a station, …). Pure signal capture for the future
+    // recommendation engine — nothing reads it yet; it just stops us throwing away
+    // provenance we already have on the client. Nullable; old rows stay NULL.
+    await client.query(`ALTER TABLE listening_events ADD COLUMN source TEXT`);
+  },
+  async function v20_mood_infer_claim(client) {
+    // Cross-device de-dupe for the auto mood inference: an atomic, self-expiring
+    // claim so two devices crossing the staleness threshold within the Gemini-call
+    // window don't BOTH infer (a read-only check can't catch that concurrent case).
+    await client.query(`ALTER TABLE users ADD COLUMN mood_inferring_at BIGINT`);
   },
 ];
 

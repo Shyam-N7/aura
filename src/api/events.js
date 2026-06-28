@@ -14,6 +14,7 @@ export function postEvent(track_id, kind, opts = {}) {
       mood:         opts.mood ?? null,
       language:     opts.language ?? null,
       mode:         opts.mode ?? null,
+      source:       opts.source ?? null,
     }),
   }).catch(err => console.warn('[events] post failed', kind, track_id, err.message));
 }

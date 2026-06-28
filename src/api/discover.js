@@ -2,7 +2,7 @@ import { fetchAuthed } from '../lib/auth';
 export async function getDiscoverHome({ lang, signal } = {}) {
   const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
   const res = await fetchAuthed(`/api/discover/home${qs}`, { signal });
-  if (!res.ok) throw new Error(`discover failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(`discover failed (${res.status})`), { status: res.status });
   return res.json();
 }
 

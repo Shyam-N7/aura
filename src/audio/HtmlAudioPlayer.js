@@ -1,17 +1,32 @@
-import { EQ_FREQS, EQ_FLAT, sanitizeGains, dbToGain } from './eqConfig.js';
+import { EQ_FREQS, EQ_FLAT, sanitizeGains, dbToGain, levelGainFor } from './eqConfig.js';
 import { getAudioQuality, subscribeAudioQuality, bitrateFor, qualityLadder } from '../lib/audioQuality.js';
+import { getLeveling, subscribeLeveling } from '../lib/audioLeveling.js';
 import { isIOS } from '../lib/platform.js';
 
-// EQ boosts add level the source (loud-mastered AAC near 0 dBFS) has no room
-// for, so the graph hard-clips at ctx.destination — crackle. Two stages give it
-// headroom: a makeup GainNode pre-attenuates by the peak boost, and a brick-wall
-// limiter sits right at the 0 dBFS clip ceiling. The makeup keeps flat/cuts and
-// every realistic boost at or below full scale (verified: presets land ≥2 dB
-// under), so the limiter is inert there — fully transparent — and engages only
-// on pathological multi-band overshoot (e.g. several bands slammed to +12) that
-// would otherwise hard-clip.
-const EQ_HEADROOM_MARGIN_DB = 3.0;  // covers typical adjacent-peak crossover sum
-const EQ_GAIN_RAMP_TC = 0.02;       // setTargetAtTime time-constant (~60 ms to track)
+// EQ boosts can push a loud-mastered source (AAC near 0 dBFS) past full scale.
+// The brick-wall LIMITER at the 0 dBFS ceiling is the real anti-clip. The makeup
+// GainNode now only trims the EXCESS of EXTREME boosts (above the threshold) — it
+// used to pre-attenuate by the whole peak band, which made every non-flat preset
+// 4.5–6 dB QUIETER than Flat (a single +3 dB band barely changes overall loudness,
+// so that was wildly over-conservative). Now a modest preset plays at full loudness
+// and rides the limiter (a touch of punch — the "boosted" feel); only pathological
+// multi-band overshoot (> threshold) gets pre-trimmed by just the excess.
+const EQ_HEADROOM_THRESHOLD_DB = 6.0;  // peak boost ≤ this → unity makeup (limiter handles the peaks)
+const EQ_GAIN_RAMP_TC = 0.02;          // setTargetAtTime time-constant (~60 ms to track)
+
+// Loudness leveling — nudge each track toward a consistent target so playback
+// feels as "leveled/boosted" as YouTube/Spotify, not at the file's raw mastering.
+// Open-loop AGC: measure the program (pre-leveling) RMS, set leveling gain =
+// target/program (clamped), and ramp SLOWLY so it settles per track without
+// audible pumping; the existing limiter catches the resulting peaks. Needs the
+// Web Audio tap, so it's gated off on iOS by default (preserves background
+// playback) — see _levelingResolved.
+const LEVEL_TARGET_RMS = 0.16;   // ~ -16 dBFS RMS target (tuneable in real testing)
+const LEVEL_MAX_DB     = 9;      // never boost a quiet track more than +9 dB
+const LEVEL_MIN_DB     = -9;     // nor pull a hot one down more than -9 dB
+const LEVEL_RAMP_TC    = 1.5;    // slow ~1.5 s settle → no pumping
+const LEVEL_MEASURE_MS = 400;    // RMS measurement cadence
+const LEVEL_EMA_ALPHA  = 0.15;   // running-loudness smoothing
 
 // Real audio via HTMLAudioElement. Plays track.streamUrl (catalog CDN mp4).
 // Tracks without a streamUrl (e.g. the mock demo catalog) become no-ops:
@@ -38,7 +53,18 @@ export class HtmlAudioPlayer {
     this._bands = null;
     this._makeup = null;   // pre-EQ attenuation for boost headroom
     this._limiter = null;  // brick-wall safety for residual crossover overshoot
+    // Loudness leveling stage (lives between makeup and limiter in the graph).
+    this._levelGain = null;   // GainNode the AGC rides toward the target
+    this._analyser = null;    // taps the program (makeup output) to measure RMS
+    this._levelActive = false;
+    this._levelEma = 0;       // smoothed program loudness (reset per track)
+    this._lastLevel = 0;      // measurement throttle
+    this._levelBuf = null;
     this._eqGains = EQ_FLAT.slice();
+    // Transient mode profile (Car Mode): an EQ override applied WITHOUT persisting
+    // over the user's saved EQ, + a leveling force. Cleared when the profile exits.
+    this._eqOverride = null;
+    this._levelForce = false;
     // Tracks user/app intent to be playing, independent of the element's actual
     // paused state — iOS can pause the element on screen-lock without us asking,
     // so on return to foreground we re-arm playback if we still mean to play.
@@ -110,6 +136,8 @@ export class HtmlAudioPlayer {
     this._baseUrl = null;
     this._bitrate = bitrateFor(getAudioQuality());
     this._unsubQuality = subscribeAudioQuality(id => this._setBitrate(bitrateFor(id)));
+    // React live when the user toggles volume leveling in Settings.
+    this._unsubLeveling = subscribeLeveling(() => this._applyLeveling());
   }
 
   // Build the AudioContext graph: source → [BiquadFilter per band] → destination.
@@ -143,7 +171,7 @@ export class HtmlAudioPlayer {
         f.type = i === 0 ? 'lowshelf' : i === EQ_FREQS.length - 1 ? 'highshelf' : 'peaking';
         f.frequency.value = freq;
         f.Q.value = 1.0;
-        f.gain.value = this._eqGains[i] ?? 0;
+        f.gain.value = this._effGains()[i] ?? 0;
         return f;
       });
       // Headroom stage: makeup pre-attenuates boosts; limiter is the no-clip
@@ -151,20 +179,34 @@ export class HtmlAudioPlayer {
       // first audio already has room (later changes ramp — see _rampParam).
       const makeup = ctx.createGain();
       makeup.gain.value = this._makeupGain();
+      // Loudness-leveling gain (unity until the AGC moves it) + an analyser tap on
+      // the program (makeup output) so leveling measures pre-leveling loudness.
+      const levelGain = ctx.createGain();
+      levelGain.gain.value = 1;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
       // Threshold at 0 dBFS (not below): the makeup already holds flat/cuts and
       // realistic boosts ≤ full scale, so a ceiling exactly at the clip point
       // stays transparent for in-range audio and only acts on true overshoot —
-      // a lower threshold would squash hot masters even when the EQ is flat.
+      // a lower threshold would squash hot masters even when the EQ is flat. It
+      // also catches the peaks the leveling boost can introduce.
       const limiter = ctx.createDynamicsCompressor();
       limiter.threshold.value = 0; limiter.knee.value = 0; limiter.ratio.value = 20;
       limiter.attack.value = 0.003; limiter.release.value = 0.25;
-      // source → b0 → b1 → … → bN → makeup → limiter → destination
+      // source → b0 → … → bN → makeup → levelGain → limiter → destination
+      // (makeup also fans out to the analyser, a measurement-only sink).
       let node = src;
       for (const b of bands) { node.connect(b); node = b; }
-      node.connect(makeup); makeup.connect(limiter); limiter.connect(ctx.destination);
+      node.connect(makeup);
+      makeup.connect(analyser);
+      makeup.connect(levelGain);
+      levelGain.connect(limiter); limiter.connect(ctx.destination);
       this._bands = bands;
       this._makeup = makeup;
+      this._levelGain = levelGain;
+      this._analyser = analyser;
       this._limiter = limiter;
+      this._levelActive = this._levelingResolved();
     } catch {
       // Band chain failed AFTER the tap — keep audio alive (un-EQ'd) by routing
       // the tapped source straight to the speakers. No EQ gain here, so no clip
@@ -174,7 +216,48 @@ export class HtmlAudioPlayer {
       this._bands = null;
       this._makeup = null;
       this._limiter = null;
+      this._levelGain = null;
+      this._analyser = null;
+      this._levelActive = false;
     }
+  }
+
+  // Whether loudness leveling should run (single source: lib/audioLeveling). False
+  // on iOS by default so native background playback is preserved (the Web Audio tap
+  // would forfeit it); an iOS user can opt in, accepting that trade.
+  _levelingResolved() { return this._levelForce || getLeveling(); }
+
+  // React to a leveling toggle (subscribed in the ctor). On: tap the graph if
+  // playing so it takes effect now. Off: ride the leveling gain back to unity.
+  _applyLeveling() {
+    if (this._levelingResolved()) {
+      if (!this._silent && this._intendedPlaying) this._enableEq();
+      this._levelActive = !!this._ctx;
+      this._levelEma = 0;
+    } else {
+      this._levelActive = false;
+      this._levelEma = 0;
+      if (this._levelGain && this._ctx) this._levelGain.gain.setTargetAtTime(1, this._ctx.currentTime, 0.1);
+    }
+  }
+
+  // Open-loop AGC step: measure the program RMS and ramp the leveling gain toward
+  // target/RMS (clamped). Throttled; no-op unless leveling is active. Piggybacks
+  // the progress rAF, so it only runs while playing + foregrounded.
+  _measureLevel() {
+    if (!this._levelActive || !this._analyser || !this._levelGain) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    if (now - this._lastLevel < LEVEL_MEASURE_MS) return;
+    this._lastLevel = now;
+    const buf = this._levelBuf ?? (this._levelBuf = new Float32Array(this._analyser.fftSize));
+    this._analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    if (rms < 1e-4) return;   // silence/gap — hold the current gain
+    this._levelEma = this._levelEma ? this._levelEma * (1 - LEVEL_EMA_ALPHA) + rms * LEVEL_EMA_ALPHA : rms;
+    const g = levelGainFor(this._levelEma, { target: LEVEL_TARGET_RMS, minDb: LEVEL_MIN_DB, maxDb: LEVEL_MAX_DB });
+    if (g != null && this._ctx) this._levelGain.gain.setTargetAtTime(g, this._ctx.currentTime, LEVEL_RAMP_TC);
   }
 
   setEqBand(i, db) {
@@ -182,7 +265,8 @@ export class HtmlAudioPlayer {
     if (!Number.isFinite(v) || i < 0 || i >= this._eqGains.length) return;
     this._eqGains[i] = v;
     this._enableEq();
-    if (this._bands?.[i]) this._rampParam(this._bands[i].gain, v);
+    // Reflect the effective value (override wins if a mode profile is active).
+    if (this._bands?.[i]) this._rampParam(this._bands[i].gain, this._effGains()[i] ?? 0);
     if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
@@ -190,16 +274,42 @@ export class HtmlAudioPlayer {
   setEqGains(arr) {
     this._eqGains = sanitizeGains(arr);
     this._enableEq();
-    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, this._eqGains[i] ?? 0));
+    // Apply the EFFECTIVE gains — a transient mode override (Car Mode) keeps
+    // priority over a user EQ change made while the profile is active.
+    const eff = this._effGains();
+    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, eff[i] ?? 0));
     if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
   }
-  // Boost headroom: attenuate by the loudest positive band (+ margin) so the EQ
-  // re-balances tone instead of overflowing. Cuts-only / flat → unity (1.0).
+  // Effective gains = the transient mode override (Car Mode) if set, else the
+  // user's saved EQ. All audio-graph reads go through this so the override is
+  // applied without touching/persisting the user's own curve.
+  _effGains() { return this._eqOverride ?? this._eqGains; }
+
+  // Boost headroom: unity for flat/cuts AND every modest boost (≤ threshold) so the
+  // preset keeps full loudness and the limiter shaves the occasional peak; only the
+  // EXCESS of an extreme boost (> threshold) is pre-trimmed to avoid heavy limiting.
   _makeupGain() {
-    const maxPos = Math.max(0, ...this._eqGains);
-    return maxPos > 0 ? dbToGain(-(maxPos + EQ_HEADROOM_MARGIN_DB)) : 1;
+    const maxPos = Math.max(0, ...this._effGains());
+    return maxPos > EQ_HEADROOM_THRESHOLD_DB ? dbToGain(-(maxPos - EQ_HEADROOM_THRESHOLD_DB)) : 1;
+  }
+
+  // Apply a transient EQ override (null clears it back to the user's EQ). Never
+  // persists. Used by Car Mode's audio profile.
+  setEqOverride(arr) {
+    this._eqOverride = arr ? sanitizeGains(arr) : null;
+    this._enableEq();
+    const eff = this._effGains();
+    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, eff[i] ?? 0));
+    if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
+    this._emit('eq', eff.slice());
+  }
+
+  // Force loudness leveling on regardless of the saved preference (Car Mode).
+  setLevelForce(on) {
+    this._levelForce = !!on;
+    this._applyLeveling();
   }
   // Ramp an AudioParam to a new value instead of snapping it — kills zipper
   // noise when the UI streams setEqBand on every pointermove during a drag.
@@ -215,7 +325,7 @@ export class HtmlAudioPlayer {
     this._ensureGraph();
     if (this._ctx?.state === 'suspended') { this._ctx.resume().catch(() => {}); }
   }
-  _eqActive() { return this._eqGains.some(g => g !== 0); }
+  _eqActive() { return this._effGains().some(g => g !== 0); }
   _persistEq() {
     try { localStorage.setItem('aura.eq.gains', JSON.stringify(this._eqGains)); } catch { /* ignore */ }
   }
@@ -247,6 +357,7 @@ export class HtmlAudioPlayer {
     if (this._raf) return;
     const tick = () => {
       this._emitProgress();
+      this._measureLevel();
       this._raf = requestAnimationFrame(tick);
     };
     this._raf = requestAnimationFrame(tick);
@@ -260,6 +371,9 @@ export class HtmlAudioPlayer {
     const seq = ++this._loadSeq;   // supersede any in-flight load
     this._baseUrl = url ?? null;
     this._silent = !url;
+    // New track → re-level from scratch so each song settles to the target.
+    this._levelEma = 0;
+    this._lastLevel = 0;
     this._el.pause();
     // Reset the progress signal up-front so the UI bar/time never carry the
     // previous track's position into the new one while it loads.
@@ -343,9 +457,13 @@ export class HtmlAudioPlayer {
     // iOS we deliberately do NOT auto-tap from a saved preset: that would forfeit
     // lock-screen / background playback with no user action this session. An
     // explicit EQ adjustment still taps via _enableEq. Once tapped, stays tapped.
-    if (this._ctx || (this._eqActive() && !isIOS())) {
+    // Tap Web Audio when EQ is in use (existing) OR loudness leveling is on. Both
+    // need the graph. _levelingResolved() is false on iOS by default, so iOS keeps
+    // native background playback unless the user explicitly opts into leveling.
+    if (this._ctx || this._levelingResolved() || (this._eqActive() && !isIOS())) {
       this._ensureGraph();
       if (this._ctx?.state === 'suspended') { try { await this._ctx.resume(); } catch { /* ignore */ } }
+      this._levelActive = this._levelingResolved() && !!this._ctx;
     }
     return this._el.play();
   }
@@ -372,6 +490,7 @@ export class HtmlAudioPlayer {
 
   destroy() {
     this._unsubQuality?.();
+    this._unsubLeveling?.();
     this._stopTick();
     this._el.pause();
     this._el.removeAttribute('src');
@@ -385,6 +504,7 @@ export class HtmlAudioPlayer {
     document.removeEventListener('visibilitychange', this._onVisible);
     if (this._ctx) { try { this._ctx.close(); } catch { /* ignore */ } }
     this._ctx = null; this._src = null; this._bands = null; this._makeup = null; this._limiter = null;
+    this._levelGain = null; this._analyser = null; this._levelBuf = null; this._levelActive = false;
     this._listeners.clear();
   }
 

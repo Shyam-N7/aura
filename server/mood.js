@@ -72,14 +72,34 @@ export async function refreshMood(userId) {
   return inferMood(userId);
 }
 
+// A mood-inference claim is valid this long — long enough to cover a slow Gemini
+// call, short enough that a crashed holder self-releases. (parallel-usage hygiene)
+const INFER_CLAIM_MS = 30 * 1000;
+
 export async function inferIfStale(userId) {
   const latest = await getCurrentMood(userId);
   if (!(await isStale(userId, latest))) return latest;
+  // Claim the inference atomically so two devices that cross the threshold together
+  // don't both call Gemini. The loser returns the existing snapshot; the winner's
+  // fresh snapshot (with updated events_seen) makes subsequent calls non-stale.
+  // The claim self-expires after INFER_CLAIM_MS so a crashed holder can't wedge it.
+  const now = Date.now();
+  const claim = await pool.query(
+    `UPDATE users SET mood_inferring_at = $2
+      WHERE id = $1 AND (mood_inferring_at IS NULL OR mood_inferring_at < $3)
+      RETURNING id`,
+    [userId, now, now - INFER_CLAIM_MS],
+  );
+  if (!claim.rowCount) return latest;   // another inference is in flight
   try {
     return await inferMood(userId);
   } catch (err) {
     const cause = err.cause?.code ? ` (${err.cause.code})` : '';
     console.warn('[mood] inference failed:', err.message + cause);
     return latest;
+  } finally {
+    // Compare-and-clear: only release if WE still hold the claim ($now), so a slow
+    // holder (>INFER_CLAIM_MS) doesn't stomp a successor that already re-claimed.
+    await pool.query('UPDATE users SET mood_inferring_at = NULL WHERE id = $1 AND mood_inferring_at = $2', [userId, now]).catch(() => {});
   }
 }

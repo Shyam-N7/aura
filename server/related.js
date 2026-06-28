@@ -232,3 +232,32 @@ export async function getRelatedTracks(pid, { lang, limit, noLangFloor } = {}) {
   cacheSet(key, tracks);
   return tracks.slice(0, want);
 }
+
+// Car Mode smart queue (best-available; the real engine is a later epic): gently
+// push tracks this user tends to SKIP toward the back of the batch so auto-radio
+// needs fewer manual nexts. Stable — preserves the base similarity order within
+// each skip tier. Applied PER-USER, after getRelatedTracks' shared cache, so the
+// cached similarity list stays user-agnostic. Best-effort: a query error returns
+// the list unchanged.
+const SKIP_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;   // 60 days
+export async function demoteSkipped(userId, tracks) {
+  if (!userId || !Array.isArray(tracks) || tracks.length < 2) return tracks;
+  const ids = tracks.map(t => t?.id).filter(Boolean);
+  if (!ids.length) return tracks;
+  let skips;
+  try {
+    const { rows } = await pool.query(
+      `SELECT track_id, COUNT(*)::int AS n
+         FROM listening_events
+        WHERE user_id = $1 AND kind = 'skip' AND ts > $2 AND track_id = ANY($3)
+        GROUP BY track_id`,
+      [userId, Date.now() - SKIP_WINDOW_MS, ids],
+    );
+    skips = new Map(rows.map(r => [r.track_id, r.n]));
+  } catch { return tracks; }
+  if (!skips.size) return tracks;
+  return tracks
+    .map((t, i) => ({ t, i, n: skips.get(t.id) ?? 0 }))
+    .sort((a, b) => a.n - b.n || a.i - b.i)
+    .map(x => x.t);
+}

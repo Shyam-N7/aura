@@ -174,3 +174,27 @@
 }
 .aura-set__pin-btn:disabled { opacity: 0.6; cursor: default; }
 .aura-set__pin-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ── Device list ───────────────────────────────────────────────────── */
+.aura-set__device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+}
+.aura-set__device + .aura-set__device { border-top: 1px solid var(--color-line); }
+.aura-set__device-remove {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aura-set__device-remove:hover { background: var(--color-ink); color: var(--color-bg); }
+.aura-set__device-remove:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }

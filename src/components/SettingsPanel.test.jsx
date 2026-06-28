@@ -7,6 +7,10 @@ vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: null, isAuthed: false }),
   enableFamilyMode: vi.fn(),
   disableFamilyMode: vi.fn(),
+  updatePreferences: vi.fn().mockResolvedValue({}),
+  listDevices: vi.fn().mockResolvedValue({ sessions: [], currentId: null, limit: 3 }),
+  revokeDevice: vi.fn().mockResolvedValue(),
+  logoutOtherDevices: vi.fn().mockResolvedValue(),
 }));
 vi.mock('../api/account', () => ({
   exportMyData: vi.fn(),
