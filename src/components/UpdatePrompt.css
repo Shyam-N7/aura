@@ -47,22 +47,6 @@
   text-overflow: ellipsis;
 }
 
-.aura-update__btn {
-  flex-shrink: 0;
-  border: 0;
-  border-radius: 9999px;
-  padding: 7px 16px;
-  background: var(--color-accent);
-  color: var(--color-bg);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 120ms ease, filter 120ms ease;
-}
-.aura-update__btn:hover { filter: brightness(1.06); }
-.aura-update__btn:active { transform: scale(0.96); }
-
 .aura-update__x {
   flex-shrink: 0;
   width: 30px;
@@ -84,5 +68,4 @@
 
 @media (prefers-reduced-motion: reduce) {
   .aura-update { animation: none; }
-  .aura-update__btn { transition: none; }
 }

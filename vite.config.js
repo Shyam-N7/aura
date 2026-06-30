@@ -8,10 +8,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // 'prompt' (not 'autoUpdate'): never reload the page on our own when a new
-      // SW activates — that was refreshing the app out from under users when
-      // they reopened it. The new version simply waits and applies on the next
-      // natural reopen; main.jsx surfaces a quiet "reopen to update" toast.
+      // 'prompt' (not 'autoUpdate'): a waiting build never reloads on its OWN —
+      // main.jsx/App.jsx drive updateSW(true) at a SAFE moment (never mid-song)
+      // instead, so the update applies itself without yanking the app out from
+      // under a listener and without a manual close/reopen. See src/lib/appUpdate.js.
       registerType: 'prompt',
       includeAssets: ['icon.svg'],
       manifest: {

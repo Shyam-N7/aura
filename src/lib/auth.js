@@ -22,13 +22,16 @@ export function getUser() { return _user; }
 // client-side identity cache that drives the authed view. (security: #22)
 export function isAuthed() { return !!_user; }
 
-function setSession(user) {
-  // The session token is now an httpOnly cookie set by the server — never stored
-  // in JS-readable storage. We persist only the user identity for UX. (security: #22)
-  try {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-  } catch { /* ignore */ }
+// Persist the user identity + the synchronous "derived" caches (hasOnboarded /
+// seed* — read before first paint by the screen initializer + showSensing) and
+// notify subscribers. Shared by login (setSession) AND every later server refresh
+// (fetchMe, preference / family / mode updates), so a normal reload reconciles ALL
+// cached bits — server-side changes (e.g. fields added by a migration) show up
+// WITHOUT a logout/login. The session token itself is an httpOnly cookie set by the
+// server — never JS-readable storage. (security: #22)
+function persistUser(user) {
   _user = user;
+  try { localStorage.setItem(USER_KEY, JSON.stringify(user)); } catch { /* ignore */ }
   if (user.hasOnboarded !== undefined) {
     try { localStorage.setItem('aura.hasOnboarded', user.hasOnboarded ? '1' : ''); } catch { /* localStorage unavailable */ }
   }
@@ -43,6 +46,9 @@ function setSession(user) {
   }
   notify();
 }
+
+// Login establishes the session — same client persistence as any later refresh.
+function setSession(user) { persistUser(user); }
 
 export function clearSession() {
   try {
@@ -193,14 +199,18 @@ export async function resetPassword({ email, code, password }) {
 }
 
 export async function fetchMe() {
-  // Validates the httpOnly session cookie against the server. A 401 means no /
-  // stale / revoked session → clear the cached identity.
-  const res = await fetch('/api/auth/me');
-  if (!res.ok) { clearSession(); return null; }
+  // Reconcile the cached identity with the server. A network/5xx blip KEEPS the
+  // cached user (just skips the update) so a boot/refocus refresh can't sign you out
+  // on a transient hiccup; only a definitive 401/403 (no / stale / revoked session)
+  // clears it. On success, persistUser refreshes the derived caches too, so
+  // server-side changes show up on a normal reload — no logout/login. (security: #22)
+  let res;
+  try { res = await fetch('/api/auth/me'); }
+  catch { return _user; }
+  if (res.status === 401 || res.status === 403) { clearSession(); return null; }
+  if (!res.ok) return _user;
   const data = await res.json();
-  _user = data.user;
-  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* localStorage unavailable */ }
-  notify();
+  persistUser(data.user);
   return data.user;
 }
 
@@ -213,9 +223,7 @@ export async function updatePreferences(prefs) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? 'update failed');
-  _user = data.user;
-  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* localStorage unavailable */ }
-  notify();
+  persistUser(data.user);
   return data.user;
 }
 
@@ -248,9 +256,7 @@ export async function enableFamilyMode(pin) {
   });
   const data = await res.json();
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'could not enable family mode'), { status: res.status, code: data.code });
-  _user = data.user;
-  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
-  notify();
+  persistUser(data.user);
   return data.user;
 }
 
@@ -262,9 +268,7 @@ export async function disableFamilyMode(pin) {
   });
   const data = await res.json();
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'could not disable family mode'), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft, retryAfterSec: data.retryAfterSec });
-  _user = data.user;
-  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
-  notify();
+  persistUser(data.user);
   return data.user;
 }
 
@@ -279,9 +283,7 @@ export async function setActiveMode(key) {
   });
   const data = await res.json();
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'could not switch mode'), { status: res.status, code: data.code });
-  _user = data.user;
-  try { localStorage.setItem(USER_KEY, JSON.stringify(data.user)); } catch { /* ignore */ }
-  notify();
+  persistUser(data.user);
   broadcast('mode', key);   // keep other tabs on this device in sync
   return data.user;
 }

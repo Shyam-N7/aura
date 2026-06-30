@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
@@ -8,6 +8,7 @@ import { useAuth } from './lib/auth';
 import { stashPostAuthPath, consumePostAuthPath } from './lib/routes';
 import { ConsentBanner } from './components/ConsentBanner';
 import { UpdatePrompt } from './components/UpdatePrompt';
+import { markUpdateReady, subscribeUpdate, applyUpdate, consumeJustUpdated } from './lib/appUpdate';
 import { getConsent, subscribeConsent } from './lib/consent';
 import { confirm } from './lib/confirm';
 import { initExitGuard, setExitGuard } from './lib/exitGuard';
@@ -86,18 +87,23 @@ function AppRoot() {
     if (!isAuthed) stashPostAuthPath(window.location.pathname + window.location.search);
   }, [isAuthed]);
 
-  // Register the service worker after mount. registerType:'prompt' means a
-  // waiting update never force-reloads — it applies on the next natural reopen.
-  // Instead of a transient toast, surface a PERSISTENT UpdatePrompt with an
-  // Update button that calls updateSW(true) (skip-waiting + reload into the
-  // fresh build). Keep the returned updateSW fn in a ref so the button can fire it.
-  const [needRefresh, setNeedRefresh] = useState(false);
-  const updateSW = useRef(null);
+  // Register the service worker after mount, poll for new builds, and hand a
+  // waiting update to the shared controller. registerType:'prompt' keeps the old
+  // bundle running until WE call updateSW(true) — so the update applies ITSELF at a
+  // safe moment instead of needing a manual click or a tab close/reopen: the authed
+  // app applies it playback-aware (App.jsx, never mid-song); pre-auth views (no
+  // playback) apply on the next navigation below. The 60s poll lets a long-open tab
+  // notice a deploy without a manual refresh.
   useEffect(() => {
-    updateSW.current = registerSW({
-      onNeedRefresh() { setNeedRefresh(true); },
+    const updateSW = registerSW({
+      onRegisteredSW(_swUrl, r) {
+        if (r) setInterval(() => { r.update().catch(() => {}); }, 60_000);
+      },
+      onNeedRefresh() { markUpdateReady(() => updateSW?.(true)); },
     });
   }, []);
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => subscribeUpdate(setUpdateReady), []);
 
   // Legal pages take precedence over the auth gate so they're public AND
   // reachable while signed in.
@@ -110,6 +116,14 @@ function AppRoot() {
     if (loc.path === '/auth') return 'auth';
     return 'landing';
   }, [loc.path, isAuthed]);
+
+  // Pre-auth pages have no playback — apply a pending update on the next
+  // navigation (a natural reload point). The authed app applies it playback-aware
+  // in App.jsx, so skip here when the app view is showing.
+  useEffect(() => {
+    if (updateReady && view !== 'app') applyUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.path, loc.search]);
 
   // Back-button exit guard — armed only while the authed app is showing, so a
   // stray Back asks before leaving instead of dropping the user out. Inert on
@@ -163,9 +177,17 @@ function AppRoot() {
     if (view !== 'app') document.body.style.background = THEME_BG[theme] || THEME_BG.dusk;
   }, [view, theme]);
 
-  // Persistent SW-update banner — shown in every view (app + pre-auth).
-  const updateBanner = needRefresh
-    ? <UpdatePrompt onUpdate={() => updateSW.current?.(true)} onDismiss={() => setNeedRefresh(false)} />
+  // After an auto-update reload, show a brief, self-dismissing confirmation toast
+  // (the flag rode the reload via sessionStorage). No action needed — the update
+  // already applied — so it just fades out.
+  const [justUpdated, setJustUpdated] = useState(() => consumeJustUpdated());
+  useEffect(() => {
+    if (!justUpdated) return undefined;
+    const t = setTimeout(() => setJustUpdated(false), 3500);
+    return () => clearTimeout(t);
+  }, [justUpdated]);
+  const updateToast = justUpdated
+    ? <UpdatePrompt onDismiss={() => setJustUpdated(false)} />
     : null;
 
   if (view === 'app') return (
@@ -173,7 +195,7 @@ function AppRoot() {
       <Root user={user} />
       {analyticsOn && <><Analytics /><SpeedInsights /></>}
       <ConsentBanner onPrivacy={() => navigate('/privacy')} />
-      {updateBanner}
+      {updateToast}
     </>
   );
 
@@ -203,7 +225,7 @@ function AppRoot() {
       </div>
       {analyticsOn && <><Analytics /><SpeedInsights /></>}
       <ConsentBanner onPrivacy={() => navigate('/privacy')} />
-      {updateBanner}
+      {updateToast}
     </>
   );
 }
