@@ -111,7 +111,9 @@ import { savePosition, flush as flushPosition, loadPosition, clearPosition } fro
 import { getTrack } from './api/catalog';
 import { getResume } from './lib/playback';
 import { talk } from './api/talk';
-import { matchLocalIntent } from './lib/voiceIntents';
+import { matchLocalIntent, stripRequestVerb } from './lib/voiceIntents';
+import { speak, stopSpeaking } from './lib/speak';
+import { getSpokenConfirm } from './lib/carVoice';
 import { EQ_CLARITY } from './audio/eqConfig';
 import { getRelated } from './api/related';
 import { prefetchLyrics } from './api/lyrics';
@@ -120,7 +122,8 @@ import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
 import { setSearchQuery } from './lib/searchQuery';
 import { fireEndOfSetIfArmed, subscribeSleepFire } from './lib/sleepTimer';
-import { useAuth, setActiveMode, showSensing, clearSession, applyBroadcastMode } from './lib/auth';
+import { useAuth, setActiveMode, showSensing, clearSession, applyBroadcastMode, fetchMe, isAuthed } from './lib/auth';
+import { subscribeUpdate, applyUpdate } from './lib/appUpdate';
 import { sensingShownToday, markSensingShown } from './lib/sensing';
 import { dropExplicit } from './lib/explicit';
 import { toast } from './lib/toast';
@@ -256,6 +259,25 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // (end of an explicit queue, or sleep-at-end). Drives the lyrics idle screen's
   // "Song ended" state; cleared whenever audio starts again (player 'play').
   const [ended, setEnded]           = useState(false);
+
+  // ── Boot refresh + auto-update ───────────────────────────────────────
+  // Reconcile the cached identity with the server once on mount so a normal reload
+  // picks up server-side changes (e.g. fields added by a migration) WITHOUT a
+  // logout/login — the cached user paints first, fresh fields swap in when this
+  // lands. fetchMe clears the session only on a real 401/403, so a transient blip
+  // can't sign you out here.
+  useEffect(() => { if (isAuthed()) fetchMe().catch(() => {}); }, []);
+  // A new build (service worker) applies ITSELF, but only at a safe moment — never
+  // mid-song. While nothing is playing, reload into the fresh build after a short
+  // grace (re-armed on each screen change); while a track plays, defer until it
+  // pauses/ends. Queue + position persist, so the reload lands where you were.
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => subscribeUpdate(setUpdateReady), []);
+  useEffect(() => {
+    if (!updateReady || playing) return undefined;
+    const t = setTimeout(() => applyUpdate(), 4000);
+    return () => clearTimeout(t);
+  }, [updateReady, playing, screen]);
   const [morph, setMorph]           = useState(null); // { track, fromRect, toRect, kind }
   const morphTimer = useRef(null);
   const beginRaf   = useRef(0);       // the mobile-open #player-art poll rAF (cancellable)
@@ -1147,6 +1169,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // run immediately and offline; anything else is sent to the SAME /api/llm/talk
   // brain that powers typed TalkAura, which handles "play <song / vibe>". The mic
   // lives in the CarPlayer dashboard; voiceHint echoes the result back on-screen.
+  // Instant LOCAL commands echo a short confirmation via flashHint (the 4s auto-clear
+  // is fine — they're terminal). The slower "play <x>" → LLM path uses the richer
+  // voiceStatus state machine below instead (a 4s clear would blank a slow request).
   const [voiceHint, setVoiceHint] = useState('');
   const voiceHintTimer = useRef(null);
   const flashHint = (msg) => {
@@ -1154,10 +1179,31 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     clearTimeout(voiceHintTimer.current);
     voiceHintTimer.current = setTimeout(() => setVoiceHint(''), 4000);
   };
+
+  // Voice-request lifecycle for the LLM path, surfaced as the Car Mode glance overlay.
+  //   phase: 'idle' | 'listening' | 'thinking' | 'done' | 'error'
+  //   text:  thinking → what the user asked for ("vaadi pulla vaadi", '' for a non-play
+  //          query); error → the message.   title: done → the resolved song title.
+  // Only the TERMINAL states (done/error) auto-fade; 'thinking' persists until talk()
+  // settles — that's the fix for a request slower than the old 4s flashHint clear.
+  const [voiceStatus, setVoiceStatus] = useState({ phase: 'idle', text: '', title: '' });
+  const voiceFadeTimer = useRef(null);   // armed ONLY on terminal states
+  const voiceReqId     = useRef(0);      // generation counter — newest press wins
+  const voiceAbort     = useRef(null);   // AbortController for the in-flight talk()
+  const clearVoiceFade = () => { clearTimeout(voiceFadeTimer.current); voiceFadeTimer.current = null; };
+  const setVoiceTerminal = (next, ms) => {
+    setVoiceStatus(next);
+    clearVoiceFade();
+    voiceFadeTimer.current = setTimeout(() => setVoiceStatus({ phase: 'idle', text: '', title: '' }), ms);
+  };
+
   const runVoiceCommand = async (transcript) => {
     if (!transcript) return;
     const local = matchLocalIntent(transcript);
     if (local) {
+      // A local command supersedes any overlay left by an in-flight "play x".
+      clearVoiceFade();
+      setVoiceStatus({ phase: 'idle', text: '', title: '' });
       const vol = player?.getVolume?.() ?? 1;
       switch (local.kind) {
         case 'next':    goNext();                                     flashHint('Next'); break;
@@ -1176,21 +1222,56 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       }
       return;
     }
-    // Not a local command → the LLM brain (same pipeline as typed TalkAura).
-    flashHint('Thinking…');
+    // Not a local command → the LLM brain (same pipeline as typed TalkAura). Two layers
+    // keep a re-press winning: useVoiceControl suppresses a stale result that was still
+    // finalizing when you re-press; and here the AbortController + this generation guard
+    // drop a turn whose network call is still in flight when the next turn starts.
+    const myId = voiceReqId.current;
+    const ctrl = new AbortController();
+    voiceAbort.current = ctrl;
+    clearVoiceFade();
+    const stripped = stripRequestVerb(transcript);
+    const hadVerb = !!stripped && stripped !== transcript.trim();
+    setVoiceStatus({ phase: 'thinking', text: hadVerb ? stripped : '', title: '' });
     try {
-      const { reply, tracks } = await talk({ message: transcript });
+      const { reply, tracks } = await talk({ message: transcript, signal: ctrl.signal });
+      if (myId !== voiceReqId.current) return;   // a newer press superseded us
       if (tracks?.length) {
         pickLiveSequence(tracks, 0, 'voice command');
-        flashHint(`Playing ${cleanTitle(tracks[0].title)}`);
+        const title = cleanTitle(tracks[0].title);
+        setVoiceTerminal({ phase: 'done', text: '', title }, 2200);
+        if (getSpokenConfirm()) speak(`Now playing ${title}`);
       } else {
-        flashHint(reply || 'No song matched.');
+        setVoiceTerminal({ phase: 'error', text: reply || 'No song matched.', title: '' }, 2600);
       }
-    } catch {
-      flashHint('Voice search failed.');
+    } catch (err) {
+      if (err?.name === 'AbortError') return;     // superseded — the new turn owns the UI
+      if (myId !== voiceReqId.current) return;
+      setVoiceTerminal({ phase: 'error', text: 'Voice search failed.', title: '' }, 2600);
     }
   };
   const voice = useVoiceControl({ onResult: runVoiceCommand });
+
+  // A new listen window always wins: cancel any in-flight request + stale speech and
+  // bump the generation counter so a re-press immediately supersedes the previous turn.
+  // Done in the press handler (not an effect) so there's no setState-in-effect cascade;
+  // the 'listening' phase shows nothing in the overlay, so no end-side reset is needed.
+  const beginVoiceTurn = () => {
+    voiceAbort.current?.abort();
+    voiceReqId.current++;
+    stopSpeaking();
+    clearVoiceFade();
+    setVoiceStatus({ phase: 'listening', text: '', title: '' });
+    voice.start();
+  };
+
+  // Teardown: a slow request must not resolve/speak after unmount.
+  useEffect(() => () => {
+    voiceAbort.current?.abort();
+    clearTimeout(voiceFadeTimer.current);
+    clearTimeout(voiceHintTimer.current);
+    stopSpeaking();
+  }, []);
 
   // The sleep sheet lives on its own bus, so it could stack with the why /
   // lyrics / crowd panels. Opening either side closes the other.
@@ -1414,7 +1495,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
                 onBack={() => leavePlayer(playerReturn)}
                 djName={t.djName}
                 voiceSupported={voice.supported} voiceListening={voice.listening}
-                onTalkStart={voice.start} onTalkEnd={voice.stop} voiceHint={voiceHint}/>
+                onTalkStart={beginVoiceTurn} onTalkEnd={voice.stop}
+                voiceHint={voiceHint} voiceStatus={voiceStatus}/>
             ) : (
               <MobilePlayer
                 open={screen === 'player'}

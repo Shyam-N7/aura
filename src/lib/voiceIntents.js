@@ -45,6 +45,14 @@ const RESUME_EXACT = new Set([
 // lone "play"/"play it" still resumes.
 const REQUEST_PREFIX = /^(play|put on|listen to|queue)\b/;
 
+// Strip a leading request verb ("play", "put on", "listen to", "queue") so the
+// voice loader can echo just what the user asked for — "play vaadi pulla vaadi" →
+// "vaadi pulla vaadi". Mirrors REQUEST_PREFIX but keeps the original casing for
+// display (the LLM still gets the full raw transcript).
+export function stripRequestVerb(transcript) {
+  return String(transcript ?? '').replace(/^\s*(play|put on|listen to|queue)\b[\s,]*/i, '').trim();
+}
+
 // Returns { kind } for a recognised local command, else null (→ route to the LLM).
 export function matchLocalIntent(transcript) {
   const s = normalize(transcript);

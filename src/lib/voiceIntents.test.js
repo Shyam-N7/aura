@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchLocalIntent } from './voiceIntents';
+import { matchLocalIntent, stripRequestVerb } from './voiceIntents';
 
 const kindOf = (t) => matchLocalIntent(t)?.kind ?? null;
 
@@ -60,5 +60,26 @@ describe('matchLocalIntent — instant local transport commands', () => {
     expect(kindOf('')).toBeNull();
     expect(kindOf(null)).toBeNull();
     expect(kindOf('what is the weather')).toBeNull();
+  });
+});
+
+describe('stripRequestVerb — loader display text', () => {
+  it('strips the leading request verb but keeps the rest (and its casing)', () => {
+    expect(stripRequestVerb('play vaadi pulla vaadi')).toBe('vaadi pulla vaadi');
+    expect(stripRequestVerb('play Despacito')).toBe('Despacito');
+    expect(stripRequestVerb('put on some jazz')).toBe('some jazz');
+    expect(stripRequestVerb('listen to Taylor Swift')).toBe('Taylor Swift');
+    expect(stripRequestVerb('queue, back to december')).toBe('back to december');
+  });
+
+  it('only strips a leading verb, never one mid-phrase', () => {
+    expect(stripRequestVerb('songs like coldplay')).toBe('songs like coldplay');
+    expect(stripRequestVerb('something to play')).toBe('something to play');
+  });
+
+  it('handles empty / nullish input', () => {
+    expect(stripRequestVerb('')).toBe('');
+    expect(stripRequestVerb(null)).toBe('');
+    expect(stripRequestVerb(undefined)).toBe('');
   });
 });

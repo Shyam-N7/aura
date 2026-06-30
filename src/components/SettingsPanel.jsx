@@ -9,6 +9,7 @@ import { getConsent, setConsent, subscribeConsent } from '../lib/consent';
 import { QUALITIES } from '../lib/audioQuality';
 import { useAudioQuality } from '../hooks/useAudioQuality';
 import { getLeveling, setLeveling } from '../lib/audioLeveling';
+import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
 import { isIOS } from '../lib/platform';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
@@ -43,6 +44,16 @@ export function SettingsPanel({ t, setTweak }) {
     setLeveling(next);
     setLevelingState(next);
     toast(next ? 'volume leveling on.' : 'volume leveling off.');
+  };
+
+  // Spoken confirmations — in hands-free Car Mode, aura says the song name aloud
+  // when a voice request resolves so you can keep your eyes on the road. Default on.
+  const [spokenConfirm, setSpokenConfirmState] = useState(getSpokenConfirm());
+  const toggleSpokenConfirm = () => {
+    const next = !spokenConfirm;
+    setSpokenConfirm(next);
+    setSpokenConfirmState(next);
+    toast(next ? 'spoken confirmations on.' : 'spoken confirmations off.');
   };
 
   // Family mode — a PIN-gated toggle. Off → reveal a "set a PIN" field; on →
@@ -254,6 +265,20 @@ export function SettingsPanel({ t, setTweak }) {
             </span>
           </span>
           <span className={`aura-set__switch ${leveling ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
+      </div>
+      <div className="aura-set__group">
+        <button type="button" role="switch" aria-checked={spokenConfirm}
+          className="aura-set__row" onClick={toggleSpokenConfirm}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">spoken confirmations</span>
+            <span className="aura-set__row-caption">
+              {spokenConfirm
+                ? 'in car mode, aura says the song name aloud when you ask by voice. it plays over the first moment of the song.'
+                : 'voice requests play silently, with on-screen text only.'}
+            </span>
+          </span>
+          <span className={`aura-set__switch ${spokenConfirm ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
         </button>
       </div>
 

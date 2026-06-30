@@ -27,6 +27,12 @@
   transform: scale(1.3);
   filter: blur(54px) saturate(1.25);
   opacity: 0.7;
+  /* Slow, calm idle drift so the screen feels alive but never distracting. */
+  animation: aura-car-drift 24s ease-in-out infinite alternate;
+}
+@keyframes aura-car-drift {
+  0%   { transform: scale(1.3)  translate3d(0, 0, 0); }
+  100% { transform: scale(1.38) translate3d(0, -1.5%, 0); }
 }
 /* Heavier scrim than the standard player: glanceable contrast beats ambience. */
 .aura-car__scrim {
@@ -78,7 +84,7 @@
   -webkit-backdrop-filter: blur(16px) saturate(140%);
           backdrop-filter: blur(16px) saturate(140%);
   border: 1px solid color-mix(in srgb, var(--color-ink), transparent 84%);
-  transition: transform 100ms ease;
+  transition: transform 120ms cubic-bezier(.2, .7, .2, 1);
 }
 .aura-car__chip:active { transform: scale(0.94); }
 .aura-car__brand {
@@ -101,12 +107,34 @@
   flex-shrink: 0;
 }
 
-/* ── Now playing (big, two-line title) ── */
-.aura-car__meta { flex-shrink: 0; text-align: center; padding: 0 6px; }
+/* ── Now playing — a compact art chip + title, so the song has an identity at a
+   glance without stealing room from the big controls below. ── */
+.aura-car__meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 6px;
+}
+.aura-car__art {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px color-mix(in srgb, #000, transparent 72%);
+}
+.aura-car__art .aura-album-art {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 12px;
+}
+.aura-car__metatext { min-width: 0; text-align: left; }
 .aura-car__title {
   font-family: var(--font-serif);
-  font-size: 30px;
-  line-height: 1.1;
+  font-size: 22px;
+  line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--color-ink);
   text-wrap: pretty;
@@ -116,9 +144,9 @@
   overflow: hidden;
 }
 .aura-car__artist {
-  margin-top: 6px;
+  margin-top: 4px;
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 15px;
   color: var(--color-ink-soft);
   white-space: nowrap;
   overflow: hidden;
@@ -150,7 +178,7 @@
   background: color-mix(in srgb, var(--color-bg), transparent 30%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
           backdrop-filter: blur(14px) saturate(140%);
-  transition: transform 100ms ease, background 140ms ease;
+  transition: transform 120ms cubic-bezier(.2, .7, .2, 1), background 140ms ease;
 }
 .aura-car__tile:active { transform: scale(0.97); background: color-mix(in srgb, var(--color-accent), transparent 86%); }
 .aura-car__tile-label {
@@ -177,9 +205,15 @@
   background: var(--color-accent);
   color: var(--color-bg);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--color-accent), transparent 56%);
-  transition: transform 100ms ease, background 140ms ease;
+  transition: transform 120ms cubic-bezier(.2, .7, .2, 1), background 140ms ease;
 }
 .aura-car__play:active { transform: scale(0.985); }
+/* While playing, the bar breathes a soft accent glow — alive, not busy. */
+.aura-car__play--playing { animation: aura-car-playpulse 2.6s ease-in-out infinite; }
+@keyframes aura-car-playpulse {
+  0%, 100% { box-shadow: 0 8px 28px color-mix(in srgb, var(--color-accent), transparent 56%); }
+  50%      { box-shadow: 0 10px 38px color-mix(in srgb, var(--color-accent), transparent 38%); }
+}
 .aura-car__play-label {
   font-family: var(--font-sans);
   font-size: 20px;
@@ -210,7 +244,7 @@
   -webkit-user-select: none;
           user-select: none;
   -webkit-touch-callout: none;
-  transition: transform 100ms ease, background 140ms ease, border-color 140ms ease;
+  transition: transform 120ms cubic-bezier(.2, .7, .2, 1), background 140ms ease, border-color 140ms ease;
 }
 .aura-car__mic:active { transform: scale(0.99); }
 /* Listening — fills accent + a breathing ring so it's obvious from a glance. */
@@ -223,9 +257,6 @@
 @keyframes aura-car-listen {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent), transparent 40%); }
   50%      { box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-accent), transparent 100%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .aura-car__mic--on { animation: none; }
 }
 .aura-car__mic--off {
   cursor: default;
@@ -242,10 +273,79 @@
   min-height: 18px;
 }
 
+/* ── Center glance overlay — shown while a spoken "play <x>" resolves, then the
+   result, then it fades. Dims the dashboard for a clean read from the road, but is
+   pointer-events:none so it never traps the mic (re-ask mid-resolve still works). ── */
+.aura-car__glance {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  background: color-mix(in srgb, var(--color-bg), transparent 24%);
+  -webkit-backdrop-filter: blur(8px);
+          backdrop-filter: blur(8px);
+  transition: opacity 220ms ease, visibility 220ms ease;
+}
+.aura-car__glance.is-shown { opacity: 1; visibility: visible; }
+.aura-car__glance-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  max-width: 86%;
+  text-align: center;
+}
+.aura-car__glance-text {
+  font-family: var(--font-serif);
+  font-size: 27px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  text-wrap: pretty;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.aura-car__glance--done .aura-car__glance-text { color: var(--color-accent); }
+.aura-car__glance--error .aura-car__glance-text {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  color: var(--color-ink-soft);
+}
+.aura-car__dots { display: flex; gap: 12px; }
+.aura-car__dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  animation: aura-soft 1s ease-in-out infinite;
+  animation-delay: var(--aura-thinking-delay);
+}
+
 /* Short phones: tighten the fixed rows so the tile split keeps real estate. */
 @media (max-height: 670px) {
   .aura-car__content { gap: 10px; }
-  .aura-car__title { font-size: 25px; }
+  .aura-car__title { font-size: 20px; }
+  .aura-car__art { width: 42px; height: 42px; }
+  .aura-car__glance-text { font-size: 23px; }
   .aura-car__play { height: 66px; }
   .aura-car__mic { height: 56px; }
+}
+
+/* Reduced motion — kept LAST in the file so these overrides win the cascade over the
+   equal-specificity base rules above (media queries add no specificity, so source
+   order decides). Disables every ambient/looping animation + the overlay fade. */
+@media (prefers-reduced-motion: reduce) {
+  .aura-car__mic--on,
+  .aura-car__play--playing,
+  .aura-car__backdrop .aura-album-art,
+  .aura-car__dot { animation: none; }
+  .aura-car__glance { transition: none; }
 }

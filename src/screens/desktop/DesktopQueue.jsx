@@ -7,6 +7,7 @@ import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { ctxOpen } from '../../lib/trackContextMenu';
+import { tap } from '../../lib/haptics';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import './DesktopQueue.css';
@@ -161,7 +162,7 @@ export function DesktopQueue({
     const startX = e.clientX, startY = e.clientY;
     const timer = setTimeout(() => {
       draggedRef.current = true;
-      navigator.vibrate?.(12);
+      tap(12);
       beginDrag(i, el, pointerId, startY);
       longPressRef.current = null;
     }, LONG_PRESS_MS);
