@@ -29,7 +29,7 @@
       ]
     },
     {
-      "source": "/(index.html|sw.js|manifest.webmanifest)",
+      "source": "/(sw.js|manifest.webmanifest)",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache" }
       ]

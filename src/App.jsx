@@ -269,15 +269,17 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   useEffect(() => { if (isAuthed()) fetchMe().catch(() => {}); }, []);
   // A new build (service worker) applies ITSELF, but only at a safe moment — never
   // mid-song. While nothing is playing, reload into the fresh build after a short
-  // grace (re-armed on each screen change); while a track plays, defer until it
-  // pauses/ends. Queue + position persist, so the reload lands where you were.
+  // grace; while a track plays, defer until it pauses/ends (the `playing` dep
+  // re-arms the timer on that transition). Deliberately NOT keyed on `screen` —
+  // doing so let rapid in-app navigation perpetually reset the countdown so a ready
+  // update never applied. Queue + position persist, so the reload lands where you were.
   const [updateReady, setUpdateReady] = useState(false);
   useEffect(() => subscribeUpdate(setUpdateReady), []);
   useEffect(() => {
     if (!updateReady || playing) return undefined;
     const t = setTimeout(() => applyUpdate(), 4000);
     return () => clearTimeout(t);
-  }, [updateReady, playing, screen]);
+  }, [updateReady, playing]);
   const [morph, setMorph]           = useState(null); // { track, fromRect, toRect, kind }
   const morphTimer = useRef(null);
   const beginRaf   = useRef(0);       // the mobile-open #player-art poll rAF (cancellable)
