@@ -277,7 +277,16 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   useEffect(() => subscribeUpdate(setUpdateReady), []);
   useEffect(() => {
     if (!updateReady || playing) return undefined;
-    const t = setTimeout(() => applyUpdate(), 4000);
+    let t;
+    const tick = () => {
+      // Don't reload out from under active text entry (a family-PIN / delete-confirm
+      // / rename mid-type) — re-check activeElement at fire time and re-arm.
+      const el = document.activeElement;
+      const editing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      if (editing) { t = setTimeout(tick, 4000); return; }
+      applyUpdate();
+    };
+    t = setTimeout(tick, 4000);
     return () => clearTimeout(t);
   }, [updateReady, playing]);
   const [morph, setMorph]           = useState(null); // { track, fromRect, toRect, kind }

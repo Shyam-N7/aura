@@ -152,3 +152,119 @@ export function renderOtpEmail({ code, purpose }) {
 
   return { subject, html, text };
 }
+
+// Escape header/UA-derived values before interpolating into the HTML email.
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+// New-device sign-in alert. Same shell/palette as renderOtpEmail; plain, non-alarming
+// house voice with a clear "wasn't you → reset your password" CTA. All interpolated
+// fields are escaped (they derive from request headers / the user-agent).
+export function renderNewDeviceEmail({ name, deviceLabel, city, country, ip, time, alsoActiveIn }) {
+  const subject = 'New sign-in to your AURA account';
+  const heading = 'New sign-in';
+  const hi = name ? `Hi ${esc(String(name).split(' ')[0] || name)}, ` : '';
+  const location = [city, country].filter(Boolean).join(', ') || 'Unknown location';
+  const alsoLine = alsoActiveIn ? `Your account is also active in ${alsoActiveIn}.` : '';
+  const preheader = `New sign-in on ${deviceLabel || 'a new device'} — if this was you, you're all set.`;
+
+  const rows = [
+    ['Device', deviceLabel || 'Unknown device'],
+    ['Location', location],
+    ['When', time || 'just now'],
+    ['IP address', ip || 'Unknown'],
+  ];
+
+  const text = [
+    heading,
+    '',
+    `${hi}we noticed a new sign-in to your AURA account.`,
+    '',
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    ...(alsoActiveIn ? ['', alsoLine] : []),
+    '',
+    "If this was you, you're all set — no action needed.",
+    "If it wasn't, reset your password to sign out everywhere.",
+    '',
+    'aura — music that gets your mood',
+    "Sent by aurafm.live. This is an automated message; please don't reply.",
+  ].join('\n');
+
+  const detailRows = rows.map(([k, v]) => `
+                    <tr>
+                      <td style="font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#9a9089; padding:5px 14px 5px 0; white-space:nowrap; vertical-align:top;">${esc(k)}</td>
+                      <td style="font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#2a221c; padding:5px 0; vertical-align:top;">${esc(v)}</td>
+                    </tr>`).join('');
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<title>${subject}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#e9dfd1;">
+<div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">${esc(preheader)}&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e9dfd1;">
+  <tr>
+    <td align="center" style="padding:44px 16px;">
+      <table role="presentation" width="464" cellpadding="0" cellspacing="0" border="0" style="width:464px; max-width:464px;">
+        <tr>
+          <td align="center" style="padding:0 0 22px;">
+            <span style="font-family:Georgia,'Times New Roman',serif; font-style:italic; font-size:22px; letter-spacing:0.02em; color:#2a221c;">aura</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color:#f6efe4; border-radius:18px; padding:42px 40px 34px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:0 0 18px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                    <td height="3" width="34" style="height:3px; width:34px; background-color:#bb6a44; border-radius:2px; font-size:0; line-height:0;">&nbsp;</td>
+                  </tr></table>
+                </td>
+              </tr>
+              <tr>
+                <td style="font-family:Georgia,'Times New Roman',serif; font-weight:400; font-size:27px; line-height:1.2; color:#2a221c; padding:0 0 10px;">${heading}</td>
+              </tr>
+              <tr>
+                <td style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.6; color:#6b6259; padding:0 0 22px;">${hi}we noticed a new sign-in to your AURA account.</td>
+              </tr>
+              <tr>
+                <td style="padding:0 0 20px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ece2d3; border-radius:12px;">
+                    <tr><td style="padding:16px 18px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">${detailRows}
+                      </table>
+                    </td></tr>
+                  </table>
+                </td>
+              </tr>
+              ${alsoActiveIn ? `<tr>
+                <td style="font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.6; color:#6b6259; padding:0 0 18px;">${esc(alsoLine)}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.6; color:#2a221c; padding:0;">If this was you, you're all set — no action needed. If it wasn't, <strong>reset your password</strong> to sign out everywhere.</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="font-family:Arial,Helvetica,sans-serif; font-size:11px; line-height:1.7; color:#b3a99f; padding:22px 16px 0;">
+            <span style="color:#9a9089;">aura</span> &middot; music that gets your mood<br>
+            Sent by aurafm.live — this is an automated message; please don't reply.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+
+  return { subject, html, text };
+}

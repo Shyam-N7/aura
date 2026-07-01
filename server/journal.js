@@ -1,4 +1,4 @@
-import { pool } from './db.js';
+import { pool, query } from './db.js';
 import { generateJournalEntry, formatDateLabel } from './prompts/journal.js';
 
 const MS_DAY = 86400000;
@@ -40,7 +40,7 @@ function aggregateDay(rows) {
 
 export async function getJournalEntries(userId, { days = 7 } = {}) {
   const since = Date.now() - days * MS_DAY;
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT e.id, e.track_id, e.ts, e.kind, e.mood, e.language,
             t.title, t.artist
      FROM listening_events e
@@ -72,7 +72,7 @@ export async function getJournalEntries(userId, { days = 7 } = {}) {
     const eventsSeen = dayRows.length;
 
     // cache lookup
-    const cached = await pool.query(
+    const cached = await query(
       `SELECT payload, events_seen FROM journal_cache WHERE user_id = $1 AND date = $2`,
       [userId, date],
     );

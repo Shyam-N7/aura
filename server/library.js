@@ -1,7 +1,7 @@
-import { pool } from './db.js';
+import { query } from './db.js';
 
 export async function getLibrarySummary(userId) {
-  const { rows: stats } = await pool.query(`
+  const { rows: stats } = await query(`
     WITH per_day AS (
       SELECT track_id,
              (ts / 86400000) AS day_bucket,
@@ -14,7 +14,7 @@ export async function getLibrarySummary(userId) {
       (SELECT COUNT(DISTINCT track_id) FROM listening_events WHERE user_id = $1 AND kind = 'play')::int AS tracks_played,
       COALESCE((SELECT SUM(max_pos) FROM per_day), 0)::float                                            AS total_seconds
   `, [userId]);
-  const { rows: langRows } = await pool.query(`
+  const { rows: langRows } = await query(`
     SELECT language, COUNT(*)::int AS plays
     FROM listening_events
     WHERE user_id = $1 AND kind = 'play' AND language IS NOT NULL
@@ -22,8 +22,8 @@ export async function getLibrarySummary(userId) {
     ORDER BY plays DESC
     LIMIT 1
   `, [userId]);
-  const { rows: likedRows } = await pool.query(`SELECT COUNT(*)::int AS n FROM liked_tracks WHERE user_id = $1`, [userId]);
-  const { rows: plRows }    = await pool.query(`SELECT COUNT(*)::int AS n FROM playlists WHERE user_id = $1`, [userId]);
+  const { rows: likedRows } = await query(`SELECT COUNT(*)::int AS n FROM liked_tracks WHERE user_id = $1`, [userId]);
+  const { rows: plRows }    = await query(`SELECT COUNT(*)::int AS n FROM playlists WHERE user_id = $1`, [userId]);
 
   return {
     tracksPlayed:     Number(stats[0].tracks_played) || 0,

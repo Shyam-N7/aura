@@ -2,7 +2,7 @@
 // current mood via Gemini, cache as a snapshot. Other features (TalkAura,
 // Bridges, Why-this) read getCurrentMood / inferIfStale to stay in sync.
 
-import { pool } from './db.js';
+import { pool, query } from './db.js';
 import { generateMoodInference } from './prompts/moodInfer.js';
 
 // Mood inference is an LLM call, so it's the expensive part of this feature.
@@ -13,7 +13,7 @@ const STALE_AGE_MS  = 2 * 60 * 60 * 1000; // or after 2 hours
 const WINDOW_SIZE   = 30;                 // events fed to the LLM
 
 async function totalPlayCount(userId) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT COUNT(*)::int AS n FROM listening_events WHERE user_id = $1 AND kind = 'play'`,
     [userId],
   );
@@ -21,7 +21,7 @@ async function totalPlayCount(userId) {
 }
 
 export async function getCurrentMood(userId) {
-  const { rows } = await pool.query(`
+  const { rows } = await query(`
     SELECT id, ts, mood, confidence, drift, reason, events_seen
     FROM mood_snapshots
     WHERE user_id = $1
@@ -39,7 +39,7 @@ async function isStale(userId, snapshot) {
 }
 
 export async function inferMood(userId) {
-  const { rows: events } = await pool.query(`
+  const { rows: events } = await query(`
     SELECT e.ts, e.kind, e.position_sec,
            t.title, t.artist, t.language
     FROM listening_events e

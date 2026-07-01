@@ -95,12 +95,19 @@ function AppRoot() {
   // playback) apply on the next navigation below. The 60s poll lets a long-open tab
   // notice a deploy without a manual refresh.
   useEffect(() => {
+    let pollId = null;
     const updateSW = registerSW({
       onRegisteredSW(_swUrl, r) {
-        if (r) setInterval(() => { r.update().catch(() => {}); }, 60_000);
+        if (!r) return;
+        // Poll for a new build, but only while the tab is VISIBLE — no point
+        // hitting the network on a backgrounded tab (battery/data). Cleared on unmount.
+        pollId = setInterval(() => {
+          if (document.visibilityState === 'visible') r.update().catch(() => {});
+        }, 60_000);
       },
       onNeedRefresh() { markUpdateReady(() => updateSW?.(true)); },
     });
+    return () => { if (pollId) clearInterval(pollId); };
   }, []);
   const [updateReady, setUpdateReady] = useState(false);
   useEffect(() => subscribeUpdate(setUpdateReady), []);

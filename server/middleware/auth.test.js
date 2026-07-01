@@ -46,3 +46,16 @@ describe('signToken + peekUserId', () => {
     expect(auth.peekUserId(bearer(t + 'tampered'))).toBeNull();
   });
 });
+
+describe('decideNewDevice', () => {
+  it('alerts only for a tracked account on an unrecognized device', () => {
+    expect(auth.decideNewDevice({ known: false, tracked: true })).toBe(true);
+  });
+  it('does NOT alert the first tracked device (nothing tracked yet → that IS this device)', () => {
+    expect(auth.decideNewDevice({ known: false, tracked: false })).toBe(false);
+  });
+  it('does NOT alert a recognized device', () => {
+    expect(auth.decideNewDevice({ known: true, tracked: true })).toBe(false);
+    expect(auth.decideNewDevice({ known: true, tracked: false })).toBe(false);
+  });
+});

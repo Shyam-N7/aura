@@ -9,6 +9,11 @@ import { pool, query, isTransient } from '../db.js';
 // clients / tests. (security: M2 / #22)
 export const SESSION_COOKIE = 'aura_session';
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — matches the JWT expiry.
+// Persistent device tag (NOT an auth credential) — an opaque `dev_<random>` used
+// only to recognize a returning device so signing in on an UNfamiliar one can raise
+// a heads-up email. ~13-month rolling expiry.
+export const DEVICE_COOKIE = 'aura_device';
+const DEVICE_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
 // How stale `last_seen_at` may get before a request refreshes it — keeps the
 // device list's "last active" useful without a write on every authed request.
 const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
@@ -44,6 +49,29 @@ export function setSessionCookie(res, token) {
 
 export function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE, cookieOptions());
+}
+
+// The device tag rides SameSite=Lax (not Strict) so it survives the top-level
+// Google-OAuth redirect back to us; it's opaque + non-authenticating, so Lax carries
+// no CSRF risk (there's nothing forgeable to do with it).
+function deviceCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+  };
+}
+
+// Read the persistent-device id from the aura_device cookie, minting + setting one
+// when absent/blank. Always (re)set so the ~13-month expiry rolls forward on use.
+export function ensureDeviceId(req, res) {
+  const existing = req.cookies?.[DEVICE_COOKIE];
+  const id = (typeof existing === 'string' && existing.startsWith('dev_'))
+    ? existing
+    : 'dev_' + crypto.randomBytes(18).toString('base64url');
+  res.cookie(DEVICE_COOKIE, id, { ...deviceCookieOptions(), maxAge: DEVICE_MAX_AGE_MS });
+  return id;
 }
 
 // Cookie first, then Authorization: Bearer fallback.
@@ -105,6 +133,15 @@ function reqMeta(req) {
   };
 }
 
+// Pure: `known` = this device id is already on a session row for the user; `tracked`
+// = the user has ANY device-tagged session at all. A sign-in alerts only when the
+// account is already tracked AND this device isn't recognized. So a user's FIRST
+// login after the feature ships (no rows tracked yet) is deliberately NOT alerted —
+// that's the device they're on; only a LATER unrecognized device raises the email.
+export function decideNewDevice({ known, tracked }) {
+  return !!tracked && !known;
+}
+
 // Atomically create a session UNDER the hard device cap. Serializes concurrent
 // session creation for the user on the users row (FOR UPDATE) so the count is
 // authoritative — a plain count-then-insert is TOCTOU-racey and lets parallel
@@ -112,7 +149,7 @@ function reqMeta(req) {
 // revoked inside the same transaction so it frees a slot atomically. Active rows
 // exclude expired ones (last_seen older than a token lifetime can't be live).
 // Returns { capped:true } at the cap, else { capped:false, sid, token }.
-export async function createSessionWithCap(req, userId, tokenVersion, maxActive, evictSessionId) {
+export async function createSessionWithCap(req, userId, tokenVersion, maxActive, evictSessionId, deviceId = null) {
   // Stable identity for THIS login, generated ONCE so a retry replays idempotently.
   // The danger case is an ambiguous commit: COMMIT reaches Postgres (row inserted)
   // but the ack is lost, surfacing as a transient error → we replay. To make that
@@ -146,15 +183,24 @@ export async function createSessionWithCap(req, userId, tokenVersion, maxActive,
         await client.query('COMMIT');   // keep the eviction (if any); just don't create
         return { capped: true };
       }
+      // New-device decision from PRE-insert state (this login's row doesn't exist
+      // yet, so it can't mark itself "known"). On an idempotent replay the row may
+      // already exist → known → newDevice:false, which also suppresses a duplicate alert.
+      const { rows: dev } = await client.query(
+        `SELECT bool_or(device_id = $2) AS known, bool_or(device_id IS NOT NULL) AS tracked
+           FROM user_sessions WHERE user_id = $1`,
+        [userId, deviceId],
+      );
+      const newDevice = decideNewDevice({ known: dev[0]?.known === true, tracked: dev[0]?.tracked === true });
       await client.query(
         `INSERT INTO user_sessions
-           (id, user_id, device_label, user_agent, ip, city, country, created_at, last_seen_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+           (id, user_id, device_id, device_label, user_agent, ip, city, country, created_at, last_seen_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
          ON CONFLICT (id) DO NOTHING`,
-        [sid, userId, m.label, m.userAgent, m.ip, m.city, m.country, now],
+        [sid, userId, deviceId, m.label, m.userAgent, m.ip, m.city, m.country, now],
       );
       await client.query('COMMIT');
-      return { capped: false, sid, token: signToken(userId, tokenVersion, sid) };
+      return { capped: false, sid, token: signToken(userId, tokenVersion, sid), newDevice, meta: m };
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
       throw e;
@@ -237,7 +283,7 @@ export async function sweepSessions() {
 // an active (non-revoked) session row exists. Returns { userId, sid } or null.
 // Throws only on a DB error (handled by callers). Tokens minted before sessions
 // existed (no sid) are grandfathered: token_version check alone.
-async function resolveSession(req) {
+export async function resolveSession(req) {
   const token = readToken(req);
   if (!token) return null;
   let decoded;

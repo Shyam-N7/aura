@@ -4,11 +4,12 @@ import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
 import {
   requireAuth, optionalAuth, setSessionCookie, clearSessionCookie,
-  createSessionWithCap, listSessions,
+  createSessionWithCap, listSessions, ensureDeviceId,
   revokeSession, revokeOtherSessions, revokeAllSessions,
 } from './middleware/auth.js';
 import { asyncHandler, clientError } from './middleware/errors.js';
 import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
+import { sendNewDeviceAlert } from './securityAlerts.js';
 import { adminBlocked } from './adminGate.js';
 import { buildModesView } from './modes.js';
 
@@ -42,6 +43,9 @@ export function sanitizeUser(row) {
     activeMode:     row.active_mode ?? 'everyday',
     modes:          buildModesView(row.modes_state ?? {}),
     showSensing:    row.show_sensing ?? true,
+    // Safe boolean (never the hash) — lets the delete-account UI pick the
+    // password vs email-a-code step-up path.
+    hasPassword:    !!row.password_hash,
   };
 }
 
@@ -118,9 +122,12 @@ const MAX_ACTIVE_SESSIONS = Math.max(1, Number(process.env.MAX_DEVICES) || 3);
 // (caller must return); false means a session + cookie were set. The caller has
 // ALREADY proven identity (password / Google token / OTP) before calling this.
 async function startSession(req, res, user) {
+  // Persistent-device id (read-or-mint the aura_device cookie) so the cap txn can
+  // tell whether this device is recognized.
+  const deviceId = ensureDeviceId(req, res);
   // Atomic cap + (optional) eviction in one transaction — see createSessionWithCap.
   const r = await createSessionWithCap(
-    req, user.id, user.token_version ?? 0, MAX_ACTIVE_SESSIONS, req.body?.evictSessionId,
+    req, user.id, user.token_version ?? 0, MAX_ACTIVE_SESSIONS, req.body?.evictSessionId, deviceId,
   );
   if (r.capped) {
     res.status(403).json({
@@ -132,6 +139,16 @@ async function startSession(req, res, user) {
     return true;
   }
   setSessionCookie(res, r.token);
+  // Unrecognized device → heads-up email. AWAITED (a serverless lambda can freeze
+  // right after res.json, dropping an un-awaited send) but wrapped so it can never
+  // fail the sign-in.
+  if (r.newDevice) {
+    try {
+      await sendNewDeviceAlert({ userId: user.id, email: user.email, name: user.name, sid: r.sid, meta: r.meta });
+    } catch (e) {
+      console.error('[securityAlerts/newDevice]', e?.message || e);
+    }
+  }
   return false;
 }
 
@@ -542,18 +559,87 @@ router.get('/me/export', exportLimiter, requireAuth, async (req, res) => {
   }
 });
 
-// ── GDPR: delete my account ──────────────────────────────────────────
-// Removes the user row; every per-user table (listening_events, liked_tracks,
-// playlists → playlist_tracks, mood_snapshots, journal_cache) is ON DELETE
-// CASCADE, so all listening history goes with it. Not reversible.
-router.delete('/me', requireAuth, async (req, res) => {
+// ── GDPR: delete my account (step-up re-auth) ────────────────────────
+// Deletion is irreversible + high-value, so it requires a fresh proof beyond the
+// session cookie: the account password, or (for Google-only accounts) an emailed
+// code. Removing the user row cascades every per-user table (listening_events,
+// liked_tracks, playlists → playlist_tracks, mood_snapshots, journal_cache).
+const DELETE_MAX_ATTEMPTS = 5;
+const DELETE_LOCK_MS = 15 * 60 * 1000;
+
+// Verify the step-up. Mirrors family.js's atomic attempts/lockout but on DEDICATED
+// columns (delete_attempts / delete_locked_until) so it can't cross-lock the login
+// throttle. Returns { ok:true } or { ok:false, status, body } for the route.
+export async function assertDeleteStepUp(user, { password, code }) {
+  const now = Date.now();
+  if (user.delete_locked_until && Number(user.delete_locked_until) > now) {
+    return { ok: false, status: 429, body: { error: 'too many attempts — try again later', code: 'locked', retryAfterSec: Math.ceil((Number(user.delete_locked_until) - now) / 1000) } };
+  }
+
+  // Google-only account (no password) → emailed 'delete' code; otp.js caps 5/code.
+  if (!user.password_hash) {
+    if (!code) return { ok: false, status: 400, body: { error: 'enter the code we emailed you', code: 'code_required' } };
+    const r = await verifyOtp(norm(user.email), String(code), { purpose: 'delete', consume: false });
+    if (!r.ok) {
+      const status = r.reason === 'mismatch' ? 401 : r.reason === 'expired' ? 410 : r.reason === 'locked' ? 429 : 400;
+      return { ok: false, status, body: { error: "that code isn't right", code: r.reason, attemptsLeft: r.attemptsLeft } };
+    }
+    return { ok: true };
+  }
+
+  // Password branch — atomic increment + conditional lock (concurrent guesses can't
+  // race the cap). attempts reset to 0 on lock; zero left after a fail = just locked.
+  const ok = typeof password === 'string' && password.length > 0 && await bcrypt.compare(password, user.password_hash);
+  if (!ok) {
+    const { rows: [r] } = await pool.query(
+      `UPDATE users SET
+         delete_attempts     = CASE WHEN delete_attempts + 1 >= $2 THEN 0 ELSE delete_attempts + 1 END,
+         delete_locked_until = CASE WHEN delete_attempts + 1 >= $2 THEN $3 ELSE delete_locked_until END
+       WHERE id = $1
+       RETURNING delete_attempts`,
+      [user.id, DELETE_MAX_ATTEMPTS, now + DELETE_LOCK_MS],
+    );
+    if (r && r.delete_attempts === 0) {
+      return { ok: false, status: 429, body: { error: 'too many attempts — try again later', code: 'locked', retryAfterSec: Math.ceil(DELETE_LOCK_MS / 1000) } };
+    }
+    return { ok: false, status: 401, body: { error: "that password isn't right", code: 'mismatch', attemptsLeft: DELETE_MAX_ATTEMPTS - (r?.delete_attempts ?? DELETE_MAX_ATTEMPTS) } };
+  }
+  await pool.query('UPDATE users SET delete_attempts = 0, delete_locked_until = NULL WHERE id = $1', [user.id]);
+  return { ok: true };
+}
+
+// Google-only accounts request an emailed 'delete' code first.
+router.post('/me/delete-code', requireAuth, asyncHandler(async (req, res) => {
+  const { rows } = await pool.query('SELECT email, password_hash FROM users WHERE id = $1', [req.userId]);
+  if (!rows.length) return res.status(404).json({ error: 'user not found' });
+  if (rows[0].password_hash) return res.status(400).json({ error: 'this account has a password — enter it to delete', code: 'has_password' });
   try {
-    const { rowCount } = await pool.query('DELETE FROM users WHERE id = $1', [req.userId]);
-    if (!rowCount) return res.status(404).json({ error: 'user not found' });
+    await issueOtp(norm(rows[0].email), { purpose: 'delete' });
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: clientError(err) });
+    if (err.statusCode === 429) return res.status(429).json({ error: clientError(err), code: 'cooldown', retryAfterSec: err.retryAfterSec });
+    throw err;
   }
+}));
+
+router.post('/me/delete', requireAuth, asyncHandler(async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.userId]);
+  if (!rows.length) return res.status(404).json({ error: 'user not found' });
+  const user = rows[0];
+  const step = await assertDeleteStepUp(user, req.body ?? {});
+  if (!step.ok) return res.status(step.status).json(step.body);
+
+  await pool.query('DELETE FROM users WHERE id = $1', [req.userId]);
+  // email_otps aren't FK-scoped to the user, so clear the 'delete' code explicitly.
+  if (!user.password_hash) { try { await consumeOtp(norm(user.email), 'delete'); } catch { /* best-effort */ } }
+  clearSessionCookie(res);
+  res.json({ ok: true });
+}));
+
+// Retired: deletion now requires step-up (POST /me/delete). A stale cached client
+// hitting the old route gets a clear 410 so it can prompt the user to reload.
+router.delete('/me', requireAuth, (_req, res) => {
+  res.status(410).json({ error: 'reload the app to delete your account', code: 'gone' });
 });
 
 export default router;

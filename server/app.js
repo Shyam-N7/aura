@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { makeRateStore } from './rateLimitStore.js';
-import { pool } from './db.js';
+import { pool, query } from './db.js';
 import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
 import { getFeatured } from './featured.js';
@@ -89,7 +89,7 @@ function buildLimiter(windowMs, limit, message, prefix, keyGenerator) {
 // can't multiply its paid-LLM budget across many IPs/devices — the per-IP key let
 // a shared/leaked account drive N× the spend. peekUserId only verifies the token
 // signature (no DB), so this stays cheap on the hot path. (security: per-account cost)
-const accountOrIpKey = (req) => {
+export const accountOrIpKey = (req) => {
   const uid = peekUserId(req);
   if (uid) return `u:${uid}`;
   return req.ip ? ipKeyGenerator(req.ip) : 'ip:unknown';
@@ -104,6 +104,9 @@ const authLimiter = buildLimiter(15 * 60 * 1000, 40, 'too many attempts — try 
 // Protects the unauthenticated, cost-bearing routes (Gemini, lyrics, upstream)
 // from spend/DoS on cache misses — SHARED store, global across instances.
 const costLimiter = buildLimiter(5 * 60 * 1000, 60, 'too many requests — slow down a moment.', 'cost', accountOrIpKey);
+// Sensitive per-account actions (family PIN, mode switches) — SHARED store, keyed by
+// account (else IP), layered on top of the routes' own per-account PIN lockouts.
+const sensitiveLimiter = buildLimiter(15 * 60 * 1000, 40, 'too many requests — slow down a moment.', 'sensitive', accountOrIpKey);
 
 app.use('/api', generalLimiter);
 app.use('/api/auth', authLimiter);
@@ -111,6 +114,9 @@ app.use('/api/auth', authLimiter);
 // Tighter than the broad generalLimiter so cache-miss spend can't be driven.
 // (security: H1 / M4 / M5)
 app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm'], costLimiter);
+// Sensitive per-account routes get a tighter, shared, account-keyed limiter on top
+// of generalLimiter — registered before their routers mount below.
+app.use(['/api/family', '/api/modes'], sensitiveLimiter);
 
 // ── Auth routes (public) ────────────────────────────────────────────
 app.use('/api/auth', authRouter);
@@ -248,7 +254,7 @@ app.get('/api/catalog/featured', optionalAuth, async (req, res) => {
     // `everyday` → the unchanged global default). Signed-out: global default.
     let seedTracks, seedArtists, modeKey;
     if (req.userId) {
-      const u = await pool.query('SELECT active_mode FROM users WHERE id = $1', [req.userId]);
+      const u = await query('SELECT active_mode FROM users WHERE id = $1', [req.userId]);
       modeKey = u.rows[0]?.active_mode || 'everyday';
       seedTracks = modeSeedTracks(modeKey);
       seedArtists = modeSeedArtists(modeKey);
@@ -276,7 +282,7 @@ app.get('/api/lyrics/:track_id', optionalAuth, async (req, res) => {
     res.status(status).json(body);
   };
   try {
-    const cached = await pool.query(
+    const cached = await query(
       `SELECT source, synced, payload, fetched_at FROM lyrics WHERE track_id = $1`,
       [track_id],
     );
@@ -434,7 +440,7 @@ app.post('/api/why', async (req, res) => {
   // arbitrary strings can't bypass the cache and force a fresh Gemini call. (#14)
   const moodKey = normalizeMood(mood);
   try {
-    const cached = await pool.query(
+    const cached = await query(
       `SELECT payload, fetched_at FROM why_cache WHERE track_id = $1 AND mood = $2`,
       [track_id, moodKey],
     );
@@ -446,7 +452,7 @@ app.post('/api/why', async (req, res) => {
     let recent = [];
     if (Array.isArray(recent_track_ids) && recent_track_ids.length) {
       const ids = recent_track_ids.slice(0, 5);
-      const { rows } = await pool.query(
+      const { rows } = await query(
         `SELECT id, title, artist, language FROM tracks WHERE id = ANY($1::text[])`,
         [ids],
       );
@@ -779,7 +785,7 @@ app.post('/api/playlists/:id/tracks', requireAuth, async (req, res) => {
     // upsert it locally). Check LOCALLY only — never getTrackById here: a miss
     // there falls through to an upstream provider call, an amplification vector.
     // Mirrors the /api/events guard. (security: #30)
-    const known = await pool.query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
+    const known = await query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
     if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
     await addTrackToPlaylist(req.userId, req.params.id, track_id);
     res.json({ ok: true });
@@ -863,20 +869,27 @@ app.post('/api/events', requireAuth, async (req, res) => {
   if (!track_id || !EVENT_KINDS.has(kind)) {
     return res.status(400).json({ error: 'invalid track_id or kind' });
   }
-  // Provenance for the future reco engine: the queue's source label. Bounded.
-  const src = source != null ? String(source).slice(0, 80) : null;
+  // Bound the free-text signal columns (mirrors `source`) so a client can't grow
+  // listening_events rows unbounded. (security: input caps)
+  const src  = source   != null ? String(source).slice(0, 80)   : null;
+  const mood_ = mood     != null ? String(mood).slice(0, 50)     : null;
+  const lang_ = language != null ? String(language).slice(0, 40) : null;
+  const mode_ = mode     != null ? String(mode).slice(0, 40)     : null;
   try {
     // The track must already be in our catalog cache (it's upserted whenever a
     // track is loaded/played). Check LOCALLY only — never getTrackById here: a
     // DB miss there falls through to an upstream provider call, so phantom ids
     // would become an amplification vector. Unknown id → reject, don't pollute
     // listening_events (it feeds mood/language affinity).
-    const known = await pool.query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
+    const known = await query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
     if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
-    await pool.query(
+    // Non-idempotent INSERT (no unique key) → retries:0 so a transient-socket replay
+    // can't double-count an event and skew mood/language affinity.
+    await query(
       `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language, mode, source)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood ?? null, language ?? null, mode ?? null, src],
+      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood_, lang_, mode_, src],
+      { retries: 0 },
     );
     res.json({ ok: true });
   } catch (err) {
@@ -887,7 +900,7 @@ app.post('/api/events', requireAuth, async (req, res) => {
 app.get('/api/events/recent', requireAuth, async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 500);
   try {
-    const { rows } = await pool.query(
+    const { rows } = await query(
       `SELECT id, track_id, ts, kind, position_sec, mood, language
        FROM listening_events WHERE user_id = $1 ORDER BY ts DESC LIMIT $2`,
       [req.userId, limit],

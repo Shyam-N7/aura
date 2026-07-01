@@ -1,4 +1,4 @@
-import { pool } from './db.js';
+import { query } from './db.js';
 
 // Convert "days back from now" to a unix-ms cutoff. Caller passes days.
 // Exported so server/autoPlaylists.js can reuse the same ms-epoch convention.
@@ -22,7 +22,7 @@ export function mapTrackRow(r) {
 }
 
 export async function getMostPlayed(userId, { days = 30, limit = 10 } = {}) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
             COUNT(*)::int AS plays
      FROM listening_events e
@@ -40,7 +40,7 @@ export async function getTopArtists(userId, { days = 30, limit = 8 } = {}) {
   // Two-stage aggregation: count plays per (artist, track), pick top track per
   // artist by play count, then rank artists by total plays. Nested window
   // functions in ORDER BY aren't supported in Postgres, hence the CTEs.
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `WITH play_counts AS (
        SELECT t.artist, t.id, COUNT(*)::int AS plays
        FROM listening_events e
@@ -75,7 +75,7 @@ export async function getTopArtists(userId, { days = 30, limit = 8 } = {}) {
 }
 
 export async function getRecentlyPlayed(userId, { limit = 10 } = {}) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT DISTINCT ON (t.id)
             t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
             e.ts AS played_at
@@ -101,7 +101,7 @@ export async function getHistory(userId, { limit = 80, before } = {}) {
   let cursor = '';
   if (before) { params.push(before); cursor = `AND e.ts < $${params.length}`; }
   params.push(limit + 1);
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
             e.ts AS played_at
      FROM listening_events e
@@ -122,7 +122,7 @@ export async function getHistory(userId, { limit = 80, before } = {}) {
 // viewer's LOCAL time of day (the server runs UTC), so "your 2am songs" are
 // correct per listener. Capped so a heavy listener's window stays a small payload.
 export async function getMusicClockPlays(userId, { days = 60, cap = 2000 } = {}) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT t.id, t.title, t.artist, t.raw, e.ts
      FROM listening_events e
      JOIN tracks t ON t.id = e.track_id

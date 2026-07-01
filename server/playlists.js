@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { pool } from './db.js';
+import { pool, query } from './db.js';
 
 function newId() {
   return 'pl_' + Math.random().toString(36).slice(2, 10);
@@ -33,7 +33,7 @@ function forbidden(msg = "you can't edit this playlist") {
 // 'owner' | 'editor' | 'viewer' | null (exists but no access). One round-trip:
 // joins the caller's collaborator row (if any) to the playlist's owner.
 async function getAccess(userId, playlistId) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT p.user_id AS owner_id, c.role AS collab_role
      FROM playlists p
      LEFT JOIN playlist_collaborators c ON c.playlist_id = p.id AND c.user_id = $1
@@ -66,7 +66,7 @@ async function requireEdit(userId, playlistId) {
 export async function listPlaylists(userId) {
   // Owned playlists PLUS those the user collaborates on. `shared` is true when a
   // playlist has any collaborators (owner's view) or the caller is a collaborator.
-  const { rows } = await pool.query(`
+  const { rows } = await query(`
     SELECT p.id, p.name, p.description, p.cover_track_id, p.created_at, p.updated_at, p.user_id AS owner_id,
            COALESCE(c.cnt, 0)::int  AS track_count,
            COALESCE(cc.ccnt, 0)::int AS collaborator_count,
@@ -103,7 +103,7 @@ export async function searchPlaylists(userId, q, { limit = 5 } = {}) {
   const term = String(q ?? '').trim();
   if (!term) return [];
   // Match owned OR collaborated playlists by name OR by a contained track.
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT p.id, p.name, p.cover_track_id, p.updated_at,
             COALESCE(c.cnt, 0)::int AS track_count,
             t.raw                   AS cover_raw
@@ -141,7 +141,7 @@ export async function searchPlaylists(userId, q, { limit = 5 } = {}) {
 // one place. The public path passes includeCollaborators:false — member identities
 // are never exposed on a public link.
 async function loadPlaylistView(id, { role = null, includeCollaborators = true } = {}) {
-  const { rows: meta } = await pool.query(
+  const { rows: meta } = await query(
     `SELECT p.id, p.name, p.description, p.cover_track_id, p.updated_at, p.user_id AS owner_id,
             p.is_public, p.public_id,
             t.raw AS cover_raw, ou.name AS owner_name
@@ -152,7 +152,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
     [id],
   );
   if (meta.length === 0) notFound();
-  const { rows: trackRows } = await pool.query(
+  const { rows: trackRows } = await query(
     `SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
             pt.position, pt.added_at
      FROM playlist_tracks pt
@@ -178,7 +178,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
   const row = meta[0];
   let collaborators = [];
   if (includeCollaborators) {
-    const { rows: collabRows } = await pool.query(
+    const { rows: collabRows } = await query(
       `SELECT c.user_id, c.role, u.name
        FROM playlist_collaborators c JOIN users u ON u.id = c.user_id
        WHERE c.playlist_id = $1 ORDER BY c.added_at ASC`,
@@ -213,7 +213,7 @@ export async function getPlaylist(userId, id) {
 // is unknown OR the playlist isn't public — same "hide existence" posture as
 // requireView. No auth, no collaborator list, role null (→ canEdit false).
 export async function getPublicPlaylist(publicId) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT id FROM playlists WHERE public_id = $1 AND is_public = TRUE`,
     [String(publicId ?? '')],
   );
@@ -244,7 +244,7 @@ export async function setPlaylistVisibility(userId, id, isPublic) {
 // Cheap change cursor for collaboration polling — just the updated_at timestamp.
 export async function getPlaylistRev(userId, id) {
   await requireView(userId, id);
-  const { rows } = await pool.query('SELECT updated_at FROM playlists WHERE id = $1', [id]);
+  const { rows } = await query('SELECT updated_at FROM playlists WHERE id = $1', [id]);
   if (!rows.length) notFound();
   return { updatedAt: Number(rows[0].updated_at) };
 }
@@ -289,7 +289,7 @@ export async function addTrackToPlaylist(userId, playlistId, trackId) {
     [playlistId, trackId, ts],
   );
   if (ins.rowCount === 0) {
-    const { rows } = await pool.query(`SELECT name FROM playlists WHERE id = $1`, [playlistId]);
+    const { rows } = await query(`SELECT name FROM playlists WHERE id = $1`, [playlistId]);
     const name = rows[0]?.name ?? 'this playlist';
     const err = new Error(`already in ${name.toLowerCase()}`);
     err.statusCode = 409;
@@ -343,7 +343,7 @@ export async function createInvite(userId, playlistId, { role = 'editor' } = {})
 
 // Accept a token → become a collaborator. Idempotent (re-accept updates role).
 export async function acceptInvite(userId, token) {
-  const { rows } = await pool.query('SELECT * FROM playlist_invites WHERE token = $1', [String(token ?? '')]);
+  const { rows } = await query('SELECT * FROM playlist_invites WHERE token = $1', [String(token ?? '')]);
   if (!rows.length) {
     const err = new Error('this invite link is invalid');
     err.statusCode = 404;
@@ -355,7 +355,7 @@ export async function acceptInvite(userId, token) {
     err.statusCode = 410;
     throw err;
   }
-  const { rows: pl } = await pool.query('SELECT user_id, name FROM playlists WHERE id = $1', [inv.playlist_id]);
+  const { rows: pl } = await query('SELECT user_id, name FROM playlists WHERE id = $1', [inv.playlist_id]);
   if (!pl.length) notFound();
   // Owner accepting their own link is a no-op (they already have full access).
   if (pl[0].user_id === userId) return { playlistId: inv.playlist_id, name: pl[0].name, role: 'owner' };

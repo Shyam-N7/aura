@@ -8,8 +8,22 @@ export async function exportMyData({ signal } = {}) {
   return res.json();
 }
 
-export async function deleteMyAccount() {
-  const res = await fetchAuthed('/api/auth/me', { method: 'DELETE' });
-  if (!res.ok) throw Object.assign(new Error(`delete failed (${res.status})`), { status: res.status });
-  return res.json();
+// Google-only accounts (no password) request an emailed 'delete' code first.
+export async function requestDeleteCode() {
+  const res = await fetchAuthed('/api/auth/me/delete-code', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error ?? `couldn't send a code (${res.status})`), { status: res.status, code: data.code, retryAfterSec: data.retryAfterSec });
+  return data;
+}
+
+// Step-up delete: pass the account password, or (Google-only) the emailed code.
+export async function deleteMyAccount({ password, code } = {}) {
+  const res = await fetchAuthed('/api/auth/me/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, code }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error ?? `delete failed (${res.status})`), { status: res.status, code: data.code, attemptsLeft: data.attemptsLeft, retryAfterSec: data.retryAfterSec });
+  return data;
 }

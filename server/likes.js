@@ -1,4 +1,4 @@
-import { pool } from './db.js';
+import { pool, query } from './db.js';
 import { getTrackById, cacheTracks } from './tracks.js';
 
 function rowToTrack(row) {
@@ -16,7 +16,7 @@ function rowToTrack(row) {
 }
 
 export async function listLiked(userId) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT l.track_id, l.liked_at,
             t.id, t.title, t.artist, t.album, t.language, t.duration_sec,
             t.stream_url, t.raw
@@ -33,7 +33,7 @@ export async function listLiked(userId) {
 }
 
 export async function listLikedIds(userId) {
-  const { rows } = await pool.query(
+  const { rows } = await query(
     `SELECT track_id FROM liked_tracks WHERE user_id = $1`,
     [userId],
   );

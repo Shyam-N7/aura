@@ -520,6 +520,23 @@ const migrations = [
     // window don't BOTH infer (a read-only check can't catch that concurrent case).
     await client.query(`ALTER TABLE users ADD COLUMN mood_inferring_at BIGINT`);
   },
+  async function v21_device_and_delete_stepup(client) {
+    // Wave 3 security extras — all additive / backward-compatible (old instances keep
+    // working during a rolling deploy; every column is nullable or defaulted).
+    // - user_sessions.device_id: opaque persistent-device id (from the `aura_device`
+    //   cookie) so signing in on an UNrecognized device can raise a heads-up email.
+    // - users.delete_attempts / delete_locked_until: an ISOLATED step-up lockout for
+    //   account deletion — dedicated columns so it can't cross-lock the login throttle.
+    await client.query(`ALTER TABLE user_sessions ADD COLUMN device_id TEXT`);
+    await client.query(`ALTER TABLE users ADD COLUMN delete_attempts INT NOT NULL DEFAULT 0`);
+    await client.query(`ALTER TABLE users ADD COLUMN delete_locked_until BIGINT`);
+    // Widen the OTP purpose CHECK so a 'delete' step-up code can be issued — the
+    // inline constraint (auto-named email_otps_purpose_check) pins signup/reset, so a
+    // 'delete' INSERT would fail with 23514 until this runs.
+    await client.query(`ALTER TABLE email_otps DROP CONSTRAINT IF EXISTS email_otps_purpose_check`);
+    await client.query(`ALTER TABLE email_otps ADD CONSTRAINT email_otps_purpose_check
+      CHECK (purpose IN ('signup','reset','delete'))`);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

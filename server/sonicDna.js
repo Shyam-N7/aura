@@ -1,4 +1,4 @@
-import { pool } from './db.js';
+import { query } from './db.js';
 import { generateDnaNarrative } from './prompts/sonicDna.js';
 
 const MS_DAY      = 86400000;
@@ -36,7 +36,7 @@ export async function getSonicDna(userId) {
   const windowStart = now - WINDOW_DAYS * MS_DAY;
   const priorStart  = windowStart - WINDOW_DAYS * MS_DAY;
 
-  const { rows: events } = await pool.query(
+  const { rows: events } = await query(
     `SELECT e.id, e.track_id, e.ts, e.kind, e.mood, e.language, e.position_sec,
             t.title, t.artist, t.duration_sec
      FROM listening_events e
@@ -101,7 +101,7 @@ export async function getSonicDna(userId) {
   const trackIds = [...seenTracks];
   let lyricism = 0.5;
   if (trackIds.length) {
-    const { rows: lyrRows } = await pool.query(
+    const { rows: lyrRows } = await query(
       `SELECT track_id FROM lyrics WHERE track_id = ANY($1::text[]) AND source != 'none'`,
       [trackIds],
     );

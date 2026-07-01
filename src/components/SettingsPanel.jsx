@@ -3,7 +3,7 @@ import { logout, useAuth, enableFamilyMode, disableFamilyMode, updatePreferences
 import { relTime } from '../lib/time';
 import { confirm } from '../lib/confirm';
 import { clearPostAuthPath } from '../lib/routes';
-import { exportMyData, deleteMyAccount } from '../api/account';
+import { exportMyData, deleteMyAccount, requestDeleteCode } from '../api/account';
 import { toast } from '../lib/toast';
 import { getConsent, setConsent, subscribeConsent } from '../lib/consent';
 import { QUALITIES } from '../lib/audioQuality';
@@ -64,6 +64,14 @@ export function SettingsPanel({ t, setTweak }) {
   const [pinOpen, setPinOpen] = useState(false);
   const [pin, setPin] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
+
+  // Delete-account step-up (mirrors the family-PIN inline form): reveal a password
+  // field (accounts with a password) or an emailed 6-digit code (Google-only).
+  const hasPassword = user?.hasPassword !== false;   // default to asking for a password if unknown
+  const [delOpen, setDelOpen] = useState(false);
+  const [delSecret, setDelSecret] = useState('');
+  const [delBusy, setDelBusy] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
 
   // Welcome-screen (the "sensing" intro) toggle. Default on for accounts cached
   // before this preference existed. When on, the intro still shows at most once a
@@ -157,34 +165,43 @@ export function SettingsPanel({ t, setTweak }) {
     clearPostAuthPath();
   };
 
-  // GDPR: permanently delete the account (cascades all history) and sign out.
-  const handleDelete = async () => {
-    const ok = await confirm({
-      title: 'delete your account?',
-      body: 'this permanently erases your account and all your listening history. it cannot be undone.',
-      confirmLabel: 'delete forever',
-      cancelLabel: 'keep my account',
-      danger: true,
-    });
-    if (!ok) return;
+  // GDPR delete — step-up re-auth. Clean sign-out is also the "already gone" landing.
+  const cleanSignOut = (msg) => {
+    logout();
+    try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
+    clearPostAuthPath();
+    toast(msg);
+  };
+  const sendDeleteCode = async () => {
+    if (delBusy) return;
+    setDelBusy(true);
     try {
-      await deleteMyAccount();
-      logout();
-      try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
-      clearPostAuthPath();
-      toast('your account has been deleted.');
+      await requestDeleteCode();
+      setCodeSent(true);
+      toast('we emailed you a delete code.');
     } catch (err) {
-      // 401/404 = the account is already gone (e.g. deleted on the server) — the
-      // delete "failing" is the desired end state, so sign out cleanly instead of
-      // showing a scary error.
-      if (err.status === 401 || err.status === 404) {
-        logout();
-        try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
-        clearPostAuthPath();
-        toast('your account has been deleted.');
-      } else {
-        toast(`couldn't delete — ${err.message}`);
-      }
+      toast(err.retryAfterSec ? `wait a moment — ${err.retryAfterSec}s` : `couldn't send a code — ${err.message}`);
+    } finally {
+      setDelBusy(false);
+    }
+  };
+  const submitDelete = async (e) => {
+    e.preventDefault();
+    if (delBusy) return;
+    const secret = delSecret.trim();
+    if (!secret) { toast(hasPassword ? 'enter your password' : 'enter the code'); return; }
+    setDelBusy(true);
+    try {
+      await deleteMyAccount(hasPassword ? { password: secret } : { code: secret });
+      cleanSignOut('your account has been deleted.');
+    } catch (err) {
+      // 404 = already gone → the delete "failing" is the desired end state.
+      if (err.status === 404) { cleanSignOut('your account has been deleted.'); return; }
+      const left = err.attemptsLeft;
+      toast(left != null ? `${err.message} — ${left} left` : err.message);
+      setDelSecret('');
+    } finally {
+      setDelBusy(false);
     }
   };
 
@@ -395,10 +412,30 @@ export function SettingsPanel({ t, setTweak }) {
       </div>
 
       <div className="aura-set__danger-zone">
-        <button type="button" className="aura-set__row aura-set__row--danger" onClick={handleDelete}>
+        <button type="button" className="aura-set__row aura-set__row--danger"
+          onClick={() => { setDelSecret(''); setCodeSent(false); setDelOpen(o => !o); }}>
           delete my account
         </button>
-        <p className="aura-set__caption">permanently erases your account and all listening history.</p>
+        <p className="aura-set__caption">permanently erases your account and all listening history. it can’t be undone.</p>
+        {delOpen && (hasPassword ? (
+          <form className="aura-set__pinrow" onSubmit={submitDelete}>
+            <input className="aura-set__pin" type="password" autoComplete="current-password"
+              placeholder="your password" value={delSecret}
+              onChange={(e) => setDelSecret(e.target.value)} aria-label="password to delete account"/>
+            <button type="submit" className="aura-set__pin-btn" disabled={delBusy}>delete forever</button>
+          </form>
+        ) : !codeSent ? (
+          <button type="button" className="aura-set__row aura-set__row--accent" disabled={delBusy} onClick={sendDeleteCode}>
+            email me a delete code
+          </button>
+        ) : (
+          <form className="aura-set__pinrow" onSubmit={submitDelete}>
+            <input className="aura-set__pin" type="text" inputMode="numeric" autoComplete="one-time-code"
+              maxLength={6} placeholder="6-digit code" value={delSecret}
+              onChange={(e) => setDelSecret(e.target.value.replace(/\D/g, ''))} aria-label="delete code"/>
+            <button type="submit" className="aura-set__pin-btn" disabled={delBusy}>delete forever</button>
+          </form>
+        ))}
       </div>
     </div>
   );
