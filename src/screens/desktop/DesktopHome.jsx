@@ -10,6 +10,7 @@ import { cleanTitle } from '../../utils/title';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
+import { NowPlayingBanner } from '../../components/player/NowPlayingBanner';
 import { TopStrip } from './TopStrip';
 import { QuickPicksOrbit } from './QuickPicksOrbit';
 import { QuickPicksSpinner } from './QuickPicksSpinner';
@@ -24,7 +25,7 @@ import './DesktopHome.css';
 const _cache = {};
 
 export function DesktopHome({
-  tracks, djName, currentTrackId, loading = false,
+  tracks, djName, currentTrackId, track, onOpenPlayer, loading = false,
   activeMode = 'everyday', modes = [], onSetMode,
   onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenAuto, onOpenPlaylists, onOpenSearch,
@@ -99,6 +100,15 @@ export function DesktopHome({
               <svg width="15" height="17" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
             </span>
           </button>
+        </section>
+      )}
+
+      {/* Now playing — a distinctive hero card that cross-fades the cover and
+          flourishes the title on each change; tap to open the full player. Hidden
+          until something is playing (the banner self-gates, the section too). */}
+      {track && (
+        <section className="aura-dh__np">
+          <NowPlayingBanner track={track} variant="quick" label="now playing" onOpen={onOpenPlayer}/>
         </section>
       )}
 

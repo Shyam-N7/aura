@@ -177,6 +177,11 @@
   letter-spacing: 0.08em;
 }
 
+/* ── Now-playing hero card — wraps NowPlayingBanner (variant="quick"). ── */
+.aura-dh__np {
+  padding: 24px 48px 0;
+}
+
 /* ── Quick picks — section wrapper; the orbital ring (QuickPicksOrbit) owns its
    own layout. Horizontal padding lives on the header + the orbit, not here. ── */
 .aura-dh__qp {
@@ -764,6 +769,7 @@
   .aura-dh-topstrip { display: none; }
   .aura-dh__greeting { padding: 26px 22px 0; }
   .aura-dh__mood-hero { font-size: 30px; }
+  .aura-dh__np { padding: 20px 22px 0; }
   .aura-dh__qp { padding: 22px 0 0; }
   .aura-dh__modemix { padding: 22px 22px 0; }
   .aura-dh__modemix-title { font-size: 17px; }

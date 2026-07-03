@@ -1,9 +1,9 @@
 import { useRef } from 'react';
 import { MonoLabel, HeartButton } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
+import { NowPlayingBanner } from '../../components/player/NowPlayingBanner';
 import { ProgressRibbon } from '../../components/player/ProgressRibbon';
 import { fmtTime } from '../../utils/fmtTime';
-import { cleanTitle } from '../../utils/title';
 import { tap } from '../../lib/haptics';
 import './CarPlayer.css';
 
@@ -72,15 +72,9 @@ export function CarPlayer({
           <span className="aura-car__like" data-vaul-no-drag><HeartButton trackId={track.id} size={24}/></span>
         </div>
 
-        <div className="aura-car__meta">
-          <div className="aura-car__art" aria-hidden="true">
-            <AlbumArt track={track} size={48} radius={12}/>
-          </div>
-          <div className="aura-car__metatext">
-            <div className="aura-car__title">{cleanTitle(track.title)}</div>
-            <div className="aura-car__artist">{track.artist}</div>
-          </div>
-        </div>
+        {/* Glance-and-go: no kicker (the top chrome already brands it, and Car Mode
+            guards vertical space) — just the cover cross-fade + title flourish. */}
+        <NowPlayingBanner track={track} variant="car"/>
 
         <div className="aura-car__scrub" data-vaul-no-drag data-no-gesture>
           <ProgressRibbon progress={progress} accent="var(--color-accent)" dim="var(--color-line)"

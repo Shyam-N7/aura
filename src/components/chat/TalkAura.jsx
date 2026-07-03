@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { AuraMark, MonoLabel } from '../primitives';
 import { ThemeToggle } from '../ThemeToggle';
+import { NowPlayingBanner } from '../player/NowPlayingBanner';
 import { talk } from '../../api/talk';
 import './TalkAura.css';
 
@@ -11,7 +12,7 @@ const SUGGESTIONS = [
   'play tamil indie',
 ];
 
-export function TalkAura({ djName, mood, onClose, onPickSequence, t, setTweak }) {
+export function TalkAura({ djName, mood, track, onOpenPlayer, onClose, onPickSequence, t, setTweak }) {
   const [messages, setMessages] = useState([
     { who: 'aura', text: `i'm reading you as ${mood} right now. the set is built around that — but tell me how it actually feels and i'll shift it.` },
   ]);
@@ -73,6 +74,7 @@ export function TalkAura({ djName, mood, onClose, onPickSequence, t, setTweak })
           </button>
         </div>
       </div>
+      <NowPlayingBanner track={track} variant="talk-mobile" label="now playing" onOpen={onOpenPlayer}/>
       <div ref={scrollRef} className="flex-1 overflow-auto px-[22px] pt-2 pb-3 flex flex-col gap-3.5">
         {messages.map((m, i) => {
           const isAura = m.who === 'aura';

@@ -87,3 +87,11 @@
 .aura-track-text {
   animation: aura-track-text-in 320ms cubic-bezier(.2, .7, .2, 1) both;
 }
+
+/* Now-playing banner entrance — a richer sibling of aura-track-text-in (more
+   travel + a clearing blur, like aura-fade-in) staggered across the kicker /
+   title / artist. Consumed by .aura-npb__* in NowPlayingBanner.css. */
+@keyframes aura-npb-flourish-in {
+  from { opacity: 0; transform: translateY(10px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}

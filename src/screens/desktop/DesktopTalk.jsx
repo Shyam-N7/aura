@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
+import { NowPlayingBanner } from '../../components/player/NowPlayingBanner';
 import { talk } from '../../api/talk';
 import { useTalkHistory } from '../../hooks/useTalkHistory';
 import './DesktopTalk.css';
@@ -13,7 +14,7 @@ const SUGGESTIONS = [
   'Play something nostalgic',
 ];
 
-export function DesktopTalk({ djName = 'aura', mood, onPickSequence }) {
+export function DesktopTalk({ djName = 'aura', mood, track, onOpenPlayer, onPickSequence }) {
   const seed = { who: 'aura', text: `I’m reading you as ${mood}. Tell me how it actually feels.` };
   const { messages, addMessage, resetMessages } = useTalkHistory(seed);
   const [draft, setDraft] = useState('');
@@ -77,6 +78,7 @@ export function DesktopTalk({ djName = 'aura', mood, onPickSequence }) {
         <p className="aura-dtk__sub">
           Tell me what you want to hear, how you feel, or where to take you next.
         </p>
+        <NowPlayingBanner track={track} variant="talk-desktop" label="now playing" onOpen={onOpenPlayer}/>
       </div>
 
       <div className="aura-dtk__scroll">

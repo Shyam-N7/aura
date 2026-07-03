@@ -107,51 +107,9 @@
   flex-shrink: 0;
 }
 
-/* ── Now playing — a compact art chip + title, so the song has an identity at a
-   glance without stealing room from the big controls below. ── */
-.aura-car__meta {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 0 6px;
-}
-.aura-car__art {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 14px color-mix(in srgb, #000, transparent 72%);
-}
-.aura-car__art .aura-album-art {
-  width: 100% !important;
-  height: 100% !important;
-  border-radius: 12px;
-}
-.aura-car__metatext { min-width: 0; text-align: left; }
-.aura-car__title {
-  font-family: var(--font-serif);
-  font-size: 22px;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--color-ink);
-  text-wrap: pretty;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.aura-car__artist {
-  margin-top: 4px;
-  font-family: var(--font-sans);
-  font-size: 15px;
-  color: var(--color-ink-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* Now playing is the shared NowPlayingBanner (variant="car") — a compact art chip
+   + title that now cross-fades the cover and flourishes the title on track change,
+   without stealing room from the big controls below. See NowPlayingBanner.css. */
 
 /* ── Progress (slim, still scrubbable) ── */
 .aura-car__scrub { flex-shrink: 0; width: 100%; max-width: 520px; margin: 0 auto; }
@@ -332,8 +290,6 @@
 /* Short phones: tighten the fixed rows so the tile split keeps real estate. */
 @media (max-height: 670px) {
   .aura-car__content { gap: 10px; }
-  .aura-car__title { font-size: 20px; }
-  .aura-car__art { width: 42px; height: 42px; }
   .aura-car__glance-text { font-size: 23px; }
   .aura-car__play { height: 66px; }
   .aura-car__mic { height: 56px; }
