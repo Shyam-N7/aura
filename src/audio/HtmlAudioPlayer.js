@@ -14,6 +14,15 @@ import { isIOS } from '../lib/platform.js';
 const EQ_HEADROOM_THRESHOLD_DB = 6.0;  // peak boost ≤ this → unity makeup (limiter handles the peaks)
 const EQ_GAIN_RAMP_TC = 0.02;          // setTargetAtTime time-constant (~60 ms to track)
 
+// Per-candidate settle window for _setSrc. A paused element on a HIDDEN page can
+// have its media pipeline suspended by the browser before it ever reaches
+// canplay (Android Chrome suspends paused background players), so an un-bounded
+// await can hang a track transition forever with the screen off. The timeout
+// turns that silent hang into a rejection, so the quality ladder descends and,
+// if every candidate stalls, a real 'error' finally surfaces for App's
+// refetch/recovery path instead of the player dying quietly between tracks.
+const SRC_SETTLE_TIMEOUT_MS = 8000;
+
 // Loudness leveling — nudge each track toward a consistent target so playback
 // feels as "leveled/boosted" as YouTube/Spotify, not at the file's raw mastering.
 // Open-loop AGC: measure the program (pre-leveling) RMS, set leveling gain =
@@ -100,8 +109,10 @@ export class HtmlAudioPlayer {
       // tapped (EQ) graph isn't left silent.
       if (this._ctx?.state === 'suspended') { this._ctx.resume().catch(() => {}); }
       // iOS may have paused the element on lock even though we still mean to be
-      // playing — re-arm so playback continues instead of just stopping.
-      if (this._intendedPlaying && this._el.paused && !this._silent) {
+      // playing — re-arm so playback continues instead of just stopping. NOT
+      // when the element ENDED: play() on an ended element replays it from 0,
+      // and the ended→advance hand-off is owned by App's queue logic.
+      if (this._intendedPlaying && this._el.paused && !this._el.ended && !this._silent) {
         this._el.play().catch(() => {});
       }
       this._lastEmit = 0;
@@ -391,7 +402,20 @@ export class HtmlAudioPlayer {
   // _probing guard the 'error' handler checks); a real 'error' is emitted ONLY
   // when every candidate fails — a genuinely dead/expired URL — so App's
   // expired-URL recovery still fires for that, but not for a routine downgrade.
-  async _loadUrl(baseUrl, seq = this._loadSeq) {
+  //
+  // Play-driven loading: when we already intend to be playing (a mid-session
+  // track transition), a play() is kicked right after each src assignment. A
+  // pending play() marks the element as playing, which (a) exempts it from the
+  // hidden-page paused-player suspension that otherwise withholds canplay with
+  // the screen off, (b) actively drives the resource load forward per the media
+  // spec, and (c) starts audio the instant data arrives — no JS needed at
+  // readiness time. Per-candidate because the load algorithm re-pauses the
+  // element on every src change; a rejected kick (AbortError on descent,
+  // NotSupportedError on a missing variant) is expected and swallowed. Autoplay
+  // policy allows this: the sticky user activation is per-document and survives
+  // src changes. Cold boot is unaffected — _intendedPlaying is false until the
+  // user plays.
+  async _loadUrl(baseUrl, seq = this._loadSeq, { kick = true } = {}) {
     const candidates = qualityLadder(baseUrl, this._bitrate);
     let lastErr;
     this._probing = true;
@@ -399,7 +423,9 @@ export class HtmlAudioPlayer {
       for (const candidate of candidates) {
         if (seq !== this._loadSeq) return;   // a newer load superseded this one
         try {
-          await this._setSrc(candidate);
+          const settled = this._setSrc(candidate);   // assigns src synchronously
+          if (kick && this._intendedPlaying) this._el.play()?.catch(() => { /* expected on descent */ });
+          await settled;
           return;                            // first playable candidate wins
         } catch (e) {
           lastErr = e;
@@ -416,17 +442,26 @@ export class HtmlAudioPlayer {
     throw err;
   }
 
+  // Settles on the FIRST of canplay / playing — real playability, same contract
+  // as before (NOT loadedmetadata: a stream that stalls right after its headers
+  // must fall through to the timeout → descent → 'error' recovery, not report
+  // success and strand a silent track the watchdog would then trust). With the
+  // play() kick pending, the pipeline isn't background-suspended, so these
+  // events do arrive once data does. The bounded timeout is the backstop for a
+  // pipeline that delivers nothing at all (hidden-page suspension, dead
+  // network): reject → the ladder descends → the all-fail path surfaces a real
+  // 'error' instead of hanging load() forever.
   _setSrc(url) {
     this._el.src = url;
     return new Promise((resolve, reject) => {
-      const onCan = () => { cleanup(); resolve(); };
-      const onErr = (e) => { cleanup(); reject(e); };
-      const cleanup = () => {
-        this._el.removeEventListener('canplay', onCan);
-        this._el.removeEventListener('error', onErr);
-      };
-      this._el.addEventListener('canplay', onCan);
-      this._el.addEventListener('error', onErr);
+      const ac = new AbortController();
+      const onOk = () => { clearTimeout(timer); ac.abort(); resolve(); };
+      const onErr = (e) => { clearTimeout(timer); ac.abort(); reject(e); };
+      const timer = setTimeout(() => { ac.abort(); reject(new Error('source settle timeout')); }, SRC_SETTLE_TIMEOUT_MS);
+      const opts = { once: true, signal: ac.signal };
+      this._el.addEventListener('canplay', onOk, opts);
+      this._el.addEventListener('playing', onOk, opts);
+      this._el.addEventListener('error', onErr, opts);
     });
   }
 
@@ -441,7 +476,11 @@ export class HtmlAudioPlayer {
     const wasPlaying = !this._el.paused;
     const seq = ++this._loadSeq;
     try {
-      await this._loadUrl(this._baseUrl, seq);
+      // No play-kick here: a quality swap must restore position BEFORE audio
+      // starts, or the new source audibly restarts from 0 for a beat. Quality
+      // changes come from the Settings UI (foreground), where canplay fires
+      // normally and the settle timeout backstops the rest.
+      await this._loadUrl(this._baseUrl, seq, { kick: false });
       if (seq !== this._loadSeq) return;   // a track change superseded this re-quality
       if (Number.isFinite(at)) this._el.currentTime = at;
       if (wasPlaying) await this._el.play();
@@ -462,7 +501,12 @@ export class HtmlAudioPlayer {
     // native background playback unless the user explicitly opts into leveling.
     if (this._ctx || this._levelingResolved() || (this._eqActive() && !isIOS())) {
       this._ensureGraph();
-      if (this._ctx?.state === 'suspended') { try { await this._ctx.resume(); } catch { /* ignore */ } }
+      // Fire-and-forget: on a hidden page a resume() can pend indefinitely, and
+      // awaiting it here would block _el.play() entirely — an independent way
+      // for a screen-off track transition to die. _onVisible retries the resume
+      // on foreground return, so a graph that couldn't resume in the background
+      // becomes audible again the moment the screen wakes.
+      if (this._ctx?.state === 'suspended') { this._ctx.resume().catch(() => { /* ignore */ }); }
       this._levelActive = this._levelingResolved() && !!this._ctx;
     }
     return this._el.play();
@@ -481,6 +525,7 @@ export class HtmlAudioPlayer {
 
   getProgress()    { return this._el.currentTime / (this._el.duration || 1); }
   getDurationSec() { return this._el.duration || 0; }
+  isEnded()        { return this._el.ended; }
 
   on(evt, cb) {
     if (!this._listeners.has(evt)) this._listeners.set(evt, new Set());

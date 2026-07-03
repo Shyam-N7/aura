@@ -467,6 +467,9 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // re-subscribing on every queue tick.
   const viewRef = useRef({ tracks: viewTracks, idx: viewIdx, source: viewSource });
   viewRef.current = { tracks: viewTracks, idx: viewIdx, source: viewSource };
+  // Same pattern for `playing` — the wake watchdog reads the live intent.
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
 
   const player = useAudioPlayer();
   useListeningRecorder({ player, track, mood: t.mood, language: track?.language, mode: activeMode, source: queue.source });
@@ -557,6 +560,13 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [repeatMode, setRepeatMode] = useState(() => readStoredRepeat());
   const repeatModeRef = useRef(repeatMode);
   const loadedTrackIdRef = useRef(null);
+  // Which track a load is CURRENTLY in flight for — lets the wake watchdog tell
+  // "still loading" (leave it alone; the settle timeout bounds it) apart from
+  // "load died" (re-kick). Cleared when the load settles either way.
+  const loadingTrackIdRef = useRef(null);
+  // Bumped by the wake watchdog to re-run the load effect when a load died while
+  // the page was hidden (the player's _loadSeq makes the duplicate race-safe).
+  const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => {
     try { localStorage.setItem('aura.repeat', repeatMode); } catch { /* ignore */ }
@@ -621,6 +631,114 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     };
   });
 
+  // How many getRelated attempts one seed gets WHILE SOMEONE IS WAITING on it
+  // (pendingApplyRef armed) before the radio gives up. Free-running prefetches
+  // don't count — only need-it-now attempts do — so effect churn at track start
+  // can never burn the budget reserved for the 'ended' / Next-click moment.
+  // Bounds the self-heal so a genuinely dead endpoint can't loop.
+  const AUTO_NEXT_MAX_TRIES = 2;
+  const autoAttemptsRef = useRef({ seedId: null, tries: 0 });
+  const canRetryAutoNext = (seedId) => {
+    const a = autoAttemptsRef.current;
+    return !!seedId && (a.seedId !== seedId || a.tries < AUTO_NEXT_MAX_TRIES);
+  };
+  // The retry paths aren't abortable (only the prefetch effect owns an
+  // AbortController), so every resolution re-checks that its seed is still the
+  // current LAST track before touching playback — a stale resolution landing
+  // after the user picked something else must neither apply nor pause/resume.
+  const seedStillCurrent = (seedId) => {
+    const q = viewRef.current;
+    return q.tracks[q.idx]?.id === seedId && q.idx + 1 >= q.tracks.length;
+  };
+  const toastNoNext = () => { if (!document.hidden) toast("couldn't find the next song."); };
+
+  // The one auto-radio fetch, shared by the prefetch effect and the dead-end
+  // retries. Dedupes against the LIVE queue (viewRef — fresher than any render
+  // closure) and resolves through the same pendingApplyRef contract as before.
+  // A transient failure while someone is waiting (pending set) retries itself
+  // once within the attempt cap instead of silently killing the session — the
+  // screen-off drive is exactly where that single network blip used to be fatal.
+  const fetchAutoNext = (seed, { signal } = {}) => {
+    const a = autoAttemptsRef.current;
+    const counted = pendingApplyRef.current ? 1 : 0;   // only waited-on attempts count
+    autoAttemptsRef.current = a.seedId === seed.id
+      ? { seedId: seed.id, tries: a.tries + counted }
+      : { seedId: seed.id, tries: counted };
+    autoFetchInFlightRef.current = true;
+    setAutoNextLoading(true);
+    getRelated(seed.id, { lang: seed.language, limit: 15, signal })
+      .then(list => {
+        if (signal?.aborted) return;   // superseded by a newer prefetch
+        autoFetchInFlightRef.current = false;
+        setAutoNextLoading(false);
+        // Dedupe vs the queue by id AND normalized title (covers / alt-credits of
+        // an already-queued song share its title), and guard against repeats
+        // within the batch itself. Keep the whole batch so the queue page can show
+        // the continuation as a list and one consume fills it in at once. Picks
+        // come ONLY from the similar-tracks source — never random/featured
+        // tracks — so the radio stays strictly on-vibe even at a dead end.
+        const live = viewRef.current.tracks;
+        const seen = new Set(live.map(t => t.id));
+        const seenTitles = new Set(live.map(t => titleKey(t.title)));
+        const picks = [];
+        for (const t of (list ?? [])) {
+          const tk = titleKey(t?.title);
+          if (!t?.id || seen.has(t.id) || seenTitles.has(tk)) continue;
+          seen.add(t.id); seenTitles.add(tk);
+          picks.push(t);
+        }
+        const pending = pendingApplyRef.current;
+        if (!picks.length) {
+          // No similar candidate left (a retry won't change a deterministic
+          // empty answer). Pause only if the user was *waiting* on end-of-track
+          // resolution FOR THIS SEED. A pending Next click leaves the current
+          // track playing (clicks that did nothing have always been silent).
+          if (pending === 'ended' && seedStillCurrent(seed.id)) {
+            setPlaying(false);
+            setEnded(true);
+            toastNoNext();
+          }
+          pendingApplyRef.current = null;
+          return;
+        }
+        if (pending) {
+          pendingApplyRef.current = null;
+          if (!seedStillCurrent(seed.id)) return;   // stale — the queue moved on
+          applyAutoRadioToQueue(seed.id, picks);
+          // User was waiting on this resolution — flip to playing so the load
+          // effect autoplays the new track even if the audio element ended
+          // (its paused property is true post-'ended', so we need this signal).
+          setPlaying(true);
+        } else {
+          autoNextRef.current = { seedId: seed.id, candidates: picks };
+          setAutoNextDisplay({ seedId: seed.id, candidates: picks });
+        }
+      })
+      .catch(() => {
+        if (signal?.aborted) return;   // stale abort — don't clear the live request's flags
+        autoFetchInFlightRef.current = false;
+        setAutoNextLoading(false);
+        const pending = pendingApplyRef.current;
+        if (!pending) return;   // nothing waiting — the dead-end retry covers it later
+        if (!seedStillCurrent(seed.id)) { pendingApplyRef.current = null; return; }
+        // Someone is waiting on this resolution: retry within the cap before
+        // giving up (pending stays armed so the resolution still autoplays).
+        if (canRetryAutoNext(seed.id)) {
+          fetchAutoNextRef.current(seed);
+          return;
+        }
+        if (pending === 'ended') {
+          setPlaying(false);
+          setEnded(true);
+          toastNoNext();
+        }
+        pendingApplyRef.current = null;
+      });
+  };
+  // Ref mirror so the mount-once 'ended' subscriber calls the fresh instance.
+  const fetchAutoNextRef = useRef(fetchAutoNext);
+  fetchAutoNextRef.current = fetchAutoNext;
+
   // Prefetch a continuation candidate when the current track becomes the last
   // in a non-wrapping queue. Fires once per (last-track, source) pair; aborts
   // on track change or unmount. On resolve, either stashes the candidate for
@@ -636,73 +754,27 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     const ctl = new AbortController();
     autoNextRef.current = null;
     setAutoNextDisplay(null);
-    autoFetchInFlightRef.current = true;
-    setAutoNextLoading(true);
-    const seedId       = track.id;
-    const seedLanguage = track.language;
-    getRelated(seedId, { lang: seedLanguage, limit: 15, signal: ctl.signal })
-      .then(list => {
-        if (ctl.signal.aborted) return;   // superseded by a newer prefetch
-        autoFetchInFlightRef.current = false;
-        setAutoNextLoading(false);
-        // Dedupe vs the queue by id AND normalized title (covers / alt-credits of
-        // an already-queued song share its title), and guard against repeats
-        // within the batch itself. Keep the whole batch so the queue page can show
-        // the continuation as a list and one consume fills it in at once. Picks
-        // come ONLY from the similar-tracks source — never random/featured
-        // tracks — so the radio stays strictly on-vibe even at a dead end.
-        const seen = new Set(viewTracks.map(t => t.id));
-        const seenTitles = new Set(viewTracks.map(t => titleKey(t.title)));
-        const picks = [];
-        for (const t of (list ?? [])) {
-          const tk = titleKey(t?.title);
-          if (!t?.id || seen.has(t.id) || seenTitles.has(tk)) continue;
-          seen.add(t.id); seenTitles.add(tk);
-          picks.push(t);
-        }
-        const pending = pendingApplyRef.current;
-        if (!picks.length) {
-          // No similar candidate left. Pause only if the user was *waiting* on
-          // end-of-track resolution. A pending Next click leaves the current
-          // track playing (clicks that did nothing have always been silent).
-          if (pending === 'ended') { setPlaying(false); setEnded(true); }
-          pendingApplyRef.current = null;
-          return;
-        }
-        if (pending) {
-          pendingApplyRef.current = null;
-          applyAutoRadioToQueue(seedId, picks);
-          // User was waiting on this resolution — flip to playing so the load
-          // effect autoplays the new track even if the audio element ended
-          // (its paused property is true post-'ended', so we need this signal).
-          setPlaying(true);
-        } else {
-          autoNextRef.current = { seedId, candidates: picks };
-          setAutoNextDisplay({ seedId, candidates: picks });
-        }
-      })
-      .catch(() => {
-        if (ctl.signal.aborted) return;   // stale abort — don't clear the live request's flags
-        autoFetchInFlightRef.current = false;
-        setAutoNextLoading(false);
-        if (pendingApplyRef.current === 'ended') { setPlaying(false); setEnded(true); }
-        pendingApplyRef.current = null;
-      });
+    fetchAutoNext({ id: track.id, language: track.language }, { signal: ctl.signal });
     return () => ctl.abort();
     // viewTracks intentionally omitted from deps — the effect only needs to
     // re-fire when the *current* track or its position changes. Including the
     // full array would re-fetch on every queue mutation (including the one
-    // this effect itself triggers).
+    // this effect itself triggers). fetchAutoNext is intentionally omitted too
+    // (recreated per render; the effect only needs the identity-stable refs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewIdx, viewTracks.length, track?.id, track?.language, viewSource, repeatMode]);
 
   // play() can reject on mobile (autoplay policy) or a dead/expired stream URL —
   // never let it fail silently. Log it; on an autoplay block, drop to paused so
   // the play button reappears and the user's next tap (a real gesture) resumes.
+  // EXCEPT while hidden (screen off): flipping to paused there would cascade
+  // through the sync effect into player.pause() → _intendedPlaying=false, which
+  // disarms the player's on-wake self-heal — and nobody can see the toast anyway.
+  // Keep the intent armed instead; the wake watchdog retries on screen-on.
   const safePlay = useCallback(() => {
     player.play()?.catch((err) => {
       console.warn('[player] play() rejected:', err?.name || '', err?.message || '');
-      if (err?.name === 'NotAllowedError') {
+      if (err?.name === 'NotAllowedError' && !document.hidden) {
         setPlaying(false);
         toast('tap play to resume.');
       }
@@ -759,8 +831,20 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           // autoplays when the resolution applies the queue mutation.
           pendingApplyRef.current = 'ended';
         } else {
-          setPlaying(false);
-          setEnded(true);
+          // No candidate and no fetch in flight — the track-start prefetch
+          // failed (flaky network in a moving car) or never fired. Retry right
+          // now within the attempt cap, keeping the playing intent armed, so a
+          // single transient blip doesn't end the session; only an exhausted
+          // seed gives up (silently when hidden — nobody can see a toast).
+          const seed = cur.tracks[cur.idx];
+          if (seed?.id && canRetryAutoNext(seed.id)) {
+            pendingApplyRef.current = 'ended';
+            fetchAutoNextRef.current({ id: seed.id, language: seed.language });
+          } else {
+            setPlaying(false);
+            setEnded(true);
+            toastNoNext();
+          }
         }
       }
     });
@@ -788,16 +872,42 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // Flush playback position to localStorage on tab close AND when the page is
   // backgrounded (e.g. iOS screen-lock). If iOS then stalls/reloads the stream,
   // the load effect's position-restore resumes mid-track instead of from 0.
+  //
+  // Coming BACK to visible doubles as the wake watchdog: the screen turning on
+  // is the only reliable recovery signal on a phone (background timers are
+  // throttled to uselessness). If we still intend to be playing but the
+  // transition died while hidden — a load that never settled because the media
+  // pipeline was suspended before canplay, or a play() rejected in the
+  // background — re-kick it now. A dead load re-runs via loadNonce; otherwise a
+  // plain safePlay(), which is a no-op when audio is already rolling and also
+  // resumes a suspended EQ/leveling graph. The progress guard skips the
+  // ended-awaiting-auto-radio window, where play() would wrongly replay the
+  // finished track from 0 — that hand-off is owned by the in-flight fetch.
   useEffect(() => {
     const flush = () => flushPosition();
-    const onVis = () => { if (document.hidden) flushPosition(); };
+    const onVis = () => {
+      if (document.hidden) { flushPosition(); return; }
+      if (!playingRef.current) return;
+      const t = viewRef.current.tracks[viewRef.current.idx];
+      if (!t) return;
+      if (loadedTrackIdRef.current !== t.id) {
+        // A load legitimately in flight rides its own (timeout-bounded) promise;
+        // only a DEAD load — settled with neither success nor a live retry — is
+        // re-kicked, so waking mid-load never restarts the buffering.
+        if (loadingTrackIdRef.current === t.id) return;
+        console.warn('[player] wake watchdog: reloading — the load died while hidden');
+        setLoadNonce(n => n + 1);
+      } else if (!player.isEnded?.() && player.getProgress() < 0.999) {
+        safePlay();
+      }
+    };
     window.addEventListener('beforeunload', flush);
     document.addEventListener('visibilitychange', onVis);
     return () => {
       window.removeEventListener('beforeunload', flush);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, []);
+  }, [player, safePlay]);
 
   // Sleep timer expiry → pause playback. Toast for visibility.
   useEffect(() => subscribeSleepFire((reason) => {
@@ -851,19 +961,25 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     if (!track) return;
     let cancelled = false;
     loadedTrackIdRef.current = null;
+    loadingTrackIdRef.current = track.id;
     player.load(track).then(() => {
       if (cancelled) return;
+      loadingTrackIdRef.current = null;
       loadedTrackIdRef.current = track.id;
       const saved = loadPosition();
       if (saved && saved.trackId === track.id && saved.progress > 0.01 && saved.progress < 0.98) {
         player.seek(saved.progress);
       }
       if (playing && screen !== 'sensing') safePlay();
-    }).catch(err => console.warn('[player] load failed', err));
+    }).catch(err => {
+      if (!cancelled) loadingTrackIdRef.current = null;
+      console.warn('[player] load failed', err);
+    });
     return () => { cancelled = true; };
     // playing/screen captured in .then() — reconciled by the play/pause effect below.
+    // loadNonce isn't read: it exists so the wake watchdog can force a re-load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player, track?.id, track?.streamUrl]);
+  }, [player, track?.id, track?.streamUrl, loadNonce]);
 
   // Warm the lyrics cache for the current + next track shortly after a track
   // settles, so opening the Lyrics overlay is instant instead of a cold fetch
@@ -940,6 +1056,16 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     if (autoFetchInFlightRef.current) {
       pendingApplyRef.current = 'next';
       setPlaying(true);  // when the fetch lands and applies, load effect autoplays
+      return;
+    }
+    // No candidate and nothing in flight (the prefetch failed earlier) — a Next
+    // click used to be a silent no-op here. Retry within the attempt cap; the
+    // resolution applies + autoplays exactly like the in-flight branch above.
+    const seed = q.tracks[q.idx];
+    if (seed?.id && canRetryAutoNext(seed.id)) {
+      pendingApplyRef.current = 'next';
+      fetchAutoNext({ id: seed.id, language: seed.language });
+      setPlaying(true);
     }
   };
   const goPrev = () => {
@@ -1477,6 +1603,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             <DesktopHome tracks={pool}
               loading={featured.status === 'loading'}
               djName={t.djName} currentTrackId={track?.id}
+              track={track} onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}
               activeMode={activeMode} modes={user?.modes} onSetMode={switchMode}
               onPick={pickById} onPickLive={pickLiveTrack} onPlaySequence={pickLiveSequence}
               onOpenJournal={() => { setJournalReturn('home'); setScreen('journal'); }}
@@ -1570,7 +1697,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         )}
         {screen === 'talk' && (
           <ScreenTransition key="talk">
-            <DesktopTalk djName={t.djName} mood={t.mood} onPickSequence={pickLiveSequence}/>
+            <DesktopTalk djName={t.djName} mood={t.mood} onPickSequence={pickLiveSequence}
+              track={track} onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}/>
           </ScreenTransition>
         )}
         {screen === 'library' && (
@@ -1752,6 +1880,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
             unified into the screen='talk' route in a later phase. */}
         {isCompact && talkOpen && <TalkAura djName={t.djName} mood={t.mood}
           onClose={() => setTalkOpen(false)} onPickSequence={pickLiveSequence}
+          track={track} onOpenPlayer={() => { setTalkOpen(false); setPlayerReturn(screen); setScreen('player'); }}
           t={t} setTweak={setTweak}/>}
         <Toast/>
         <AddToPlaylistSheet/>
