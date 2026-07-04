@@ -20,7 +20,7 @@ import './DesktopPlaylistDetail.css';
 // no remove (it's not a user-owned list). Used for catalog/editorial playlists
 // (fetched by id) AND for auto "from your listening" sets, which already carry
 // their full tracks in memory — pass them via `initialData` to skip the fetch.
-export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
+export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, ownerName = null, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
   const [hit, setHit]       = useState({ data: initialData, error: null });
   const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
@@ -77,6 +77,9 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
         )}
         {status === 'ok' && (
           <>
+            {ownerName && (
+              <MonoLabel className="text-ink-faint block mb-2" size={10}>shared by {ownerName}</MonoLabel>
+            )}
             <h1 className="aura-dpd__hero">
               <em>{hit.data.name}</em>.
             </h1>

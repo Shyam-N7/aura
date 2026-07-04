@@ -1,7 +1,31 @@
 /* Public, view-only playlist page (/p/:publicId). Standalone full-bleed page —
-   rendered outside the authed app shell, so it carries its own minimal styling. */
+   rendered outside the authed app shell, inside a theme-${theme} wrapper — so it
+   carries its own styling and reads only the shared --color-* tokens (works in
+   dusk/bloom light AND midnight dark). Styled as an immersive landing-sibling:
+   a blurred album-art hero + a persistent glass CTA that converts. */
 
+.aura-pub {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  /* Palette for any procedural AlbumArt fallback (hero disc / a track missing
+     artwork) — inherited by the CoverPattern's var(--p0/--p1/--p2). Keeps a
+     missing cover on-brand instead of a bare initials monogram. */
+  --p0: var(--color-surface);
+  --p1: color-mix(in srgb, var(--color-accent), transparent 55%);
+  --p2: var(--color-accent);
+}
+
+/* Wordmark floats over the scrim. */
 .aura-pub__brand {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 16px);
+  left: 20px;
+  z-index: 4;
   display: inline-flex;
   padding: 4px 0;
   background: none;
@@ -9,11 +33,170 @@
   cursor: pointer;
 }
 
+/* ── Loading / error states ── centred on the fallback backdrop for continuity. */
+.aura-pub__state { position: relative; min-height: 100%; display: grid; place-items: center; overflow: hidden; }
+.aura-pub__state-inner { position: relative; z-index: 2; text-align: center; padding: 24px; max-width: 420px; }
+.aura-pub__state-sub { margin-top: 10px; color: var(--color-ink-soft); font-size: 14px; }
+
+/* ── HERO ── */
+.aura-pub__hero { position: relative; overflow: hidden; }
+
+.aura-pub__backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.aura-pub__backdrop .aura-album-art {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+  transform: scale(1.3);
+  filter: blur(48px) saturate(1.3);
+  opacity: 0.9;
+}
+/* Missing-cover fallback: a tasteful accent glow, never a broken monogram. */
+.aura-pub__backdrop-fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 30% 20%, color-mix(in srgb, var(--color-accent), transparent 55%), transparent 60%),
+    radial-gradient(120% 90% at 80% 40%, var(--color-accent-soft), transparent 65%),
+    var(--color-surface);
+  transform: scale(1.2);
+  filter: blur(40px);
+}
+
+/* Theme-aware scrim: art shows through the top, solid bg by the base. */
+.aura-pub__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-bg), transparent 24%) 0%,
+    color-mix(in srgb, var(--color-bg), transparent 55%) 34%,
+    color-mix(in srgb, var(--color-bg), transparent 50%) 60%,
+    var(--color-bg) 100%
+  );
+}
+
+.aura-pub__hero-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 74px) 24px 40px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.aura-pub__cover .aura-album-art {
+  --album-shadow: 0 28px 60px rgb(0 0 0 / 0.30), 0 6px 16px rgb(0 0 0 / 0.16);
+}
+.aura-pub__eyebrow { letter-spacing: 0.14em; }
+.aura-pub__title {
+  font-family: var(--font-serif);
+  font-size: clamp(30px, 8vw, 46px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+  margin: 4px 0 2px;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;             /* long name / emoji never overflows */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.aura-pub__owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-ink-soft);
+}
+.aura-pub__owner strong { color: var(--color-ink); font-weight: 600; }
+.aura-pub__avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent), transparent 72%);
+  color: var(--color-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+.aura-pub__pulse { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; }
+
+/* ── TRACKLIST ── solid bg; bottom padding clears the fixed CTA bar. */
+.aura-pub__list {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 20px calc(env(safe-area-inset-bottom) + 96px);
+}
+.aura-pub__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.aura-pub__idx {
+  width: 26px;
+  flex-shrink: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--color-ink-faint);
+}
+.aura-pub__row-main { flex: 1; min-width: 0; }
+.aura-pub__row-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aura-pub__row-meta { display: block; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aura-pub__row-dur { flex-shrink: 0; margin-left: 8px; }
+.aura-pub__empty { color: var(--color-ink-soft); font-size: 14px; padding: 24px 0; text-align: center; }
+
+/* ── STICKY GLASS CTA ── fixed to the viewport bottom so it's always in reach
+   (the page's own scroll container fills the viewport). List padding above keeps
+   it off the last row. */
+.aura-pub__bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+  background: color-mix(in srgb, var(--color-bg), transparent 20%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+          backdrop-filter: blur(16px) saturate(160%);
+  border-top: 1px solid var(--color-line);
+}
+.aura-pub__bar-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.aura-pub__bar-copy { display: flex; flex-direction: column; min-width: 0; }
+.aura-pub__bar-lead { font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.aura-pub__bar-sub { font-size: 12px; color: var(--color-ink-soft); }
+
 .aura-pub__cta {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 18px;
+  flex-shrink: 0;
+  padding: 11px 20px;
   border-radius: 999px;
   border: 0;
   cursor: pointer;
@@ -22,38 +205,46 @@
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.12s ease;
 }
 .aura-pub__cta:hover { opacity: 0.92; }
+.aura-pub__cta:active { transform: scale(0.97); }
 
-.aura-pub__banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--color-accent-soft);
-  border: 1px solid var(--color-line);
+/* Back-to-top pill sits just above the fixed CTA bar (~64px tall). This page is
+   standalone (no .aura-responsive-shell), so BackToTop's mobile-suppression rule
+   doesn't apply and the pill shows on every surface. Dropped surface opacity (vs
+   the near-solid app default) so the backdrop-blur reads as real glass. */
+.aura-pub .aura-btt {
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--color-surface), transparent 46%);
+  border-color: color-mix(in srgb, var(--color-ink), transparent 82%);
+}
+.aura-pub .aura-btt:hover {
+  background: color-mix(in srgb, var(--color-surface), transparent 32%);
 }
 
-.aura-pub__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--color-line);
+/* ── Reveal (reuse global keyframes; --d staggers each element) ── */
+.aura-pub--fx   { opacity: 0; animation: aura-npb-flourish-in 520ms cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) both; }
+.aura-pub--rise { opacity: 0; animation: aura-rise 360ms cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) both; }
+
+/* Desktop: keep a centred column, scale the hero up. */
+@media (min-width: 720px) {
+  .aura-pub__hero-inner { padding-top: calc(env(safe-area-inset-top) + 92px); padding-bottom: 52px; }
+  .aura-pub__title { font-size: clamp(40px, 4vw, 56px); }
+  .aura-pub__cover .aura-album-art { --size: 220px !important; }
 }
 
-.aura-pub__idx {
-  width: 24px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: var(--color-ink-faint);
+/* Midnight: deepen the scrim a touch so a light cover doesn't wash the dark base. */
+.theme-midnight .aura-pub__scrim {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-bg), transparent 18%) 0%,
+    color-mix(in srgb, var(--color-bg), transparent 48%) 34%,
+    var(--color-bg) 100%
+  );
 }
 
-@media (max-width: 480px) {
-  .aura-pub__banner { flex-direction: column; align-items: stretch; }
-  .aura-pub__banner .aura-pub__cta { width: 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .aura-pub--fx,
+  .aura-pub--rise { animation: none; opacity: 1; }
 }

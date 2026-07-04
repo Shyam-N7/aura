@@ -1,21 +1,28 @@
-import { useEffect, useState } from 'react';
-import { MonoLabel } from '../components/primitives';
+import { useEffect, useRef, useState } from 'react';
+import { MonoLabel, BreathingDot } from '../components/primitives';
 import { AlbumArt } from '../components/album/AlbumArt';
 import { AuraLoader } from '../components/feedback/AuraLoader';
+import { BackToTop } from '../components/BackToTop';
 import { getPublicPlaylist } from '../api/playlists';
 import { fmtTime, fmtRuntime } from '../utils/fmtTime';
 import { cleanTitle } from '../utils/title';
 import { setMeta } from '../lib/meta';
-import { clearPostAuthPath } from '../lib/routes';
+import { stashPostAuthPath } from '../lib/routes';
 import './PublicPlaylistScreen.css';
 
 // Public, view-only playlist page. Rendered by main.jsx's top-level view machine
 // for /p/:publicId — BEFORE the auth gate — so a shared link opens for anyone in
-// any browser, signed in or out. Read-only: no playback for visitors (the public
-// API returns no stream URLs); the CTA invites them into AURA.
+// any browser, signed in or out. This is AURA's #1 organic-growth surface (a
+// friend shares the link; a signed-out stranger opens it on a phone), so it's
+// styled as an immersive landing-sibling, not the plain in-app list: a blurred
+// album-art hero + a persistent glass CTA that converts. Read-only — the public
+// API returns no stream URLs; a signed-in "Play in AURA" hands off to the app
+// (which resolves URLs + plays), and a signed-out "Sign up free" returns here
+// after signup (the stash), where the same play handoff is then available.
 export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
   const [hit, setHit] = useState({ data: null, error: null });
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
+  const scrollRef = useRef(null);   // the page IS the scroll container (for BackToTop)
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -29,7 +36,7 @@ export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
   }, [publicId]);
 
   // Per-playlist tab title + client-side OG (the non-crawler fallback; crawlers
-  // get server-injected tags once that ships — see plan 2c).
+  // get the server-injected tags — see server/app.js injectPlaylistOg).
   useEffect(() => {
     if (status !== 'ok') return;
     const name = hit.data.name;
@@ -42,82 +49,127 @@ export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
   }, [status, hit.data]);
 
   const tracks = hit.data?.tracks ?? [];
+  const hasCover = !!hit.data?.coverImageUrl;
+  // Give the cover a clean radial disc if it has no artwork (the inherited
+  // --p0/--p1/--p2 palette on .aura-pub colours it), so a missing image never
+  // renders the bare initials monogram.
+  const cover = { imageUrl: hit.data?.coverImageUrl, title: hit.data?.name, cover: 'circle' };
+  const ownerInitial = (hit.data?.ownerName?.trim()?.[0] || 'A').toUpperCase();
+  const runtime = fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0));
 
-  const signUp = () => { clearPostAuthPath(); onNavigate('/auth?mode=signup'); };
+  // Signed-out → sign up, but stash THIS page so they land back here (now signed
+  // in, with "Play in AURA" live) instead of being dropped at the app home.
+  const signUp = () => {
+    stashPostAuthPath('/p/' + encodeURIComponent(publicId));
+    onNavigate('/auth?mode=signup');
+  };
+  // Signed-in → hand the app this playlist to OPEN as a read-only in-app view
+  // (they browse + choose to play; editing needs the separate collaborate invite).
+  // App.jsx's ?open= boot effect fetches it and opens the shared-playlist screen.
+  const openInApp = () => onNavigate('/?open=' + encodeURIComponent(publicId));
 
   return (
-    <div className="absolute inset-0 bg-bg text-ink overflow-y-auto">
-      <div className="max-w-[720px] mx-auto px-6 pt-8 pb-24">
-        <button type="button" onClick={() => onNavigate('/')} className="aura-pub__brand" aria-label="AURA home">
-          <MonoLabel className="text-ink-soft">AURA</MonoLabel>
-        </button>
+    <div ref={scrollRef} className="aura-pub">
+      <button type="button" onClick={() => onNavigate('/')} className="aura-pub__brand" aria-label="AURA home">
+        <MonoLabel className="text-ink-soft">AURA</MonoLabel>
+      </button>
 
-        {status === 'loading' && (
-          <div className="mt-16"><AuraLoader label="Loading playlist"/></div>
-        )}
+      {status === 'loading' && (
+        <div className="aura-pub__state">
+          <div className="aura-pub__backdrop-fallback" aria-hidden="true"/>
+          <div className="aura-pub__state-inner"><AuraLoader label="Loading playlist"/></div>
+        </div>
+      )}
 
-        {status === 'error' && (
-          <div className="mt-16 text-center">
-            <h1 className="font-serif text-[28px] text-ink">This playlist isn’t available.</h1>
-            <p className="mt-3 text-ink-soft text-[14px]">
-              The link may be private now, or it doesn’t exist.
-            </p>
-            <button type="button" onClick={() => onNavigate('/')} className="aura-pub__cta mt-8">
-              Go to AURA
-            </button>
+      {status === 'error' && (
+        <div className="aura-pub__state">
+          <div className="aura-pub__backdrop-fallback" aria-hidden="true"/>
+          <div className="aura-pub__state-inner">
+            <h1 className="aura-pub__title">This playlist isn’t available.</h1>
+            <p className="aura-pub__state-sub">The link may be private now, or it doesn’t exist.</p>
+            <button type="button" onClick={() => onNavigate('/')} className="aura-pub__cta mt-6">Go to AURA</button>
           </div>
-        )}
+        </div>
+      )}
 
-        {status === 'ok' && (
-          <>
-            <div className="flex items-end gap-5 mt-8">
-              <div className="shrink-0">
-                <AlbumArt track={{ imageUrl: hit.data.coverImageUrl, title: hit.data.name }} size={140} radius={8}/>
+      {status === 'ok' && (
+        <>
+          {/* ── HERO — full-bleed blurred cover + scrim, centred content ── */}
+          <header className="aura-pub__hero">
+            <div className="aura-pub__backdrop" aria-hidden="true">
+              {hasCover
+                ? <AlbumArt track={cover} size={420} radius={0} style={{ '--album-shadow': 'none' }}/>
+                : <div className="aura-pub__backdrop-fallback"/>}
+            </div>
+            <div className="aura-pub__scrim" aria-hidden="true"/>
+
+            <div className="aura-pub__hero-inner">
+              <div className="aura-pub__cover aura-pub--fx" style={{ '--d': '0ms' }}>
+                <AlbumArt track={cover} size={200} radius={14}/>
               </div>
-              <div className="min-w-0">
-                <MonoLabel className="text-ink-faint" size={9}>shared playlist</MonoLabel>
-                <h1 className="font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-ink mt-1.5 break-words">
-                  {hit.data.name}
-                </h1>
-                <div className="text-ink-soft text-[13px] mt-2">
-                  {hit.data.ownerName ? `by ${hit.data.ownerName}` : 'on AURA'}
-                  {tracks.length > 0 && (
-                    <> · {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'} · {fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</>
-                  )}
-                </div>
+
+              <MonoLabel className="aura-pub__eyebrow aura-pub--fx text-ink-faint" size={10} style={{ '--d': '70ms' }}>
+                shared playlist
+              </MonoLabel>
+
+              <h1 className="aura-pub__title aura-pub--fx" style={{ '--d': '130ms' }}>
+                {hit.data.name}
+              </h1>
+
+              <div className="aura-pub__owner aura-pub--fx" style={{ '--d': '190ms' }}>
+                <span className="aura-pub__avatar" aria-hidden="true">{ownerInitial}</span>
+                <span>{hit.data.ownerName ? <>shared by <strong>{hit.data.ownerName}</strong></> : 'on AURA'}</span>
+              </div>
+
+              {tracks.length > 0 && (
+                <MonoLabel className="aura-pub__meta aura-pub--fx text-ink-soft" size={10} numeric style={{ '--d': '230ms' }}>
+                  {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'} · {runtime}
+                </MonoLabel>
+              )}
+
+              <div className="aura-pub__pulse aura-pub--fx" style={{ '--d': '290ms' }}>
+                <BreathingDot color="var(--color-accent)" size={6}/>
+                <MonoLabel className="text-ink-faint" size={9}>on aura</MonoLabel>
               </div>
             </div>
+          </header>
 
-            <div className="aura-pub__banner mt-7">
-              <span className="text-ink-soft text-[13px]">
-                {isAuthed ? 'Open this in AURA to play it.' : 'Sign up free to play these on AURA — radio that reads your mood.'}
-              </span>
+          {/* ── TRACKLIST ── */}
+          <section className="aura-pub__list">
+            {tracks.length === 0 && (
+              <p className="aura-pub__empty">This playlist has no tracks yet.</p>
+            )}
+            {tracks.map((t, i) => (
+              <div key={t.id} className="aura-pub__row aura-pub--rise" style={{ '--d': `${Math.min(i, 12) * 40}ms` }}>
+                <div className="aura-pub__idx">{String(i + 1).padStart(2, '0')}</div>
+                <AlbumArt track={t} size={52} radius={6}/>
+                <div className="aura-pub__row-main">
+                  <div className="aura-pub__row-title">{cleanTitle(t.title)}</div>
+                  <MonoLabel className="aura-pub__row-meta text-ink-soft" size={9.5}>
+                    {(t.artist ?? '').toLowerCase()}{t.language ? ` · ${t.language}` : ''}
+                  </MonoLabel>
+                </div>
+                <MonoLabel className="aura-pub__row-dur text-ink-faint" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
+              </div>
+            ))}
+          </section>
+
+          {/* ── STICKY GLASS CTA — persists over the list while scrolling ── */}
+          <div className="aura-pub__bar">
+            <div className="aura-pub__bar-inner">
+              <div className="aura-pub__bar-copy">
+                <span className="aura-pub__bar-lead">{isAuthed ? 'Open this in AURA' : 'Sign up free to play'}</span>
+                {!isAuthed && <span className="aura-pub__bar-sub">radio that reads your mood</span>}
+              </div>
               {isAuthed
-                ? <button type="button" onClick={() => onNavigate('/')} className="aura-pub__cta">Open AURA</button>
+                ? <button type="button" onClick={openInApp} className="aura-pub__cta">Open in AURA</button>
                 : <button type="button" onClick={signUp} className="aura-pub__cta">Sign up free</button>}
             </div>
+          </div>
+        </>
+      )}
 
-            <div className="mt-8">
-              {tracks.length === 0 && (
-                <p className="text-ink-soft text-[14px]">This playlist has no tracks yet.</p>
-              )}
-              {tracks.map((t, i) => (
-                <div key={t.id} className="aura-pub__row">
-                  <div className="aura-pub__idx">{String(i + 1).padStart(2, '0')}</div>
-                  <AlbumArt track={t} size={46} radius={4}/>
-                  <div className="flex-1 min-w-0">
-                    <div className="truncate text-ink text-[14px]">{cleanTitle(t.title)}</div>
-                    <MonoLabel className="text-ink-soft mt-1 block truncate" size={9.5}>
-                      {(t.artist ?? '').toLowerCase()} · {t.language ?? ''}
-                    </MonoLabel>
-                  </div>
-                  <MonoLabel className="text-ink-faint shrink-0 ml-3" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      <BackToTop scrollRef={scrollRef}/>
     </div>
   );
 }

@@ -82,6 +82,7 @@ const SCREEN_LABELS = {
   'playlist-detail':       'Loading playlist',
   'catalog-playlist-detail': 'Loading playlist',
   'auto-playlist-detail':  'Loading playlist',
+  'shared-playlist':       'Loading playlist',
   journal:                 'Loading journal',
   dna:                     'Building your sonic DNA',
   bridges:                 'Loading bridges',
@@ -129,7 +130,7 @@ import { dropExplicit } from './lib/explicit';
 import { toast } from './lib/toast';
 import { confirm } from './lib/confirm';
 import { prompt } from './lib/prompt';
-import { createPlaylist, addToPlaylist } from './api/playlists';
+import { createPlaylist, addToPlaylist, getPublicPlaylist } from './api/playlists';
 
 // ── Shared-element morph ──────────────────────────────────────────
 // Viewport-relative rect — no more unscaling against the 402×874 stage,
@@ -238,6 +239,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // hard refresh the URL falls back to home (buildPath maps unknown screens → '/').
   const [autoPlaylist,      setAutoPlaylist]     = useState(null);
   const [autoReturn,        setAutoReturn]       = useState('playlists');
+  // A shared PUBLIC playlist opened in-app from a /p/:id link (?open= handoff).
+  // Held in memory + rendered read-only via DesktopCatalogPlaylistDetail, exactly
+  // like an auto playlist — not deep-linked, so a hard refresh falls back to home.
+  const [sharedPlaylist,    setSharedPlaylist]   = useState(null);
+  const [sharedReturn,      setSharedReturn]     = useState('home');
   const [artistKey,         setArtistKey]        = useState(initialFromPath?.artistKey ?? null);
   const [artistReturn,      setArtistReturn]     = useState('home');
   // Same back-stack pattern for player + queue so tapping back from the
@@ -259,6 +265,11 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // (end of an explicit queue, or sleep-at-end). Drives the lyrics idle screen's
   // "Song ended" state; cleared whenever audio starts again (player 'play').
   const [ended, setEnded]           = useState(false);
+  // Shuffle toggle for the up-next; auto-resets when the queue is replaced
+  // wholesale (clear / pickLive / new source). Declared here with the other
+  // playback state so the pick* handlers above shuffleQueue can reset it without
+  // a use-before-declare.
+  const [shuffleActive, setShuffleActive] = useState(false);
 
   // ── Boot refresh + auto-update ───────────────────────────────────────
   // Reconcile the cached identity with the server once on mount so a normal reload
@@ -428,6 +439,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       'playlist-detail': 'playlist · AURA',
       'catalog-playlist-detail': 'playlist · AURA',
       'auto-playlist-detail': 'playlist · AURA',
+      'shared-playlist': 'playlist · AURA',
       'album-detail': 'album · AURA',
       artist: 'artist · AURA',
       journal: 'journal · AURA',
@@ -1159,6 +1171,28 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     });
   };
 
+  // Deep-link from a shared /p/:id page: a signed-in visitor tapped "Open in
+  // AURA", which navigated here with ?open=<publicId>. Fetch that public playlist
+  // and open it as a READ-ONLY in-app view — they browse and choose what to play
+  // (editing / collaborating needs the separate ?join= invite; a public link is
+  // view-only). Strip the param first so a refresh / StrictMode re-run can't
+  // re-trigger. Mirrors the ?join= invite handoff. Play-time stream URLs resolve
+  // lazily via getTrack once a track becomes current — no eager fetch here.
+  useEffect(() => {
+    let openId;
+    try { openId = new URLSearchParams(window.location.search).get('open'); } catch { openId = null; }
+    if (!openId) return undefined;
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('open');
+      window.history.replaceState(null, '', u.pathname + u.search);
+    } catch { /* ignore */ }
+    getPublicPlaylist(openId)
+      .then(pl => { setSharedPlaylist(pl); setSharedReturn('home'); setScreen('shared-playlist'); })
+      .catch(() => { /* bad / removed link — just stay on home */ });
+    // once on mount (only stable setters + the imported fetch are referenced)
+  }, []);
+
   // Open the player on a track from the featured pool. Seeds the queue with
   // the pool starting at the picked idx so the rest of "tonight's set" remains.
   const pickById = (id, srcEl) => {
@@ -1234,8 +1268,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // queue order stays as-is (we don't store the pre-shuffle order, and most
   // users wanting an unshuffled set will pick a fresh source anyway).
   // Re-shuffle = tap off → tap on. Auto-resets to false whenever the queue
-  // is replaced wholesale (clear / pickLive / new source).
-  const [shuffleActive, setShuffleActive] = useState(false);
+  // is replaced wholesale (clear / pickLive / new source). State declared up top
+  // with the other playback state.
   const shuffleQueue = () => {
     if (shuffleActive) {
       setShuffleActive(false);
@@ -1757,6 +1791,14 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           <ScreenTransition key={`auto-${autoPlaylist.id}`}>
             <DesktopCatalogPlaylistDetail playlistId={autoPlaylist.id} initialData={autoPlaylist}
               onClose={() => setScreen(autoReturn)} onPlaySequence={pickLiveSequence}
+              onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
+          </ScreenTransition>
+        )}
+        {screen === 'shared-playlist' && sharedPlaylist && (
+          <ScreenTransition key={`shared-${sharedPlaylist.id}`}>
+            <DesktopCatalogPlaylistDetail playlistId={sharedPlaylist.id} initialData={sharedPlaylist}
+              ownerName={sharedPlaylist.ownerName}
+              onClose={() => setScreen(sharedReturn)} onPlaySequence={pickLiveSequence}
               onPlayOne={pickLiveTrack} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}/>
           </ScreenTransition>
         )}
