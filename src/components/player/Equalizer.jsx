@@ -10,7 +10,7 @@ import { saveEqUserPreset, deleteEqUserPreset, MAX_PRESETS } from '../../lib/eqP
 import { prompt } from '../../lib/prompt';
 import { confirm } from '../../lib/confirm';
 import { toast } from '../../lib/toast';
-import { isIOS } from '../../lib/platform';
+import { isIOS, isTapUnsafe } from '../../lib/platform';
 import './Equalizer.css';
 
 // Curve-fader geometry. The cell width + track height are computed per-open from
@@ -135,16 +135,20 @@ function EqPopup({ player, anchorEl, closing, onRequestClose, onFinalized }) {
   // for later changes (incl. another EQ instance).
   useEffect(() => player.on('eq', (g) => setGains(g.slice())), [player]);
 
-  // iOS heads-up (once): tapping the EQ commits the Web Audio tap, which iOS
-  // forfeits lock-screen / background playback for. Tell the user before they
-  // touch a slider so it isn't a silent surprise. See HtmlAudioPlayer.play().
+  // Phone heads-up (once): touching the EQ commits the Web Audio tap, which
+  // costs background playback — iOS drops lock-screen audio; Android goes
+  // silent when the screen turns off. Tell the user before they touch a slider
+  // so it isn't a silent surprise. See HtmlAudioPlayer.play() / isTapUnsafe.
   useEffect(() => {
-    if (!isIOS()) return;
+    if (!isTapUnsafe()) return;
     try {
-      if (localStorage.getItem('aura.eq.iosWarned') === '1') return;
-      localStorage.setItem('aura.eq.iosWarned', '1');
+      if (localStorage.getItem('aura.eq.bgWarned') === '1'
+        || localStorage.getItem('aura.eq.iosWarned') === '1') return;   // legacy iOS key
+      localStorage.setItem('aura.eq.bgWarned', '1');
     } catch { /* localStorage disabled — show it anyway */ }
-    toast('on iphone, using the equalizer pauses lock-screen playback for this session.');
+    toast(isIOS()
+      ? 'on iphone, using the equalizer pauses lock-screen playback for this session.'
+      : 'on android, using the equalizer can stop playback while the screen is off, for this session.');
   }, []);
 
   // Centered modal — close on outside pointer / Esc. (The trigger is excluded so

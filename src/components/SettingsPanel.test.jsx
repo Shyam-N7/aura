@@ -60,6 +60,16 @@ describe('SettingsPanel', () => {
     expect(getByText('high').closest('button')).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('volume leveling defaults ON everywhere and toggling persists', () => {
+    const { getByRole, getByText } = renderPanel();
+    const sw = getByRole('switch', { name: /volume leveling/i });
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    expect(getByText(/nothing plays too loud/)).toBeInTheDocument();
+    fireEvent.click(sw);
+    expect(localStorage.getItem('aura.leveling')).toBe('0');
+    expect(getByText(/original loudness/)).toBeInTheDocument();
+  });
+
   it('keeps delete last, after sign out', () => {
     const { getByText } = renderPanel();
     const signOut = getByText('sign out');

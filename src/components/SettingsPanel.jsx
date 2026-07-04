@@ -10,7 +10,6 @@ import { QUALITIES } from '../lib/audioQuality';
 import { useAudioQuality } from '../hooks/useAudioQuality';
 import { getLeveling, setLeveling } from '../lib/audioLeveling';
 import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
-import { isIOS } from '../lib/platform';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
 
@@ -35,9 +34,9 @@ export function SettingsPanel({ t, setTweak }) {
   const [quality, setQuality] = useAudioQuality();
   const qualityCaption = QUALITIES.find(q => q.id === quality)?.caption ?? '';
 
-  // Volume leveling — even out loudness across songs (the YouTube-style "boosted/
-  // balanced" feel). Off by default on iOS (the Web Audio tap it needs would
-  // forfeit lock-screen playback there).
+  // Volume leveling — even out loudness across songs (the YouTube model: hot
+  // tracks come down via plain element volume). No Web Audio, background-safe
+  // everywhere, so it defaults ON on every platform.
   const [leveling, setLevelingState] = useState(getLeveling());
   const toggleLeveling = () => {
     const next = !leveling;
@@ -277,7 +276,7 @@ export function SettingsPanel({ t, setTweak }) {
             <span className="aura-set__row-label">volume leveling</span>
             <span className="aura-set__row-caption">
               {leveling
-                ? `evens out loudness across songs so nothing plays too quiet.${isIOS() ? ' on iphone this can pause lock-screen playback.' : ''}`
+                ? 'evens out loudness across songs so nothing plays too loud.'
                 : 'plays each song at its original loudness.'}
             </span>
           </span>

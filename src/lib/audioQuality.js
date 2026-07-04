@@ -45,6 +45,9 @@ const STANDARD = [320, 160, 96, 48];
 // path or right before `?query`) so query strings and any other digits in the
 // path are left alone. Returns the url unchanged when there's no token to swap.
 const BITRATE_TOKEN = /_\d+\.mp4(?=\?|$)/;
+// Whether a url carries a swappable bitrate suffix at all (lib/loudness uses
+// this to decide if a cheap measurement variant exists).
+export function hasBitrateToken(url) { return !!url && BITRATE_TOKEN.test(url); }
 let warnedNoToken = false;
 export function swapBitrate(url, bitrate) {
   if (!url) return url;

@@ -117,6 +117,7 @@ import { speak, stopSpeaking } from './lib/speak';
 import { getSpokenConfirm } from './lib/carVoice';
 import { getRelated } from './api/related';
 import { prefetchLyrics } from './api/lyrics';
+import { measureTrack } from './lib/loudness';
 import { titleKey, cleanTitle } from './utils/title';
 import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
@@ -1003,6 +1004,18 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       if (next?.id) prefetchLyrics(next.id);
     }, 1200);
     return () => clearTimeout(id);
+  }, [track?.id, next?.id]);
+
+  // Measure the upcoming track's loudness while the current one plays, so most
+  // transitions are leveled on their first listen (the current track's own miss
+  // is kicked by player.load). measureTrack self-gates — cache hit, hidden
+  // page, missing stream URL, in-flight duplicate are all cheap no-ops.
+  useEffect(() => {
+    if (!next?.id) return;
+    const id = setTimeout(() => measureTrack(next), 1500);
+    return () => clearTimeout(id);
+    // `next` identity churns with every queue write; its id is the real signal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.id, next?.id]);
 
   // Lazy stream-URL refetch for any track that loses its URL (cold-start

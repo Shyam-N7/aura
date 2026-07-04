@@ -63,13 +63,3 @@ export function sanitizeGains(arr) {
 // Decibels → linear amplitude gain. Shared by the audio engine's makeup/headroom
 // stage (HtmlAudioPlayer) so dB math lives with the rest of the EQ config.
 export function dbToGain(db) { return Math.pow(10, db / 20); }
-
-// Loudness-leveling gain for a measured program RMS: the linear gain that moves it
-// toward `target`, clamped to [minDb, maxDb] so we never over-boost a quiet track
-// or crush a hot one. Returns null when the program is effectively silent (don't
-// adjust). Pure (testable); the engine ramps toward this value slowly.
-export function levelGainFor(rms, { target, minDb, maxDb }) {
-  if (!(rms > 1e-4)) return null;
-  const g = target / rms;
-  return Math.max(dbToGain(minDb), Math.min(dbToGain(maxDb), g));
-}

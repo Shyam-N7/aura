@@ -1,10 +1,9 @@
-import { isIOS } from './platform';
-
 // Loudness-leveling preference (the "volume leveling" toggle). Mirrors
 // audioQuality: a single localStorage-backed source + a pub/sub the audio engine
 // subscribes to, so flipping it in Settings takes effect live without a player ref.
-// Default ON everywhere EXCEPT iOS — there, tapping Web Audio forfeits lock-screen/
-// background playback, so it's opt-in (the toggle says so).
+// Leveling is volume-composed (lib/loudness measures a track once; the player
+// attenuates hot tracks via el.volume) — no Web Audio involved, so it's safe for
+// lock-screen/background playback everywhere and defaults ON.
 
 const KEY = 'aura.leveling';
 const subs = new Set();
@@ -15,7 +14,7 @@ export function getLeveling() {
     if (v === '1') return true;
     if (v === '0') return false;
   } catch { /* ignore */ }
-  return !isIOS();
+  return true;
 }
 
 export function setLeveling(on) {

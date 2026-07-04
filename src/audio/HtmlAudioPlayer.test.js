@@ -79,6 +79,56 @@ describe('HtmlAudioPlayer — EQ makeup gain (clipping headroom)', () => {
   });
 });
 
+// Volume-composed leveling: el.volume = user volume × attenuate-only gain from
+// the loudness cache. The user's slider value stays the API/persisted value —
+// leveling rides invisibly on top and can only reduce, never boost.
+describe('HtmlAudioPlayer — volume-composed loudness leveling', () => {
+  it('composes el.volume = user × attenuation, keeps user volume as the API value', () => {
+    localStorage.setItem('aura.volume', '0.8');
+    const p = new HtmlAudioPlayer();
+    p._levelDb = -10;                              // 6 dB over the -16 target
+    p._applyVolume();
+    expect(p._el.volume).toBeCloseTo(0.8 * Math.pow(10, -6 / 20), 5);
+    expect(p.getVolume()).toBe(0.8);
+    p.destroy();
+  });
+
+  it('unmeasured track and leveling-off both play at the raw user volume', () => {
+    const p = new HtmlAudioPlayer();
+    p.setVolume(0.7);
+    p._levelDb = null;                             // unmeasured → unity
+    p._applyVolume();
+    expect(p._el.volume).toBeCloseTo(0.7, 5);
+    localStorage.setItem('aura.leveling', '0');    // toggled off → raw even when measured
+    p._levelDb = -6;
+    p._applyVolume();
+    expect(p._el.volume).toBeCloseTo(0.7, 5);
+    p.destroy();
+  });
+
+  it('never boosts a quiet track above the user volume', () => {
+    const p = new HtmlAudioPlayer();
+    p.setVolume(0.5);
+    p._levelDb = -40;
+    p._applyVolume();
+    expect(p._el.volume).toBeCloseTo(0.5, 5);
+    p.destroy();
+  });
+
+  it('setVolume persists + emits the USER value while leveling stays applied', () => {
+    const p = new HtmlAudioPlayer();
+    p._levelDb = -10;
+    const onVol = vi.fn();
+    p.on('volume', onVol);
+    p.setVolume(0.5);
+    expect(onVol).toHaveBeenCalledWith(0.5);
+    expect(localStorage.getItem('aura.volume')).toBe('0.5');
+    expect(p.getVolume()).toBe(0.5);
+    expect(p._el.volume).toBeCloseTo(0.5 * Math.pow(10, -6 / 20), 5);
+    p.destroy();
+  });
+});
+
 // The tap policy is the screen-off fix: phones must never auto-tap Web Audio
 // from a saved preset (a tapped element's sound exits only through the
 // AudioContext, which Android halts with the screen off and iOS drops from the
