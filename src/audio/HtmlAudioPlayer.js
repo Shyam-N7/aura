@@ -1,6 +1,6 @@
 import { EQ_FREQS, EQ_FLAT, sanitizeGains, dbToGain } from './eqConfig.js';
 import { getAudioQuality, subscribeAudioQuality, bitrateFor, qualityLadder } from '../lib/audioQuality.js';
-import { getLeveling, subscribeLeveling } from '../lib/audioLeveling.js';
+import { getLeveling, levelingAvailable, subscribeLeveling } from '../lib/audioLeveling.js';
 import { getTrackDb, measureTrack, levelGainForDb } from '../lib/loudness.js';
 import { isTapUnsafe } from '../lib/platform.js';
 
@@ -214,9 +214,9 @@ export class HtmlAudioPlayer {
   }
 
   // Whether volume leveling should apply (the Settings toggle, or Car Mode's
-  // force). Leveling is volume-composed — no Web Audio — so it's safe for
-  // background/lock-screen playback on every platform.
-  _levelingResolved() { return this._levelForce || getLeveling(); }
+  // force). Availability gates both paths: on iOS el.volume writes are ignored,
+  // so even a forced gain could never be heard — don't measure for it either.
+  _levelingResolved() { return levelingAvailable() && (this._levelForce || getLeveling()); }
 
   // React to a leveling toggle (Settings) or Car Mode's force: recompose the
   // element volume. Off restores the user's raw volume instantly; on applies

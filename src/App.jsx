@@ -118,6 +118,7 @@ import { getSpokenConfirm } from './lib/carVoice';
 import { getRelated } from './api/related';
 import { prefetchLyrics } from './api/lyrics';
 import { measureTrack } from './lib/loudness';
+import { getLeveling } from './lib/audioLeveling';
 import { titleKey, cleanTitle } from './utils/title';
 import { setMeta } from './lib/meta';
 import { requestSearchFocus } from './lib/searchFocus';
@@ -1008,15 +1009,19 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
 
   // Measure the upcoming track's loudness while the current one plays, so most
   // transitions are leveled on their first listen (the current track's own miss
-  // is kicked by player.load). measureTrack self-gates — cache hit, hidden
-  // page, missing stream URL, in-flight duplicate are all cheap no-ops.
+  // is kicked by player.load). Gated on the leveling preference at fire time —
+  // a user who turned leveling off must not pay the download. measureTrack
+  // self-gates the rest — cache hit, hidden page, missing stream URL, in-flight
+  // duplicate are all cheap no-ops.
   useEffect(() => {
     if (!next?.id) return;
-    const id = setTimeout(() => measureTrack(next), 1500);
+    const id = setTimeout(() => { if (getLeveling()) measureTrack(next); }, 1500);
     return () => clearTimeout(id);
-    // `next` identity churns with every queue write; its id is the real signal.
+    // `next` identity churns with every queue write; its id is the real signal,
+    // plus streamUrl for the persisted-queue cold start where the URL is merged
+    // in after the id is already showing (same reason as the load effect above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.id, next?.id]);
+  }, [track?.id, next?.id, next?.streamUrl]);
 
   // Lazy stream-URL refetch for any track that loses its URL (cold-start
   // hydration didn't cover it, or it's track 3+ becoming current). Merges

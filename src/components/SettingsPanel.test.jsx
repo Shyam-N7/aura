@@ -60,7 +60,7 @@ describe('SettingsPanel', () => {
     expect(getByText('high').closest('button')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('volume leveling defaults ON everywhere and toggling persists', () => {
+  it('volume leveling defaults ON and toggling persists', () => {
     const { getByRole, getByText } = renderPanel();
     const sw = getByRole('switch', { name: /volume leveling/i });
     expect(sw).toHaveAttribute('aria-checked', 'true');
@@ -68,6 +68,16 @@ describe('SettingsPanel', () => {
     fireEvent.click(sw);
     expect(localStorage.getItem('aura.leveling')).toBe('0');
     expect(getByText(/original loudness/)).toBeInTheDocument();
+  });
+
+  it('hides volume leveling on iOS, where el.volume writes are ignored', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari', platform: 'iPhone', maxTouchPoints: 5 });
+    try {
+      const { queryByRole } = renderPanel();
+      expect(queryByRole('switch', { name: /volume leveling/i })).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('keeps delete last, after sign out', () => {

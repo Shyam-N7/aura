@@ -17,6 +17,13 @@ const MIN_MEASURABLE_DB = -60;    // below this = silence/broken decode — don'
 const MAX_ENTRIES = 1500;         // ~60 KB of localStorage; evict oldest-written
 const MAX_MEASURE_SEC = 12 * 60;  // don't decode marathon programs on phones
 const DECODE_RATE = 12000;        // decode-target sample rate (memory, not accuracy)
+const FETCH_TIMEOUT_MS = 30_000;  // a stalled download must not wedge the one-at-a-time queue
+
+// Session mirror of the localStorage cache. When persistence fails (quota full,
+// storage disabled) a measurement would otherwise be re-run on EVERY play of
+// every track, forever, without leveling ever engaging — write-through here so
+// it at least sticks for the session.
+const mem = new Map();
 
 function readAll() {
   try {
@@ -32,11 +39,15 @@ function writeAll(map) {
 export function getTrackDb(trackId) {
   if (!trackId) return null;
   const db = readAll()[trackId]?.db;
-  return Number.isFinite(db) ? db : null;
+  if (Number.isFinite(db)) return db;
+  const session = mem.get(trackId);
+  return Number.isFinite(session) ? session : null;
 }
 
 // Store a measurement, evicting the oldest-written entries past the cap.
 export function storeTrackDb(trackId, db) {
+  mem.set(trackId, db);
+  if (mem.size > MAX_ENTRIES) mem.delete(mem.keys().next().value);
   const map = readAll();
   map[trackId] = { db, at: Date.now() };
   const ids = Object.keys(map);
@@ -89,7 +100,11 @@ export function measureTrack(track) {
   const cached = getTrackDb(id);
   if (cached != null) return Promise.resolve(cached);
   if (typeof document !== 'undefined' && document.hidden) return Promise.resolve(null);
-  if ((track.durationSec ?? 0) > MAX_MEASURE_SEC) return Promise.resolve(null);
+  // Duration gate fails CLOSED: the catalog serves null for missing provider
+  // durations, and unknown-length content (radio programs, hours-long mixes)
+  // would download and decode tens-to-hundreds of MB on a phone.
+  const dur = track.durationSec;
+  if (!Number.isFinite(dur) || dur <= 0 || dur > MAX_MEASURE_SEC) return Promise.resolve(null);
   if (inflight.has(id)) return inflight.get(id);
   const p = queue.then(() => doMeasure(track));
   inflight.set(id, p);
@@ -106,7 +121,10 @@ async function doMeasure(track) {
   if (!Ctx) return null;
   for (const candidate of measurementUrls(track.streamUrl)) {
     try {
-      const res = await fetch(candidate);   // CDN sends ACAO:* (the element already streams it cross-origin)
+      // CDN sends ACAO:* (the element already streams it cross-origin). The
+      // signal covers the body read too: a silently-stalled connection would
+      // otherwise never settle and freeze the queue until reload.
+      const res = await fetch(candidate, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!res.ok) continue;                // e.g. a track with no 48k variant — try the next tier
       const bytes = await res.arrayBuffer();
       const buf = await new Ctx(1, 1, DECODE_RATE).decodeAudioData(bytes);

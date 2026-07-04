@@ -8,7 +8,7 @@ import { toast } from '../lib/toast';
 import { getConsent, setConsent, subscribeConsent } from '../lib/consent';
 import { QUALITIES } from '../lib/audioQuality';
 import { useAudioQuality } from '../hooks/useAudioQuality';
-import { getLeveling, setLeveling } from '../lib/audioLeveling';
+import { getLeveling, setLeveling, levelingAvailable } from '../lib/audioLeveling';
 import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
@@ -35,8 +35,8 @@ export function SettingsPanel({ t, setTweak }) {
   const qualityCaption = QUALITIES.find(q => q.id === quality)?.caption ?? '';
 
   // Volume leveling — even out loudness across songs (the YouTube model: hot
-  // tracks come down via plain element volume). No Web Audio, background-safe
-  // everywhere, so it defaults ON on every platform.
+  // tracks come down via plain element volume). No Web Audio, background-safe.
+  // Hidden on iOS, where the browser ignores app volume changes entirely.
   const [leveling, setLevelingState] = useState(getLeveling());
   const toggleLeveling = () => {
     const next = !leveling;
@@ -269,7 +269,7 @@ export function SettingsPanel({ t, setTweak }) {
         ))}
       </div>
       <p className="aura-set__caption">{qualityCaption}</p>
-      <div className="aura-set__group">
+      {levelingAvailable() && <div className="aura-set__group">
         <button type="button" role="switch" aria-checked={leveling}
           className="aura-set__row" onClick={toggleLeveling}>
           <span className="aura-set__row-text">
@@ -282,7 +282,7 @@ export function SettingsPanel({ t, setTweak }) {
           </span>
           <span className={`aura-set__switch ${leveling ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
         </button>
-      </div>
+      </div>}
       <div className="aura-set__group">
         <button type="button" role="switch" aria-checked={spokenConfirm}
           className="aura-set__row" onClick={toggleSpokenConfirm}>
