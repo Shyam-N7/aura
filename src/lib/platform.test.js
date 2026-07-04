@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { isIOS } from './platform';
+import { isIOS, isAndroid, isTapUnsafe } from './platform';
 
 const stubNav = (nav) => vi.stubGlobal('navigator', nav);
 
@@ -30,5 +30,39 @@ describe('isIOS', () => {
     expect(isIOS()).toBe(false);
     stubNav({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome', platform: 'Linux armv8l', maxTouchPoints: 5 });
     expect(isIOS()).toBe(false);
+  });
+});
+
+describe('isAndroid', () => {
+  it('detects Android by user agent', () => {
+    stubNav({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome', platform: 'Linux armv8l', maxTouchPoints: 5 });
+    expect(isAndroid()).toBe(true);
+  });
+
+  it('is false on Windows, Mac, and iPhone', () => {
+    stubNav({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', platform: 'Win32', maxTouchPoints: 0 });
+    expect(isAndroid()).toBe(false);
+    stubNav({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari', platform: 'MacIntel', maxTouchPoints: 0 });
+    expect(isAndroid()).toBe(false);
+    stubNav({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari', platform: 'iPhone', maxTouchPoints: 5 });
+    expect(isAndroid()).toBe(false);
+  });
+});
+
+// The tap-policy gate: phones (either platform) must never auto-tap Web Audio;
+// desktop is the only auto-tap-safe surface.
+describe('isTapUnsafe', () => {
+  it('is true on iPhone and Android', () => {
+    stubNav({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari', platform: 'iPhone', maxTouchPoints: 5 });
+    expect(isTapUnsafe()).toBe(true);
+    stubNav({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome', platform: 'Linux armv8l', maxTouchPoints: 5 });
+    expect(isTapUnsafe()).toBe(true);
+  });
+
+  it('is false on desktop (Windows / real Mac)', () => {
+    stubNav({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', platform: 'Win32', maxTouchPoints: 0 });
+    expect(isTapUnsafe()).toBe(false);
+    stubNav({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari', platform: 'MacIntel', maxTouchPoints: 0 });
+    expect(isTapUnsafe()).toBe(false);
   });
 });

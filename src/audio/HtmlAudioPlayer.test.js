@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HtmlAudioPlayer } from './HtmlAudioPlayer';
 import { dbToGain } from './eqConfig';
 
@@ -75,6 +75,56 @@ describe('HtmlAudioPlayer — EQ makeup gain (clipping headroom)', () => {
     expect(p._makeupGain()).toBeLessThan(1);
     p._eqGains = [0, 0, 0, 0, 7, 0, 0, 0];                   // just over → -(7 - 6)
     expect(p._makeupGain()).toBeCloseTo(dbToGain(-1), 10);
+    p.destroy();
+  });
+});
+
+// The tap policy is the screen-off fix: phones must never auto-tap Web Audio
+// from a saved preset (a tapped element's sound exits only through the
+// AudioContext, which Android halts with the screen off and iOS drops from the
+// lock screen); desktop may. An already-tapped session keeps using its graph.
+describe('HtmlAudioPlayer — Web Audio tap policy (screen-off safety)', () => {
+  const stubNav = (nav) => vi.stubGlobal('navigator', nav);
+  afterEach(() => vi.unstubAllGlobals());
+
+  const DESKTOP = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', platform: 'Win32', maxTouchPoints: 0 };
+  const ANDROID = { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome', platform: 'Linux armv8l', maxTouchPoints: 5 };
+  const IPHONE  = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari', platform: 'iPhone', maxTouchPoints: 5 };
+
+  const makePlayer = () => {
+    const p = new HtmlAudioPlayer();
+    p._silent = false;                       // pretend a real track is loaded
+    p._el.play = () => Promise.resolve();    // jsdom can't actually play media
+    p._ensureGraph = vi.fn();
+    return p;
+  };
+
+  it('auto-taps on desktop when a saved non-flat preset is active', async () => {
+    stubNav(DESKTOP);
+    const p = makePlayer();
+    p._eqGains = [4, 0, 0, 0, 0, 0, 0, 0];
+    await p.play();
+    expect(p._ensureGraph).toHaveBeenCalled();
+    p.destroy();
+  });
+
+  it('never auto-taps on Android or iOS, even with a saved preset', async () => {
+    for (const nav of [ANDROID, IPHONE]) {
+      stubNav(nav);
+      const p = makePlayer();
+      p._eqGains = [4, 0, 0, 0, 0, 0, 0, 0];
+      await p.play();
+      expect(p._ensureGraph).not.toHaveBeenCalled();
+      p.destroy();
+    }
+  });
+
+  it('keeps an already-tapped session on its graph, on any platform', async () => {
+    stubNav(ANDROID);
+    const p = makePlayer();
+    p._ctx = {};                             // an explicit EQ gesture tapped earlier
+    await p.play();
+    expect(p._ensureGraph).toHaveBeenCalled();
     p.destroy();
   });
 });

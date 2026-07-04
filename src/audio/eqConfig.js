@@ -39,10 +39,6 @@ export const EQ_PRESETS = [
 // All-flat gains array — the safe default when nothing is stored yet.
 export const EQ_FLAT = EQ_FREQS.map(() => 0);
 
-// The vocal-clarity curve, reused as Car Mode's transient EQ profile (a presence
-// lift so vocals cut through over car speakers).
-export const EQ_CLARITY = EQ_PRESETS.find(p => p.id === 'clarity').gains;
-
 // True when two gain arrays are effectively equal (used to highlight the active
 // preset, and to tell "Custom" from a named preset). Tolerant of float drift.
 export function gainsMatch(a, b) {

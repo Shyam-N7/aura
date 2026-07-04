@@ -1,7 +1,7 @@
 import { EQ_FREQS, EQ_FLAT, sanitizeGains, dbToGain, levelGainFor } from './eqConfig.js';
 import { getAudioQuality, subscribeAudioQuality, bitrateFor, qualityLadder } from '../lib/audioQuality.js';
 import { getLeveling, subscribeLeveling } from '../lib/audioLeveling.js';
-import { isIOS } from '../lib/platform.js';
+import { isTapUnsafe } from '../lib/platform.js';
 
 // EQ boosts can push a loud-mastered source (AAC near 0 dBFS) past full scale.
 // The brick-wall LIMITER at the 0 dBFS ceiling is the real anti-clip. The makeup
@@ -52,11 +52,13 @@ export class HtmlAudioPlayer {
     this._listeners = new Map();
     this._raf = 0;
     this._lastEmit = 0;
-    // Web Audio EQ graph — built lazily, and only when the EQ is actually in use
-    // (first slider/preset touch, or first play with a saved non-flat preset).
-    // Until then the bare <audio> element plays untapped, which is what iOS keeps
-    // alive on the lock screen — tapping via createMediaElementSource forfeits
-    // native background playback. createMediaElementSource can run only once.
+    // Web Audio EQ graph — built lazily, and ONLY for the EQ. The bare <audio>
+    // element is the audible output everywhere else: tapping it via
+    // createMediaElementSource forfeits background playback on BOTH mobile
+    // platforms (iOS drops lock-screen audio; Android halts the AudioContext on
+    // screen-off — see isTapUnsafe). Auto-tap from a saved non-flat preset is
+    // desktop-only; on phones only an explicit EQ gesture taps (warned in the
+    // EQ UI). createMediaElementSource can run only once per element.
     this._ctx = null;
     this._src = null;
     this._bands = null;
@@ -70,9 +72,8 @@ export class HtmlAudioPlayer {
     this._lastLevel = 0;      // measurement throttle
     this._levelBuf = null;
     this._eqGains = EQ_FLAT.slice();
-    // Transient mode profile (Car Mode): an EQ override applied WITHOUT persisting
-    // over the user's saved EQ, + a leveling force. Cleared when the profile exits.
-    this._eqOverride = null;
+    // Transient mode force (Car Mode): leveling on WITHOUT persisting over the
+    // user's saved preference. Cleared when the mode exits.
     this._levelForce = false;
     // Tracks user/app intent to be playing, independent of the element's actual
     // paused state — iOS can pause the element on screen-lock without us asking,
@@ -119,6 +120,10 @@ export class HtmlAudioPlayer {
       this._emitProgress();
       if (!this._el.paused) this._startTick();
     };
+    // Declare media-playback intent where the Audio Session API exists
+    // (progressive enhancement — helps platform focus/ducking integration as
+    // browsers ship it; a no-op TypeError elsewhere).
+    try { navigator.audioSession.type = 'playback'; } catch { /* unshipped */ }
     this._el.addEventListener('timeupdate', this._onTimeUpdate);
     this._el.addEventListener('ended', this._onEnded);
     this._el.addEventListener('play',  this._onPlay);
@@ -176,13 +181,16 @@ export class HtmlAudioPlayer {
     // The element is now tapped; commit so the guard above never re-runs this.
     this._ctx = ctx;
     this._src = src;
+    // Field breadcrumb: Chrome 136+ reports a platform-halted context as
+    // 'interrupted' (screen-off on Android, calls) — visible in chrome://inspect.
+    ctx.onstatechange = () => console.info('[player] ctx state:', ctx.state);
     try {
       const bands = EQ_FREQS.map((freq, i) => {
         const f = ctx.createBiquadFilter();
         f.type = i === 0 ? 'lowshelf' : i === EQ_FREQS.length - 1 ? 'highshelf' : 'peaking';
         f.frequency.value = freq;
         f.Q.value = 1.0;
-        f.gain.value = this._effGains()[i] ?? 0;
+        f.gain.value = this._eqGains[i] ?? 0;
         return f;
       });
       // Headroom stage: makeup pre-attenuates boosts; limiter is the no-clip
@@ -238,11 +246,11 @@ export class HtmlAudioPlayer {
   // would forfeit it); an iOS user can opt in, accepting that trade.
   _levelingResolved() { return this._levelForce || getLeveling(); }
 
-  // React to a leveling toggle (subscribed in the ctor). On: tap the graph if
-  // playing so it takes effect now. Off: ride the leveling gain back to unity.
+  // React to a leveling toggle (subscribed in the ctor). Never taps the graph —
+  // the AGC only runs where an EQ tap already exists (desktop); on phones the
+  // untapped element keeps background playback and leveling stays inert.
   _applyLeveling() {
     if (this._levelingResolved()) {
-      if (!this._silent && this._intendedPlaying) this._enableEq();
       this._levelActive = !!this._ctx;
       this._levelEma = 0;
     } else {
@@ -276,8 +284,7 @@ export class HtmlAudioPlayer {
     if (!Number.isFinite(v) || i < 0 || i >= this._eqGains.length) return;
     this._eqGains[i] = v;
     this._enableEq();
-    // Reflect the effective value (override wins if a mode profile is active).
-    if (this._bands?.[i]) this._rampParam(this._bands[i].gain, this._effGains()[i] ?? 0);
+    if (this._bands?.[i]) this._rampParam(this._bands[i].gain, v);
     if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
@@ -285,36 +292,18 @@ export class HtmlAudioPlayer {
   setEqGains(arr) {
     this._eqGains = sanitizeGains(arr);
     this._enableEq();
-    // Apply the EFFECTIVE gains — a transient mode override (Car Mode) keeps
-    // priority over a user EQ change made while the profile is active.
-    const eff = this._effGains();
-    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, eff[i] ?? 0));
+    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, this._eqGains[i] ?? 0));
     if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
     this._persistEq();
     this._emit('eq', this._eqGains.slice());
   }
-  // Effective gains = the transient mode override (Car Mode) if set, else the
-  // user's saved EQ. All audio-graph reads go through this so the override is
-  // applied without touching/persisting the user's own curve.
-  _effGains() { return this._eqOverride ?? this._eqGains; }
 
   // Boost headroom: unity for flat/cuts AND every modest boost (≤ threshold) so the
   // preset keeps full loudness and the limiter shaves the occasional peak; only the
   // EXCESS of an extreme boost (> threshold) is pre-trimmed to avoid heavy limiting.
   _makeupGain() {
-    const maxPos = Math.max(0, ...this._effGains());
+    const maxPos = Math.max(0, ...this._eqGains);
     return maxPos > EQ_HEADROOM_THRESHOLD_DB ? dbToGain(-(maxPos - EQ_HEADROOM_THRESHOLD_DB)) : 1;
-  }
-
-  // Apply a transient EQ override (null clears it back to the user's EQ). Never
-  // persists. Used by Car Mode's audio profile.
-  setEqOverride(arr) {
-    this._eqOverride = arr ? sanitizeGains(arr) : null;
-    this._enableEq();
-    const eff = this._effGains();
-    if (this._bands) this._bands.forEach((b, i) => this._rampParam(b.gain, eff[i] ?? 0));
-    if (this._makeup) this._rampParam(this._makeup.gain, this._makeupGain());
-    this._emit('eq', eff.slice());
   }
 
   // Force loudness leveling on regardless of the saved preference (Car Mode).
@@ -336,7 +325,7 @@ export class HtmlAudioPlayer {
     this._ensureGraph();
     if (this._ctx?.state === 'suspended') { this._ctx.resume().catch(() => {}); }
   }
-  _eqActive() { return this._effGains().some(g => g !== 0); }
+  _eqActive() { return this._eqGains.some(g => g !== 0); }
   _persistEq() {
     try { localStorage.setItem('aura.eq.gains', JSON.stringify(this._eqGains)); } catch { /* ignore */ }
   }
@@ -490,16 +479,13 @@ export class HtmlAudioPlayer {
   async play() {
     if (this._silent) return;
     this._intendedPlaying = true;
-    // Tap through Web Audio when the EQ is genuinely in use: already tapped this
-    // session (a real gesture built _ctx), or — off iOS, where Web Audio doesn't
+    // Tap through Web Audio ONLY for the EQ: already tapped this session (a real
+    // gesture built _ctx), or — on desktop, the one surface where the tap doesn't
     // cost background playback — a saved non-flat preset we can auto-apply. On
-    // iOS we deliberately do NOT auto-tap from a saved preset: that would forfeit
-    // lock-screen / background playback with no user action this session. An
-    // explicit EQ adjustment still taps via _enableEq. Once tapped, stays tapped.
-    // Tap Web Audio when EQ is in use (existing) OR loudness leveling is on. Both
-    // need the graph. _levelingResolved() is false on iOS by default, so iOS keeps
-    // native background playback unless the user explicitly opts into leveling.
-    if (this._ctx || this._levelingResolved() || (this._eqActive() && !isIOS())) {
+    // phones (iOS AND Android) we never auto-tap: the tapped element's audio dies
+    // with the screen off (see isTapUnsafe). An explicit EQ adjustment still taps
+    // via _enableEq — a warned, user-chosen trade. Once tapped, stays tapped.
+    if (this._ctx || (this._eqActive() && !isTapUnsafe())) {
       this._ensureGraph();
       // Fire-and-forget: on a hidden page a resume() can pend indefinitely, and
       // awaiting it here would block _el.play() entirely — an independent way

@@ -115,7 +115,6 @@ import { talk } from './api/talk';
 import { matchLocalIntent, stripRequestVerb } from './lib/voiceIntents';
 import { speak, stopSpeaking } from './lib/speak';
 import { getSpokenConfirm } from './lib/carVoice';
-import { EQ_CLARITY } from './audio/eqConfig';
 import { getRelated } from './api/related';
 import { prefetchLyrics } from './api/lyrics';
 import { titleKey, cleanTitle } from './utils/title';
@@ -495,14 +494,14 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     else if (type === 'mode') applyBroadcastMode(payload);
   }), []);
 
-  // Car Mode audio profile: force loudness leveling on + a vocal-presence EQ so
-  // music is loud AND vocals cut over car speakers. Transient — restored when you
-  // leave car mode (never overwrites the user's saved EQ / leveling preference).
+  // Car Mode audio profile: force volume leveling on so music stays evenly loud
+  // over road noise. Transient — restored when you leave car mode (never
+  // overwrites the user's saved leveling preference). No EQ override here: the
+  // Web Audio tap it needs kills screen-off playback on phones — the exact
+  // scenario Car Mode exists for.
   useEffect(() => {
     if (!player) return;
-    const car = activeMode === 'car';
-    player.setLevelForce?.(car);
-    player.setEqOverride?.(car ? EQ_CLARITY : null);
+    player.setLevelForce?.(activeMode === 'car');
   }, [player, activeMode]);
 
   // Cross-device resume: on cold boot, if another device was recently playing a
