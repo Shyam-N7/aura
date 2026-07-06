@@ -121,6 +121,55 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
   };
 
   const lists = hit.data ?? [];
+  // Two groups: sets YOU own (incl. a shared list you started) vs sets you were
+  // invited into. The API returns one flat array; partition it for the headings.
+  const owned  = lists.filter(p => !p.shared || p.role === 'owner');
+  const joined = lists.filter(p => p.shared && p.role !== 'owner');
+
+  const renderRow = (p) => (
+    <div key={p.id} className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); onOpenPlaylist?.(p.id); }}
+        className="aura-lib-pl-card flex items-center gap-3.5 w-full"
+      >
+        {p.coverImageUrl
+          ? <img src={p.coverImageUrl} alt="" className="aura-lib-pl-cover" loading="lazy"/>
+          : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">
+              {p.name?.[0]?.toUpperCase() ?? '·'}
+            </span>}
+        <div className="flex-1 min-w-0">
+          <div className="aura-pl-row-name truncate">{p.name}</div>
+          <div className="aura-pl-row-count">
+            {p.trackCount} {p.trackCount === 1 ? 'track' : 'tracks'}
+            {p.shared && ` · ${p.role === 'owner' ? 'shared' : 'shared with you'}`}
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === p.id ? null : { id: p.id, el }); }}
+          aria-label="More"
+          className="aura-pl-overflow bg-transparent border-0 p-2 cursor-pointer text-ink-soft">
+          <svg width="4" height="16" viewBox="0 0 4 16">
+            <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+            <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+            <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+          </svg>
+        </button>
+      </button>
+      {menu?.id === p.id && (
+        <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={52}>
+          {p.role === 'owner' ? (
+            <button onClick={() => remove(p)} className="aura-pl-menu-item aura-pl-menu-item--danger">
+              Delete
+            </button>
+          ) : (
+            <button onClick={() => leave(p)} className="aura-pl-menu-item aura-pl-menu-item--danger">
+              Leave
+            </button>
+          )}
+        </AnchoredMenu>
+      )}
+    </div>
+  );
 
   return (
     <div ref={scrollRef} className="absolute inset-0 bg-bg text-ink pt-5 overflow-auto pb-24 animate-aura-sheet-in"
@@ -180,107 +229,80 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
         </div>
       )}
 
-      <div className="pt-7 px-[22px] flex flex-col gap-2">
-        {/* New-playlist form: tinted, clearly distinct from playlist rows */}
-        {creating ? (
-          <form onSubmit={submitNew} onClick={(e) => e.stopPropagation()} className="aura-pl-create">
-            <span className="aura-pl-create__eyebrow">Create a playlist</span>
-            <div className="aura-pl-create__row">
-              <span className="aura-pl-cover-fallback">+</span>
-              <input
-                ref={inputRef}
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Escape') { setCreating(false); setNewName(''); } }}
-                placeholder="Name your playlist"
-                className="aura-pl-create-input"
-              />
-            </div>
-            <div className="aura-pl-create__actions">
-              <button type="button" onClick={() => { setCreating(false); setNewName(''); }} className="aura-pl-create__cancel">
-                Cancel
-              </button>
-              <button type="submit" disabled={!newName.trim()} className="aura-pl-create__submit">
-                Create
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button onClick={(e) => { e.stopPropagation(); setCreating(true); }}
-            className="aura-lib-pl-card flex items-center gap-3.5 w-full">
-            <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">+</span>
-            <span className="aura-pl-new-label">New playlist</span>
-          </button>
-        )}
-
-        {status === 'loading' && (
-          <div className="py-3">
-            <span className="aura-pl-status">Loading playlists</span>
-          </div>
-        )}
-
-        {status === 'error' && (
-          <div className="py-4 aura-pl-status">
-            Couldn’t fetch playlists — {hit.error}
-          </div>
-        )}
-
-        {status === 'ok' && lists.length === 0 && !creating && (
-          <div className="py-8">
-            <div className="aura-pl-empty-title">
-              Nothing here yet.
-            </div>
-            <div className="aura-pl-empty-sub">
-              Tap “New playlist” above to start one.
-            </div>
-          </div>
-        )}
-
-        {lists.map(p => (
-          <div key={p.id} className="relative">
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenPlaylist?.(p.id); }}
-              className="aura-lib-pl-card flex items-center gap-3.5 w-full"
-            >
-              {p.coverImageUrl
-                ? <img src={p.coverImageUrl} alt="" className="aura-lib-pl-cover" loading="lazy"/>
-                : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">
-                    {p.name?.[0]?.toUpperCase() ?? '·'}
-                  </span>}
-              <div className="flex-1 min-w-0">
-                <div className="aura-pl-row-name truncate">{p.name}</div>
-                <div className="aura-pl-row-count">
-                  {p.trackCount} {p.trackCount === 1 ? 'track' : 'tracks'}
-                  {p.shared && ` · ${p.role === 'owner' ? 'shared' : 'shared with you'}`}
-                </div>
+      {/* Made by you — the sets you started (incl. a shared list you own), plus
+          the create entry point and the fetch/empty states. */}
+      <div className="pt-7 px-[22px]">
+        <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">Made by you</span>
+        <div className="pt-2.5 flex flex-col gap-2">
+          {/* New-playlist form: tinted, clearly distinct from playlist rows */}
+          {creating ? (
+            <form onSubmit={submitNew} onClick={(e) => e.stopPropagation()} className="aura-pl-create">
+              <span className="aura-pl-create__eyebrow">Create a playlist</span>
+              <div className="aura-pl-create__row">
+                <span className="aura-pl-cover-fallback">+</span>
+                <input
+                  ref={inputRef}
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setCreating(false); setNewName(''); } }}
+                  placeholder="Name your playlist"
+                  className="aura-pl-create-input"
+                />
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === p.id ? null : { id: p.id, el }); }}
-                aria-label="More"
-                className="aura-pl-overflow bg-transparent border-0 p-2 cursor-pointer text-ink-soft">
-                <svg width="4" height="16" viewBox="0 0 4 16">
-                  <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                  <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                  <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                </svg>
-              </button>
+              <div className="aura-pl-create__actions">
+                <button type="button" onClick={() => { setCreating(false); setNewName(''); }} className="aura-pl-create__cancel">
+                  Cancel
+                </button>
+                <button type="submit" disabled={!newName.trim()} className="aura-pl-create__submit">
+                  Create
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button onClick={(e) => { e.stopPropagation(); setCreating(true); }}
+              className="aura-lib-pl-card flex items-center gap-3.5 w-full">
+              <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">+</span>
+              <span className="aura-pl-new-label">New playlist</span>
             </button>
-            {menu?.id === p.id && (
-              <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={52}>
-                {p.role === 'owner' ? (
-                  <button onClick={() => remove(p)} className="aura-pl-menu-item aura-pl-menu-item--danger">
-                    Delete
-                  </button>
-                ) : (
-                  <button onClick={() => leave(p)} className="aura-pl-menu-item aura-pl-menu-item--danger">
-                    Leave
-                  </button>
-                )}
-              </AnchoredMenu>
-            )}
-          </div>
-        ))}
+          )}
+
+          {status === 'loading' && (
+            <div className="py-3">
+              <span className="aura-pl-status">Loading playlists</span>
+            </div>
+          )}
+
+          {status === 'error' && (
+            <div className="py-4 aura-pl-status">
+              Couldn’t fetch playlists — {hit.error}
+            </div>
+          )}
+
+          {status === 'ok' && owned.length === 0 && !creating && (
+            <div className="py-8">
+              <div className="aura-pl-empty-title">
+                Nothing here yet.
+              </div>
+              <div className="aura-pl-empty-sub">
+                Tap “New playlist” above to start one.
+              </div>
+            </div>
+          )}
+
+          {owned.map(renderRow)}
+        </div>
       </div>
+
+      {/* Shared with you — sets a friend invited you into. Hidden entirely when
+          you haven't joined any, so the heading never sits over an empty list. */}
+      {joined.length > 0 && (
+        <div className="pt-7 px-[22px]">
+          <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">Shared with you</span>
+          <div className="pt-2.5 flex flex-col gap-2">
+            {joined.map(renderRow)}
+          </div>
+        </div>
+      )}
       <BackToTop scrollRef={scrollRef}/>
     </div>
   );
