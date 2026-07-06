@@ -6,6 +6,7 @@ import { getCatalogPlaylist } from '../../api/discover';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
+import { hideTrack } from '../../api/hidden';
 import { ctxOpen } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
@@ -60,6 +61,23 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
   const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
   const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
 
+  // "Don't show this again" — only on the made-for-you mixes (a catalog list
+  // isn't a pick of ours to apologise for). Removes the row immediately; the
+  // undo lives in Settings → hidden songs.
+  const isAutoMix = initialData?.kind === 'auto';
+  const hideOne = async (t) => {
+    setMenu(null);
+    try {
+      await hideTrack(t.id);
+      setHit(h => h.data
+        ? { ...h, data: { ...h.data, tracks: (h.data.tracks ?? []).filter(x => x.id !== t.id) } }
+        : h);
+      toast("hidden — aura won't pick this for you again. undo in settings.");
+    } catch {
+      toast("couldn't hide that — try again.");
+    }
+  };
+
   return (
     <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
       <div className="aura-dpd__header">
@@ -83,6 +101,14 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
             <h1 className="aura-dpd__hero">
               <em>{hit.data.name}</em>.
             </h1>
+            {initialData?.editionLabel && (
+              <MonoLabel className="text-ink-faint block mt-3" size={9.5}>
+                {initialData.editionLabel}{initialData.refreshing ? ' · refreshing…' : ''} — {initialData.description}
+              </MonoLabel>
+            )}
+            {initialData?.ruleLine && (
+              <MonoLabel className="text-ink-faint block mt-1" size={8.5}>{initialData.ruleLine}</MonoLabel>
+            )}
             {tracks.length > 0 && (
               <div className="mt-7">
                 <button onClick={playAll} className="aura-dpd__play-all">
@@ -117,6 +143,11 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
                     <MonoLabel className="text-ink-soft mt-1.5 block truncate" size={9.5}>
                       {(t.artist ?? '').toLowerCase()} · {t.language ?? ''}
                     </MonoLabel>
+                    {t.reason && (
+                      <MonoLabel className="text-ink-faint mt-1 block truncate" size={8.5}>
+                        {t.reason}
+                      </MonoLabel>
+                    )}
                   </div>
                   <MonoLabel className="text-ink-faint shrink-0 ml-4" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
                 </button>
@@ -132,11 +163,14 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
                     </svg>
                   </button>
                   {menu?.id === t.id && (
-                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
+                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={isAutoMix ? 204 : 166}>
                       <button onClick={() => playOne(t)}    className="aura-pl-menu-item">play song</button>
                       <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
                       <button onClick={() => addToQueue(t)} className="aura-pl-menu-item">add to queue</button>
                       <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to my playlist</button>
+                      {isAutoMix && (
+                        <button onClick={() => hideOne(t)} className="aura-pl-menu-item">don’t show this again</button>
+                      )}
                     </AnchoredMenu>
                   )}
                 </div>

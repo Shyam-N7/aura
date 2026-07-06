@@ -9,6 +9,7 @@ import { getConsent, setConsent, subscribeConsent } from '../lib/consent';
 import { QUALITIES } from '../lib/audioQuality';
 import { useAudioQuality } from '../hooks/useAudioQuality';
 import { getLeveling, setLeveling, levelingAvailable } from '../lib/audioLeveling';
+import { listHidden, unhideTrack } from '../api/hidden';
 import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
@@ -128,6 +129,28 @@ export function SettingsPanel({ t, setTweak }) {
       await revokeDevice(id);
       setDevices(ds => ds.filter(d => d.id !== id));
       toast('device logged out.');
+    } catch (err) { toast(err.message); }
+  };
+
+  // Hidden songs — the visible "don't show this again" list (mixes/auto-radio
+  // never pick these). Loaded on mount; unhide prunes locally so it reacts at once.
+  const [hidden, setHidden] = useState([]);
+  const [hiddenLoading, setHiddenLoading] = useState(true);
+  const [hiddenError, setHiddenError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    listHidden()
+      .then((h) => { if (alive) setHidden(h); })
+      .catch(() => { if (alive) setHiddenError(true); })
+      .finally(() => { if (alive) setHiddenLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const unhideOne = async (id) => {
+    try {
+      await unhideTrack(id);
+      setHidden(hs => hs.filter(h => h.id !== id));
+      toast('back in the mix.');
     } catch (err) { toast(err.message); }
   };
 
@@ -296,6 +319,30 @@ export function SettingsPanel({ t, setTweak }) {
           </span>
           <span className={`aura-set__switch ${spokenConfirm ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
         </button>
+      </div>
+
+      <p className="aura-set__group-label">made for you</p>
+      <div className="aura-set__group">
+        {hiddenLoading && <p className="aura-set__caption">loading…</p>}
+        {!hiddenLoading && hiddenError && <p className="aura-set__caption">couldn’t load hidden songs — try reopening settings.</p>}
+        {!hiddenLoading && !hiddenError && hidden.length === 0 && (
+          <p className="aura-set__caption">
+            no hidden songs. “don’t show this again” on any mix track lands here.
+          </p>
+        )}
+        {hidden.map((h) => (
+          <div key={h.id} className="aura-set__device">
+            <span className="aura-set__row-text">
+              <span className="aura-set__row-label">{(h.title || '').toLowerCase()}</span>
+              <span className="aura-set__row-caption">
+                {(h.artist || '').toLowerCase() || 'aura won’t pick this for you'}
+              </span>
+            </span>
+            <button type="button" className="aura-set__device-remove"
+              aria-label={`unhide ${h.title}`}
+              onClick={() => unhideOne(h.id)}>unhide</button>
+          </div>
+        ))}
       </div>
 
       <p className="aura-set__group-label">family mode</p>

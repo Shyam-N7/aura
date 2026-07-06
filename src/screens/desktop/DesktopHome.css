@@ -567,6 +567,9 @@
   transition: transform 180ms ease;
 }
 .aura-dh__playlist:hover { transform: translateY(-1px); }
+/* Gate card — a mix that hasn't unlocked yet; informational, not clickable. */
+.aura-dh__playlist--gate { cursor: default; opacity: 0.55; }
+.aura-dh__playlist--gate:hover { transform: none; }
 .aura-dh__playlist-cover {
   width: 100%;
   aspect-ratio: 1;

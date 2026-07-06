@@ -138,13 +138,24 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
         </div>
       </div>
 
-      {/* Auto / smart sets — read-only, built from listening history. Tapping the
-          card OPENS the set (like a normal playlist); the ▶ plays it directly. */}
+      {/* Made-for-you mixes — read-only, built from listening history. Tapping the
+          card OPENS the set (like a normal playlist); the ▶ plays it directly.
+          Unlike Home (which windows the daypart mixes), the full suite shows here;
+          a gate card is informational only. */}
       {auto.length > 0 && (
         <div className="pt-6 px-[22px]">
-          <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">From your listening</span>
+          <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">Made for you</span>
           <div className="pt-2.5 flex flex-col gap-2">
-            {auto.map(a => (
+            {auto.map(a => a.kind === 'auto-gate' ? (
+              <div key={a.id}
+                className="aura-lib-pl-card aura-pl-auto-card flex items-center gap-3.5 w-full opacity-55">
+                <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">♫</span>
+                <div className="flex-1 min-w-0">
+                  <div className="aura-pl-row-name truncate">{a.name}</div>
+                  <div className="aura-pl-row-count truncate">{a.gate?.line}</div>
+                </div>
+              </div>
+            ) : (
               <button key={a.id} onClick={() => onOpenAuto?.(a)}
                 className="aura-lib-pl-card aura-pl-auto-card flex items-center gap-3.5 w-full">
                 {a.coverImageUrl
@@ -152,7 +163,9 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
                   : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">♫</span>}
                 <div className="flex-1 min-w-0">
                   <div className="aura-pl-row-name truncate">{a.name}</div>
-                  <div className="aura-pl-row-count truncate">{a.description}</div>
+                  <div className="aura-pl-row-count truncate">
+                    {(a.editionLabel ?? a.description) + (a.refreshing ? ' · refreshing…' : '')}
+                  </div>
                 </div>
                 <span
                   role="button" tabIndex={0} aria-label={`play ${a.name}`}

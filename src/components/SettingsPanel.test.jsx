@@ -18,6 +18,10 @@ vi.mock('../api/account', () => ({
 }));
 vi.mock('../lib/confirm', () => ({ confirm: vi.fn().mockResolvedValue(false) }));
 vi.mock('../lib/toast', () => ({ toast: vi.fn() }));
+vi.mock('../api/hidden', () => ({
+  listHidden: vi.fn().mockResolvedValue([]),
+  unhideTrack: vi.fn().mockResolvedValue(undefined),
+}));
 
 const renderPanel = (setTweak = vi.fn()) =>
   render(<SettingsPanel t={{ theme: 'dusk' }} setTweak={setTweak}/>);
@@ -68,6 +72,21 @@ describe('SettingsPanel', () => {
     fireEvent.click(sw);
     expect(localStorage.getItem('aura.leveling')).toBe('0');
     expect(getByText(/original loudness/)).toBeInTheDocument();
+  });
+
+  it('lists hidden songs with a working unhide', async () => {
+    const { listHidden, unhideTrack } = await import('../api/hidden');
+    listHidden.mockResolvedValueOnce([{ id: 'h1', title: 'Hidden Song', artist: 'Some Artist', hiddenAt: 1 }]);
+    const { findByText, getByRole, queryByText } = renderPanel();
+    expect(await findByText('hidden song')).toBeInTheDocument();
+    fireEvent.click(getByRole('button', { name: /unhide Hidden Song/i }));
+    expect(unhideTrack).toHaveBeenCalledWith('h1');
+    await vi.waitFor(() => expect(queryByText('hidden song')).not.toBeInTheDocument());
+  });
+
+  it('shows the empty hidden-songs caption when nothing is hidden', async () => {
+    const { findByText } = renderPanel();
+    expect(await findByText(/no hidden songs/)).toBeInTheDocument();
   });
 
   it('hides volume leveling on iOS, where el.volume writes are ignored', () => {

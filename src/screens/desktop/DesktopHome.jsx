@@ -65,6 +65,14 @@ export function DesktopHome({
 
   const scrollRef = useScrollMemory('home');   // cache renders synchronously on remount
 
+  // Daypart mixes surface on Home only inside their own window (the playlists
+  // screen always shows the full suite); everything else always shows.
+  const hour = new Date().getHours();
+  const visibleAuto = autoPlaylists.filter(a =>
+    a.mixKey === 'morning' ? (hour >= 5 && hour < 12)
+      : a.mixKey === 'night' ? (hour >= 20 || hour < 4)
+        : true);
+
   return (
     <div ref={scrollRef} className="aura-dh">
       <TopStrip djName={djName} onOpenSearch={onOpenSearch} t={t} setTweak={setTweak}
@@ -240,11 +248,22 @@ export function DesktopHome({
         </>
       )}
 
-      {autoPlaylists.length > 0 && (
+      {visibleAuto.length > 0 && (
         <>
-          <SectionHeader title="From your listening" sub="Smart sets built from your plays" onMore={onOpenPlaylists} large/>
+          <SectionHeader title="Made for you" sub="Fresh editions from your plays — skips count" onMore={onOpenPlaylists} large/>
           <div className="aura-dh__playlists-grid">
-            {autoPlaylists.map(a => (
+            {visibleAuto.map(a => a.kind === 'auto-gate' ? (
+              // Honest gate card — the mix doesn't exist yet, so nothing to open.
+              <div key={a.id} className="aura-dh__playlist aura-dh__playlist--gate">
+                <span className="aura-dh__playlist-cover aura-dh__playlist-cover--fallback">♫</span>
+                <div>
+                  <div className="aura-dh__playlist-name">{a.name}</div>
+                  <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
+                    {a.gate?.line}
+                  </MonoLabel>
+                </div>
+              </div>
+            ) : (
               <button key={a.id} onClick={() => onOpenAuto?.(a)} className="aura-dh__playlist">
                 {a.coverImageUrl
                   ? <img src={a.coverImageUrl} alt="" loading="lazy" className="aura-dh__playlist-cover"/>
@@ -252,7 +271,7 @@ export function DesktopHome({
                 <div>
                   <div className="aura-dh__playlist-name">{a.name}</div>
                   <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
-                    {a.description}
+                    {(a.editionLabel ?? a.description) + (a.refreshing ? ' · refreshing…' : '')}
                   </MonoLabel>
                 </div>
               </button>
