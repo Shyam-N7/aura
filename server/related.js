@@ -5,6 +5,7 @@
 
 import { searchSongs, decodeEntities, decryptMediaUrl, pickImageUrl } from './catalog.js';
 import { cacheTracks, getTrackById } from './tracks.js';
+import { getSuppressedTrackIds } from './tasteScore.js';
 import { pool } from './db.js';
 import {
   CATALOG_API_BASE, CATALOG_USER_AGENT, CATALOG_API_VERSION,
@@ -44,8 +45,9 @@ function dedupeByTitle(tracks, seedTitle) {
 
 // Keep the radio diverse: allow at most `max` tracks from any single artist (incl.
 // the seed artist), preserving order. Without this a reco list can collapse into one
-// artist's catalogue and feel like "their greatest hits".
-function capPerArtist(tracks, max = 2) {
+// artist's catalogue and feel like "their greatest hits". Exported — the mixes
+// (autoPlaylists/discoveryMix) share the same diversity rule.
+export function capPerArtist(tracks, max = 2) {
   const counts = new Map();
   const out = [];
   for (const t of tracks) {
@@ -233,31 +235,39 @@ export async function getRelatedTracks(pid, { lang, limit, noLangFloor } = {}) {
   return tracks.slice(0, want);
 }
 
-// Car Mode smart queue (best-available; the real engine is a later epic): gently
-// push tracks this user tends to SKIP toward the back of the batch so auto-radio
-// needs fewer manual nexts. Stable — preserves the base similarity order within
-// each skip tier. Applied PER-USER, after getRelatedTracks' shared cache, so the
-// cached similarity list stays user-agnostic. Best-effort: a query error returns
-// the list unchanged.
+// Smart queue (every signed-in listener): tracks the user explicitly hid or
+// skip-shelved (tasteScore's suppressed set) are DROPPED when the batch survives
+// without them, else sunk to the very back — auto-radio must never brick; other
+// frequently-skipped tracks are gently pushed back. Stable — preserves the base
+// similarity order within each tier. Applied PER-USER, after getRelatedTracks'
+// shared cache, so the cached similarity list stays user-agnostic. Best-effort:
+// a query error returns the list unchanged.
 const SKIP_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;   // 60 days
+const SUPPRESSED_TIER = 1e9;                        // sorts after any real skip count
 export async function demoteSkipped(userId, tracks) {
   if (!userId || !Array.isArray(tracks) || tracks.length < 2) return tracks;
   const ids = tracks.map(t => t?.id).filter(Boolean);
   if (!ids.length) return tracks;
-  let skips;
+  let skips, suppressed;
   try {
-    const { rows } = await pool.query(
-      `SELECT track_id, COUNT(*)::int AS n
-         FROM listening_events
-        WHERE user_id = $1 AND kind = 'skip' AND ts > $2 AND track_id = ANY($3)
-        GROUP BY track_id`,
-      [userId, Date.now() - SKIP_WINDOW_MS, ids],
-    );
+    const [sup, { rows }] = await Promise.all([
+      getSuppressedTrackIds(userId),
+      pool.query(
+        `SELECT track_id, COUNT(*)::int AS n
+           FROM listening_events
+          WHERE user_id = $1 AND kind = 'skip' AND ts > $2 AND track_id = ANY($3)
+          GROUP BY track_id`,
+        [userId, Date.now() - SKIP_WINDOW_MS, ids],
+      ),
+    ]);
+    suppressed = sup;
     skips = new Map(rows.map(r => [r.track_id, r.n]));
   } catch { return tracks; }
-  if (!skips.size) return tracks;
-  return tracks
-    .map((t, i) => ({ t, i, n: skips.get(t.id) ?? 0 }))
+  if (!skips.size && !tracks.some(t => suppressed.has(t?.id))) return tracks;
+  const survivors = tracks.filter(t => !suppressed.has(t?.id));
+  const base = survivors.length >= 5 ? survivors : tracks;
+  return base
+    .map((t, i) => ({ t, i, n: suppressed.has(t?.id) ? SUPPRESSED_TIER : (skips.get(t.id) ?? 0) }))
     .sort((a, b) => a.n - b.n || a.i - b.i)
     .map(x => x.t);
 }

@@ -537,6 +537,33 @@ const migrations = [
     await client.query(`ALTER TABLE email_otps ADD CONSTRAINT email_otps_purpose_check
       CHECK (purpose IN ('signup','reset','delete'))`);
   },
+  async function v22_mix_editions_and_hidden(client) {
+    // "Made for you" mixes (server/autoPlaylists.js + tasteScore.js).
+    // - mix_editions: per-user dated snapshots of each generated mix, the
+    //   journal_cache pattern generalised — payload keeps trackId+reason only
+    //   (rows re-hydrate via JOIN tracks at read so metadata stays fresh).
+    //   Editions are never deleted: past editions are the archive.
+    // - hidden_tracks: the explicit "don't show this again" contract — a hard
+    //   exclusion from every mix and auto-radio pick, visible and undoable in
+    //   Settings (unlike skip-shelving, which is implicit and self-healing).
+    await client.query(`
+      CREATE TABLE mix_editions (
+        user_id      TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        mix_key      TEXT   NOT NULL,
+        edition_key  TEXT   NOT NULL,
+        payload      JSONB  NOT NULL,
+        generated_at BIGINT NOT NULL,
+        PRIMARY KEY (user_id, mix_key, edition_key)
+      );
+      CREATE INDEX idx_mix_editions_latest ON mix_editions(user_id, mix_key, generated_at DESC);
+      CREATE TABLE hidden_tracks (
+        user_id   TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        track_id  TEXT   NOT NULL,
+        hidden_at BIGINT NOT NULL,
+        PRIMARY KEY (user_id, track_id)
+      );
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

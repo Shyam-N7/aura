@@ -24,7 +24,8 @@ import { getLibrarySummary } from './library.js';
 import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
-import { getAutoPlaylists } from './autoPlaylists.js';
+import { getAutoPlaylists, refreshDueMixes } from './autoPlaylists.js';
+import { hideTrack, unhideTrack, listHidden } from './hiddenTracks.js';
 import { getDiscoverHome } from './discover.js';
 import { getCatalogPlaylistDetail } from './catalog.js';
 import { getBridgeTracks, getBridgeSuggestion } from './bridges.js';
@@ -216,9 +217,10 @@ app.get('/api/tracks/:id/related', optionalAuth, async (req, res) => {
     const lang = req.query.lang ? String(req.query.lang) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     let tracks = await getRelatedTracks(req.params.id, { lang, limit });
-    // Car Mode smart queue: bias away from songs this user skips (per-user,
-    // post-cache). Other modes are unchanged.
-    if (req.query.mode === 'car' && req.userId) tracks = await demoteSkipped(req.userId, tracks);
+    // Smart queue for every signed-in listener (was Car-Mode-only): drop hidden/
+    // skip-shelved tracks and sink frequent skips. Per-user, post-cache, so the
+    // shared similarity cache stays user-agnostic.
+    if (req.userId) tracks = await demoteSkipped(req.userId, tracks);
     res.json({ tracks });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -408,7 +410,12 @@ app.get('/api/lyrics-jobs/process', async (req, res) => {
     // Daily housekeeping — prune expired/revoked sessions (independent of lyrics
     // generation). Best-effort: never let it fail the reaper.
     await sweepSessions().catch((e) => console.warn('[sessions] sweep failed:', e?.message ?? e));
-    res.json(await processQueue());
+    const lyrics = await processQueue();
+    // Pre-warm today's made-for-you editions (02:00 UTC ≈ 07:30 IST). Best-effort
+    // and time-budgeted so it can never starve the lyrics queue's next run.
+    const mixes = await refreshDueMixes({ budgetMs: 30000 })
+      .catch((e) => { console.warn('[mixes] refresh failed:', e?.message ?? e); return null; });
+    res.json({ ...lyrics, mixes });
   } catch (err) {
     res.status(500).json({ error: clientError(err) });
   }
@@ -732,6 +739,36 @@ app.delete('/api/likes/:track_id', requireAuth, async (req, res) => {
   }
 });
 
+// Hidden tracks — "don't show this again." A hard exclusion from every
+// made-for-you pick (mixes + auto-radio); visible and undoable in Settings.
+app.get('/api/hidden', requireAuth, async (req, res) => {
+  try {
+    res.json({ hidden: await listHidden(req.userId) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.post('/api/hidden', requireAuth, async (req, res) => {
+  const { track_id } = req.body ?? {};
+  if (!track_id) return res.status(400).json({ error: 'missing track_id' });
+  try {
+    await hideTrack(req.userId, track_id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.delete('/api/hidden/:track_id', requireAuth, async (req, res) => {
+  try {
+    await unhideTrack(req.userId, req.params.track_id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
 app.get('/api/playlists', requireAuth, async (req, res) => {
   try {
     res.json({ playlists: await listPlaylists(req.userId) });
@@ -744,7 +781,9 @@ app.get('/api/playlists', requireAuth, async (req, res) => {
 // `getPlaylist(userId, 'auto')` would 404 instead of returning the smart sets.
 app.get('/api/playlists/auto', requireAuth, async (req, res) => {
   try {
-    res.json({ playlists: await getAutoPlaylists(req.userId) });
+    // tzOffset (JS getTimezoneOffset convention) keys editions to the USER'S
+    // calendar day — the music-clock endpoint set this precedent.
+    res.json({ playlists: await getAutoPlaylists(req.userId, { tzOffset: req.query.tzOffset }) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

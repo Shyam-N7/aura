@@ -17,6 +17,8 @@ vi.mock('./tracks.js', () => ({ cacheTracks: vi.fn(), getTrackById: vi.fn() }));
 // related.js now persists similarity edges via the pool; stub it so the test
 // stays isolated from the DB (db.js throws at import without DATABASE_URL).
 vi.mock('./db.js', () => ({ pool: { query: vi.fn().mockResolvedValue({ rows: [] }) } }));
+// The suppressed set (hidden + skip-shelved) comes from the score engine.
+vi.mock('./tasteScore.js', () => ({ getSuppressedTrackIds: vi.fn() }));
 vi.mock('./catalog.js', () => ({
   searchSongs: vi.fn(),
   decodeEntities: (s) => s,
@@ -26,7 +28,9 @@ vi.mock('./catalog.js', () => ({
 
 import { searchSongs } from './catalog.js';
 import { getTrackById } from './tracks.js';
-import { getRelatedTracks } from './related.js';
+import { pool } from './db.js';
+import { getSuppressedTrackIds } from './tasteScore.js';
+import { getRelatedTracks, demoteSkipped } from './related.js';
 
 // A catalog song object in the shape webradio.getSong returns (matches what
 // mapRecoSong reads). Distinct ids/titles per call so dedupe/cap are observable.
@@ -128,5 +132,42 @@ describe('getRelatedTracks — song station + dedupe/cap + fallback', () => {
 
     expect(searchSongs).toHaveBeenCalledWith('tamil songs', expect.objectContaining({ lang: 'tamil' }));
     expect(out.map(t => t.id)).toEqual(['g1']);
+  });
+});
+
+// The smart-queue pass applied per-user after the shared cache: hidden/shelved
+// tracks drop (or sink when the batch would go too thin), frequent skips sink.
+describe('demoteSkipped — suppression + skip demotion', () => {
+  const list = (idsArr) => idsArr.map(id => ({ id, title: id, artist: `a-${id}` }));
+  const skipRows = (map) => Object.entries(map).map(([track_id, n]) => ({ track_id, n }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getSuppressedTrackIds.mockResolvedValue(new Set());
+    pool.query.mockResolvedValue({ rows: [] });
+  });
+
+  it('sinks frequently-skipped tracks, stable within tiers', async () => {
+    pool.query.mockResolvedValue({ rows: skipRows({ b: 3, d: 1 }) });
+    const out = await demoteSkipped('u1', list(['a', 'b', 'c', 'd', 'e']));
+    expect(out.map(t => t.id)).toEqual(['a', 'c', 'e', 'd', 'b']);
+  });
+
+  it('drops suppressed tracks outright when enough of the batch survives', async () => {
+    getSuppressedTrackIds.mockResolvedValue(new Set(['b']));
+    const out = await demoteSkipped('u1', list(['a', 'b', 'c', 'd', 'e', 'f']));
+    expect(out.map(t => t.id)).toEqual(['a', 'c', 'd', 'e', 'f']);
+  });
+
+  it('sinks suppressed tracks to the back instead of bricking a thin batch', async () => {
+    getSuppressedTrackIds.mockResolvedValue(new Set(['a', 'b']));
+    const out = await demoteSkipped('u1', list(['a', 'b', 'c', 'd', 'e']));
+    expect(out.map(t => t.id)).toEqual(['c', 'd', 'e', 'a', 'b']);
+  });
+
+  it('returns the list unchanged on a query error (best-effort contract)', async () => {
+    getSuppressedTrackIds.mockRejectedValue(new Error('db down'));
+    const tracks = list(['a', 'b', 'c']);
+    expect(await demoteSkipped('u1', tracks)).toBe(tracks);
   });
 });

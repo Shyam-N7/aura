@@ -35,7 +35,11 @@ async function upsert(track) {
   `, [
     track.id, track.title, track.artist, track.album, track.language,
     track.durationSec, track.streamUrl,
-    JSON.stringify({ imageUrl: track.imageUrl }),
+    // Carry the explicit flag when the source knew it (mapRecoSong/search do) —
+    // discovery re-checks it on cached candidates; absent = unknown, not clean.
+    JSON.stringify(track.explicit === true
+      ? { imageUrl: track.imageUrl, explicit: true }
+      : { imageUrl: track.imageUrl }),
     Date.now(),
   ]);
 }
