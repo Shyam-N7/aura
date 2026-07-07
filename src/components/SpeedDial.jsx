@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { AuraMark } from './primitives';
-import { TapHint } from './TapHint';
-import { killHint } from '../lib/tapHint';
 import './SpeedDial.css';
 
 // AURA quick-action speed dial (compact surfaces only — desktop has the rails).
@@ -56,9 +54,7 @@ export function SpeedDial({ actions = [] }) {
       </div>
       <button type="button" className="aura-sd__fab" aria-label="quick actions"
         aria-haspopup="menu" aria-expanded={open}
-        onClick={() => { if (!open) killHint('speedDial'); setOpen(o => !o); }}>
-        {/* First-run nudge — the FAB is an unlabeled logo until you tap it. */}
-        <TapHint id="speedDial" label="quick actions" placement="above" show={!open}/>
+        onClick={() => setOpen(o => !o)}>
         <span className="aura-sd__fab-mark"><AuraMark size={24}/></span>
         <span className="aura-sd__fab-cross" aria-hidden="true">
           <svg width="15" height="15" viewBox="0 0 16 16">

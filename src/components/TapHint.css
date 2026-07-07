@@ -13,16 +13,11 @@
 }
 .aura-taphint--above { bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
 .aura-taphint--right { left: calc(100% + 10px); top: 50%; transform: translateY(-50%); flex-direction: row; }
-/* Inside a row-shaped host: a centered overlay on the right, label beside the
-   hand — stacked, it outgrows the row and the spill paints UNDER the next
-   sibling (the host's backdrop-filter traps the hint in its stacking context). */
-.aura-taphint--inside {
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
-  flex-direction: row-reverse;
-  gap: 8px;
-}
+/* Inside a row-shaped host: top-right, label under the hand. The label may
+   spill past the host's edge — a host with its own stacking context (glass
+   backdrop-filter) must lift itself above later siblings while hinting, or
+   the spill paints under them (see .aura-dlib__shelf:has(.aura-taphint)). */
+.aura-taphint--inside { top: 10px; right: 14px; }
 
 .aura-taphint__stage {
   position: relative;

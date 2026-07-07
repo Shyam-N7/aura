@@ -40,8 +40,10 @@ describe('DesktopBridges v2', () => {
     const onPickSequence = vi.fn();
     render(<DesktopBridges onPickSequence={onPickSequence}/>);
     // Preset cards contain "begin →" spans; only the itinerary CTA is a button
-    // whose accessible name is exactly that.
-    const begin = await screen.findByRole('button', { name: 'begin →' });
+    // whose accessible name is exactly that. Wide timeout: the CTA renders
+    // after two chained async fetches, which can outrun findBy's 1s default
+    // when the whole suite runs in parallel.
+    const begin = await screen.findByRole('button', { name: 'begin →' }, { timeout: 4000 });
     fireEvent.click(begin);
     expect(onPickSequence).toHaveBeenCalledWith(TRACKS, 0, 'restless → focused', expect.anything());
   });

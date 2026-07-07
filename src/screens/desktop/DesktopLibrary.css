@@ -152,6 +152,10 @@
   border-color: rgb(255 255 255 / 0.10);
   box-shadow: 0 14px 38px rgb(0 0 0 / 0.36), inset 0 1px 0 rgb(255 255 255 / 0.10);
 }
+/* While the tap hint shows: the shelf's backdrop-filter traps the hint in this
+   shelf's stacking context, so the label spilling past the head would paint
+   UNDER the next shelf — lift the hinting shelf in front of its siblings. */
+.aura-dlib__shelf:has(.aura-taphint) { z-index: 1; }
 
 .aura-dlib__shelf-head {
   width: 100%;
