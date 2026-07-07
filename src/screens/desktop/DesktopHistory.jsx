@@ -6,7 +6,7 @@ import { getHistory, getMusicClockPlays } from '../../api/stats';
 import { summarizeClock } from '../../lib/musicClock';
 import { formatTime12 } from '../../hooks/useNow';
 import { cleanTitle } from '../../utils/title';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { toast } from '../../lib/toast';
@@ -165,7 +165,7 @@ export function DesktopHistory({ onClose, onPickLive, onPlayNext, onAddToQueue }
                 {day.rows.map((t) => {
                   const rowKey = `${t.id}-${t.playedAt}`;
                   return (
-                    <div key={rowKey} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
+                    <div key={rowKey} className="aura-dpd__row" {...ctxPress(t)}>
                       <button onClick={() => onPickLive?.(t)} className="aura-dpd__main">
                         <AlbumArt track={t} size={50} radius={4}/>
                         <div className="flex-1 min-w-0">

@@ -6,7 +6,7 @@ import { AlbumArt } from '../../components/album/AlbumArt';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { tap } from '../../lib/haptics';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
@@ -218,7 +218,7 @@ export function DesktopQueue({
         ? { transform: `translateY(${shift}px)`, transition: 'transform 240ms cubic-bezier(.25,.85,.3,1)' }
         : { transition: 'transform 240ms cubic-bezier(.25,.85,.3,1)' };
     return (
-      <div key={t.id + i} data-row data-idx={i} style={style} onContextMenu={ctxOpen(t)}
+      <div key={t.id + i} data-row data-idx={i} style={style} {...ctxPress(t)}
         className={`aura-dq__row ${isPast ? 'aura-dq__row--past' : ''} ${isDragging ? 'aura-dq__row--dragging' : ''}`}>
         {onReorder && (
           <button type="button"

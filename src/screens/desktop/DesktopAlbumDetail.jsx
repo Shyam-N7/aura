@@ -6,7 +6,7 @@ import { getAlbum } from '../../api/catalog';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
@@ -96,7 +96,7 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
+              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(tracks, i, (hit.data?.name ?? '').toLowerCase(), e.currentTarget)}
                   className="aura-dpd__main">

@@ -15,7 +15,7 @@ import { LANGUAGES } from '../../data/languages';
 import { dropExplicit } from '../../lib/explicit';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { SearchSidebar } from './SearchSidebar';
@@ -165,7 +165,7 @@ export function DesktopSearch({
       <div className="aura-dse__section-title">Songs</div>
       <div className="aura-dse__results">
         {songs.map(t => (
-          <div key={t.id} className="aura-dse__result-wrap" onContextMenu={ctxOpen(t)}>
+          <div key={t.id} className="aura-dse__result-wrap" {...ctxPress(t)}>
             <button onClick={(e) => onPickLive?.(t, e.currentTarget)} className="aura-dse__result">
               <AlbumArt track={t} radius={6} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
               <div>

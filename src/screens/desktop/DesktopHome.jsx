@@ -7,7 +7,8 @@ import { listPlaylists } from '../../api/playlists';
 import { listAutoPlaylists } from '../../api/autoPlaylists';
 import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { homeCache as _cache } from '../../lib/homeCache';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
 import { NowPlayingBanner } from '../../components/player/NowPlayingBanner';
@@ -19,10 +20,9 @@ import { HeroBand } from './HeroBand';
 import { BridgeCard } from './BridgeCard';
 import './DesktopHome.css';
 
-// In-memory cache for home fetches. Survives DesktopHome unmount/remount
-// (e.g., navigating to player and back) so we don't re-fetch + cascade-
-// reveal sections on every return. Fresh on hard reload.
-const _cache = {};
+// The section-fetch cache is lib/homeCache (`_cache` here) — it survives
+// unmount/remount so sections don't re-fetch + cascade-reveal on every return,
+// and other screens invalidate keys they make stale (e.g. hiding a mix track).
 
 export function DesktopHome({
   tracks, djName, currentTrackId, track, onOpenPlayer, loading = false,
@@ -58,7 +58,10 @@ export function DesktopHome({
     if (!_cache.topArtists)     getTopArtists     ({ signal: ctl.signal }).then(d => { _cache.topArtists     = d; setTopArtists(d);     }).catch(() => {});
     if (!_cache.recentlyPlayed) getRecentlyPlayed ({ signal: ctl.signal }).then(d => { _cache.recentlyPlayed = d; setRecentlyPlayed(d); }).catch(() => {});
     if (!_cache.yourPlaylists)  listPlaylists     ({ signal: ctl.signal }).then(d => { _cache.yourPlaylists  = d; setYourPlaylists(d);  }).catch(() => {});
-    if (!_cache.autoPlaylists)  listAutoPlaylists ({ signal: ctl.signal }).then(d => { _cache.autoPlaylists  = d; setAutoPlaylists(d);  }).catch(() => {});
+    // Mixes are the one section that goes stale mid-session (hide a track,
+    // cross an edition boundary) — stale-while-revalidate: the cache renders
+    // instantly above, a fresh fetch runs on EVERY mount and updates in place.
+    listAutoPlaylists({ signal: ctl.signal }).then(d => { _cache.autoPlaylists = d; setAutoPlaylists(d); }).catch(() => {});
     if (!_cache.discover)       getDiscoverHome   ({ signal: ctl.signal }).then(d => { _cache.discover       = d; setDiscover(d);       }).catch(() => {});
     return () => ctl.abort();
   }, []);
@@ -265,9 +268,20 @@ export function DesktopHome({
               </div>
             ) : (
               <button key={a.id} onClick={() => onOpenAuto?.(a)} className="aura-dh__playlist">
-                {a.coverImageUrl
-                  ? <img src={a.coverImageUrl} alt="" loading="lazy" className="aura-dh__playlist-cover"/>
-                  : <span className="aura-dh__playlist-cover aura-dh__playlist-cover--fallback">♫</span>}
+                <span className="aura-dh__playlist-coverwrap">
+                  {a.coverImageUrl
+                    ? <img src={a.coverImageUrl} alt="" loading="lazy" className="aura-dh__playlist-cover"/>
+                    : <span className="aura-dh__playlist-cover aura-dh__playlist-cover--fallback">♫</span>}
+                  {/* One-tap play without opening the detail — parity with the
+                      playlists screen's rows. */}
+                  <span
+                    role="button" tabIndex={0} aria-label={`play ${a.name}`}
+                    onClick={(e) => { e.stopPropagation(); onPlaySequence?.(a.tracks, 0, a.name); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onPlaySequence?.(a.tracks, 0, a.name); } }}
+                    className="aura-dh__playlist-play">
+                    <svg width="12" height="12" viewBox="0 0 13 13"><path d="M3 2 L11 6.5 L3 11 Z" fill="currentColor"/></svg>
+                  </span>
+                </span>
                 <div>
                   <div className="aura-dh__playlist-name">{a.name}</div>
                   <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
@@ -292,7 +306,7 @@ export function DesktopHome({
                 </div>
               ))
               : newPicks.map(t => (
-              <button key={t.id} onClick={() => onPick?.(t.id)} onContextMenu={ctxOpen(t)} className="aura-dh__pick">
+              <button key={t.id} onClick={() => onPick?.(t.id)} {...ctxPress(t)} className="aura-dh__pick">
                 <span className="aura-dh__pick-art">
                   <AlbumArt track={t} radius={6}
                     style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>

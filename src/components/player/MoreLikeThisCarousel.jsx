@@ -4,7 +4,7 @@ import { MonoLabel } from '../primitives';
 import { AlbumArt } from '../album/AlbumArt';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import '../../screens/PlaylistsScreen.css';   // .aura-pl-menu / .aura-pl-menu-item
 import './MoreLikeThisCarousel.css';
@@ -80,7 +80,7 @@ export function MoreLikeThisCarousel({ status, tracks, error, onPlay, onPlayNext
       {status === 'ok' && tracks.length > 0 && (
         <div className="aura-mlt__row">
           {tracks.slice(0, 8).map(t => (
-            <div key={t.id} className="aura-mlt__card-wrap" onContextMenu={ctxOpen(t)}>
+            <div key={t.id} className="aura-mlt__card-wrap" {...ctxPress(t)}>
               <button type="button" onClick={() => playNow(t)} className="aura-mlt__card">
                 <span className="aura-mlt__art">
                   <AlbumArt track={t} size={44} radius={4}/>

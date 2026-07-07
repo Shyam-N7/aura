@@ -11,7 +11,7 @@ vi.mock('../../api/autoPlaylists', () => ({ listAutoPlaylists: vi.fn() }));
 vi.mock('../../api/discover', () => ({
   getDiscoverHome: vi.fn().mockResolvedValue({ trending: [], popularPlaylists: [], movieSongs: [] }),
 }));
-vi.mock('../../lib/trackContextMenu', () => ({ ctxOpen: () => () => {} }));
+vi.mock('../../lib/trackContextMenu', () => ({ ctxPress: () => ({}) }));
 
 import { listAutoPlaylists } from '../../api/autoPlaylists';
 import { DesktopHome } from './DesktopHome';
@@ -57,5 +57,8 @@ describe('DesktopHome — made-for-you shelf', () => {
     expect(screen.queryByText('your morning songs')).not.toBeInTheDocument();
     const gateLine = screen.getByText("unlocks after ~30 songs — you're at 14");
     expect(gateLine.closest('button')).toBeNull();                          // gate card is inert
+    // One-tap ▶ on real mix tiles (parity with the playlists screen); none on gates.
+    expect(screen.getByLabelText('play on repeat')).toBeInTheDocument();
+    expect(screen.queryByLabelText('play new to you')).toBeNull();
   });
 });

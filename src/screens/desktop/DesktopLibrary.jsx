@@ -9,10 +9,12 @@ import { listPlaylists } from '../../api/playlists';
 import { getHistory } from '../../api/stats';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { SettingsPanel } from '../../components/SettingsPanel';
 import { toast } from '../../lib/toast';
+import { TapHint } from '../../components/TapHint';
+import { killHint } from '../../lib/tapHint';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
 import { PRIMARY_LANGUAGES } from '../../data/languages';
@@ -32,7 +34,7 @@ const SHELF_KEY = 'aura.libraryShelf';
 // closed (cover fan / counts / dots) — it eases out as the rows fade up.
 // The clip layer's delayed visibility:hidden keeps collapsed content out of
 // the tab order and the a11y tree without React 18's awkward inert handling.
-function Shelf({ id, title, peek, open, onToggle, children }) {
+function Shelf({ id, title, peek, open, onToggle, hint, children }) {
   return (
     <section className={`aura-dlib__shelf ${open ? 'is-open' : ''}`}>
       <button type="button" className="aura-dlib__shelf-head"
@@ -41,6 +43,7 @@ function Shelf({ id, title, peek, open, onToggle, children }) {
         <span className="aura-dlib__peek">{peek}</span>
         <span className="aura-dlib__shelf-plus" aria-hidden="true">+</span>
       </button>
+      {hint}
       <div id={`shelf-${id}`} role="region" aria-label={title} className="aura-dlib__shelf-body">
         <div className="aura-dlib__shelf-clip">
           <div className="aura-dlib__shelf-inner">{children}</div>
@@ -63,6 +66,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   });
 
   const toggleShelf = (id) => {
+    killHint('libraryShelf');   // the user found the accordion — hint retires
     const next = openShelf === id ? null : id;
     setOpenShelf(next);
     try {
@@ -129,6 +133,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
           </section>
 
           <Shelf id="liked" title="liked songs"
+            hint={<TapHint id="libraryShelf" label="tap to open" placement="inside" show={openShelf === null}/>}
             open={openShelf === 'liked'} onToggle={() => toggleShelf('liked')}
             peek={liked?.length > 0 ? (
               <>
@@ -142,7 +147,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
               <div className="aura-dlib__empty-row">No liked songs yet. Tap the heart on any track.</div>
             )}
             {liked?.length > 0 && liked.slice(0, 4).map((t, i) => (
-              <div key={t.id} className="aura-dlib__row-wrap" onContextMenu={ctxOpen(t)}>
+              <div key={t.id} className="aura-dlib__row-wrap" {...ctxPress(t)}>
                 <button onClick={(e) => onPlaySequence?.(liked, i, 'your liked', e.currentTarget)}
                   className="aura-dlib__row">
                   <AlbumArt track={t} size={50} radius={4}/>

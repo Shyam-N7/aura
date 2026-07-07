@@ -22,6 +22,9 @@ vi.mock('../api/hidden', () => ({
   listHidden: vi.fn().mockResolvedValue([]),
   unhideTrack: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('../lib/whatsNew', () => ({ openWhatsNew: vi.fn() }));
+vi.mock('../lib/tour', () => ({ requestTour: vi.fn() }));
+vi.mock('../lib/shortcutsHelp', () => ({ openShortcutsHelp: vi.fn() }));
 
 const renderPanel = (setTweak = vi.fn()) =>
   render(<SettingsPanel t={{ theme: 'dusk' }} setTweak={setTweak}/>);
@@ -72,6 +75,19 @@ describe('SettingsPanel', () => {
     fireEvent.click(sw);
     expect(localStorage.getItem('aura.leveling')).toBe('0');
     expect(getByText(/original loudness/)).toBeInTheDocument();
+  });
+
+  it('help rows open what’s new, replay the tour, and the shortcuts overlay', async () => {
+    const { openWhatsNew } = await import('../lib/whatsNew');
+    const { requestTour } = await import('../lib/tour');
+    const { openShortcutsHelp } = await import('../lib/shortcutsHelp');
+    const { getByText } = renderPanel();
+    fireEvent.click(getByText('what’s new'));
+    expect(openWhatsNew).toHaveBeenCalledWith(expect.objectContaining({ releases: expect.any(Array) }));
+    fireEvent.click(getByText('replay the tour'));
+    expect(requestTour).toHaveBeenCalled();
+    fireEvent.click(getByText('keyboard shortcuts'));   // jsdom width → desktop breakpoint
+    expect(openShortcutsHelp).toHaveBeenCalled();
   });
 
   it('lists hidden songs with a working unhide', async () => {

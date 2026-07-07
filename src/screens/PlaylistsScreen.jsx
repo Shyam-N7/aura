@@ -5,9 +5,19 @@ import { getUser } from '../lib/auth';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
 import { AnchoredMenu } from '../components/AnchoredMenu';
+import { TapHint } from '../components/TapHint';
+import { killHint } from '../lib/tapHint';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import { BackToTop } from '../components/BackToTop';
 import './PlaylistsScreen.css';
+
+// Why home sometimes shows fewer mixes than this screen: home windows the
+// daypart mixes to their own local hours; here the full suite always shows,
+// with these captions doing the explaining.
+const DAYPART_NOTE = {
+  morning: 'on home in the morning',
+  night: 'on home after 8pm',
+};
 
 export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySequence }) {
   const [hit, setHit]       = useState({ data: null, error: null });
@@ -73,7 +83,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
     try {
       const playlist = await createPlaylist({ name });
       setHit(h => ({ ...h, data: [playlist, ...(h.data ?? [])] }));
-      toast('Playlist created.');
+      toast('playlist created.');
       setNewName('');
       setCreating(false);
     } catch (err) {
@@ -93,7 +103,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
     try {
       await deletePlaylist(playlist.id);
       setHit(h => ({ ...h, data: (h.data ?? []).filter(p => p.id !== playlist.id) }));
-      toast('Playlist deleted.');
+      toast('playlist deleted.');
     } catch (err) {
       toast(`Couldn’t delete — ${err.message}`);
     }
@@ -114,7 +124,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
     try {
       await removePlaylistCollaborator(playlist.id, me.id);
       setHit(h => ({ ...h, data: (h.data ?? []).filter(p => p.id !== playlist.id) }));
-      toast('Left the playlist.');
+      toast('left the playlist.');
     } catch (err) {
       toast(`Couldn’t leave — ${err.message}`);
     }
@@ -189,8 +199,9 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
 
       {/* Made-for-you mixes — read-only, built from listening history. Tapping the
           card OPENS the set (like a normal playlist); the ▶ plays it directly.
-          Unlike Home (which windows the daypart mixes), the full suite shows here;
-          a gate card is informational only. */}
+          Unlike Home (which windows the daypart mixes), the full suite shows here —
+          the DAYPART_NOTE caption explains why home sometimes shows fewer; a gate
+          card is informational only. */}
       {auto.length > 0 && (
         <div className="pt-6 px-[22px]">
           <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">Made for you</span>
@@ -213,7 +224,9 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
                 <div className="flex-1 min-w-0">
                   <div className="aura-pl-row-name truncate">{a.name}</div>
                   <div className="aura-pl-row-count truncate">
-                    {(a.editionLabel ?? a.description) + (a.refreshing ? ' · refreshing…' : '')}
+                    {(a.editionLabel ?? a.description)
+                      + (a.refreshing ? ' · refreshing…' : '')
+                      + (DAYPART_NOTE[a.mixKey] ? ` · ${DAYPART_NOTE[a.mixKey]}` : '')}
                   </div>
                 </div>
                 <span
@@ -259,11 +272,16 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
               </div>
             </form>
           ) : (
-            <button onClick={(e) => { e.stopPropagation(); setCreating(true); }}
-              className="aura-lib-pl-card flex items-center gap-3.5 w-full">
-              <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">+</span>
-              <span className="aura-pl-new-label">New playlist</span>
-            </button>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); killHint('newPlaylist'); setCreating(true); }}
+                className="aura-lib-pl-card flex items-center gap-3.5 w-full">
+                <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">+</span>
+                <span className="aura-pl-new-label">New playlist</span>
+              </button>
+              {/* First-playlist nudge — only while the user owns nothing. */}
+              <TapHint id="newPlaylist" label="start your first playlist" placement="inside"
+                show={status === 'ok' && owned.length === 0 && !creating}/>
+            </div>
           )}
 
           {status === 'loading' && (
@@ -281,10 +299,10 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
           {status === 'ok' && owned.length === 0 && !creating && (
             <div className="py-8">
               <div className="aura-pl-empty-title">
-                Nothing here yet.
+                nothing here yet.
               </div>
               <div className="aura-pl-empty-sub">
-                Tap “New playlist” above to start one.
+                tap “new playlist” above to start one.
               </div>
             </div>
           )}

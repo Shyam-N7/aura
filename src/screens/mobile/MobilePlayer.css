@@ -229,6 +229,36 @@
   .aura-mp__hint { animation-duration: 2.4s; }
 }
 
+/* One-time gesture lesson (lib/tapHint 'playerGestures') — two stacked glass
+   pills centred over the cover; JS owns the lifetime, CSS just fades it in. */
+.aura-mp__gesture-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: aura-fade-in 400ms ease;
+}
+.aura-mp__gesture-hint-line {
+  padding: 7px 14px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-bg), transparent 18%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+          backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in srgb, #fff, transparent 82%);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
 /* "swipe up = next" cue — sits in the gap between the album cover and the EQ
    button (bottom of the hero), on top so it's always visible, and clear of the
    title/artist below. Fades in on entry + each track change (keyed); the three

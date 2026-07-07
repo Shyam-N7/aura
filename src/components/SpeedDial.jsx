@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AuraMark } from './primitives';
+import { TapHint } from './TapHint';
+import { killHint } from '../lib/tapHint';
 import './SpeedDial.css';
 
 // AURA quick-action speed dial (compact surfaces only — desktop has the rails).
@@ -28,6 +30,18 @@ export function SpeedDial({ actions = [] }) {
 
   return (
     <div ref={rootRef} className={`aura-sd ${open ? 'is-open' : ''}`}>
+      {/* Water-drop goo layer — solid blobs ONLY (the filter's alpha threshold
+          shreds borders/text/shadows), painted behind the crisp buttons. Each
+          drop travels from the FAB centre to its action's circle, leading the
+          crisp button slightly so the bloom reads as liquid. Geometry mirrors
+          the CSS constants (FAB 56 / stack gap 12 / icon 40 / pitch 50) —
+          change one, change both. */}
+      <div className="aura-sd__goo" aria-hidden="true">
+        <span className="aura-sd__goo-fab"/>
+        {items.map((a, i) => (
+          <span key={a.id} className="aura-sd__goo-drop" style={{ '--i': items.length - 1 - i }}/>
+        ))}
+      </div>
       <div className="aura-sd__items" role="menu" aria-hidden={!open}>
         {items.map((a, i) => (
           <button key={a.id} type="button" role="menuitem" tabIndex={open ? 0 : -1}
@@ -41,7 +55,10 @@ export function SpeedDial({ actions = [] }) {
         ))}
       </div>
       <button type="button" className="aura-sd__fab" aria-label="quick actions"
-        aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        aria-haspopup="menu" aria-expanded={open}
+        onClick={() => { if (!open) killHint('speedDial'); setOpen(o => !o); }}>
+        {/* First-run nudge — the FAB is an unlabeled logo until you tap it. */}
+        <TapHint id="speedDial" label="quick actions" placement="above" show={!open}/>
         <span className="aura-sd__fab-mark"><AuraMark size={24}/></span>
         <span className="aura-sd__fab-cross" aria-hidden="true">
           <svg width="15" height="15" viewBox="0 0 16 16">

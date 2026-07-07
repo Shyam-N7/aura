@@ -34,6 +34,14 @@ export function GooFilter() {
             values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo"/>
           <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
         </filter>
+        {/* Speed-dial water drops — 40px circles need a lighter blur than
+            "strong" (10 over-melts them into one puddle mid-flight). */}
+        <filter id="aura-goo-dial" colorInterpolationFilters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+          <feColorMatrix in="blur" type="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -8" result="goo"/>
+          <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+        </filter>
       </defs>
     </svg>
   );

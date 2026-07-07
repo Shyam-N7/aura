@@ -570,6 +570,20 @@
 /* Gate card — a mix that hasn't unlocked yet; informational, not clickable. */
 .aura-dh__playlist--gate { cursor: default; opacity: 0.55; }
 .aura-dh__playlist--gate:hover { transform: none; }
+/* One-tap ▶ chip over a mix tile's cover — hover/focus-reveal on desktop,
+   always visible on touch (forced in the phone container query below). */
+.aura-dh__playlist-coverwrap { position: relative; display: block; }
+.aura-dh__playlist-play {
+  position: absolute; right: 8px; bottom: 8px;
+  width: 34px; height: 34px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-bg); color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  opacity: 0; transition: opacity 160ms ease, transform 160ms ease;
+}
+.aura-dh__playlist:hover .aura-dh__playlist-play,
+.aura-dh__playlist:focus-within .aura-dh__playlist-play { opacity: 1; }
+.aura-dh__playlist-play:hover { transform: scale(1.06); }
 .aura-dh__playlist-cover {
   width: 100%;
   aspect-ratio: 1;
@@ -788,6 +802,7 @@
   .aura-dh__playlists-grid { padding: 0 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .aura-dh__playlist-name { font-size: 17px; }
   .aura-dh__playlist-cover--fallback { font-size: 48px; }
+  .aura-dh__playlist-play { opacity: 1; }   /* touch has no hover */
   .aura-dh__new-picks { padding: 0 22px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
   .aura-dh__about-grid { padding: 0 22px; grid-template-columns: 1fr; gap: 12px; }
   .aura-dh__about-card { padding: 20px; min-height: 150px; }

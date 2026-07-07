@@ -5,7 +5,7 @@ import { AnchoredMenu } from '../AnchoredMenu';
 import { useRelated } from './useRelated';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import '../../screens/PlaylistsScreen.css';
 import './RailExtras.css';
 
@@ -49,7 +49,7 @@ export function RailExtras({ track, onPickLive, onPlayNext, onAddToQueue, onOpen
         {status === 'ok' && tracks.length > 0 && (
           <div className="aura-rail-extras__list">
             {tracks.slice(0, 6).map(t => (
-              <div key={t.id} className="aura-rail-extras__row-wrap" onContextMenu={ctxOpen(t)}>
+              <div key={t.id} className="aura-rail-extras__row-wrap" {...ctxPress(t)}>
                 <button onClick={() => playNow(t)} className="aura-rail-extras__row">
                   <AlbumArt track={t} size={36} radius={4}/>
                   <div className="flex-1 min-w-0">

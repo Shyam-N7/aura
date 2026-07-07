@@ -33,6 +33,47 @@
   .aura-sd { transition: none; }
 }
 
+/* ── Goo layer — the water-drop bloom (see SpeedDial.jsx comment) ─────── */
+.aura-sd__goo {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 56px;
+  height: 56px;
+  filter: url(#aura-goo-dial);
+  pointer-events: none;
+}
+.aura-sd__goo-fab {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--color-bg);
+}
+.aura-sd__goo-drop {
+  position: absolute;
+  right: 0;
+  bottom: 8px;              /* 40px drop centred on the 56px FAB centre */
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: var(--color-bg);
+  transform: translateY(0) scale(0.5);
+  /* 220ms vs the buttons' 260ms, same delay curve — the drop lands ~40ms
+     ahead of its button, which is what makes it read as water. */
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+  transition-delay: calc(var(--i, 0) * 18ms);
+}
+.aura-sd.is-open .aura-sd__goo-drop {
+  transform: translateY(calc(-1 * (60px + var(--i, 0) * 50px))) scale(1);
+}
+.theme-midnight .aura-sd__goo-fab,
+.theme-midnight .aura-sd__goo-drop {
+  background: color-mix(in srgb, var(--color-bg), white 4%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-sd__goo { display: none; }
+}
+
 /* ── Action stack ─────────────────────────────────────────────────────── */
 .aura-sd__items {
   display: flex;

@@ -138,6 +138,7 @@
   gap: 14px;
 }
 .aura-dlib__shelf {
+  position: relative;   /* anchors the tap-to-open TapHint */
   border-radius: 22px;
   border: 1px solid var(--color-line);
   background: color-mix(in srgb, var(--color-surface), transparent 45%);

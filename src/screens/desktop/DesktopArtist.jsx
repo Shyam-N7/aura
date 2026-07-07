@@ -6,7 +6,7 @@ import { getArtist } from '../../api/artists';
 import { cleanTitle } from '../../utils/title';
 import { fmtTime } from '../../utils/fmtTime';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
@@ -115,7 +115,7 @@ export function DesktopArtist({
             <SectionHeader title="Top tracks" sub="Most-played from this artist" large/>
             <div className="aura-dpd__list">
               {tracks.slice(0, 10).map((t, i) => (
-                <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
+                <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
                   <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                   <button onClick={(e) => onPlaySequence?.(tracks, i, `${artist.name.toLowerCase()} · top tracks`, e.currentTarget)}
                     className="aura-dpd__main">

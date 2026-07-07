@@ -1,0 +1,69 @@
+/* Tap hint — decorative hand + ripple + label. Lives inside the host's
+   stacking context (never above sheets/tour by construction). */
+
+.aura-taphint {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  animation: aura-fade-in 300ms ease;
+}
+.aura-taphint--above { bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
+.aura-taphint--right { left: calc(100% + 10px); top: 50%; transform: translateY(-50%); flex-direction: row; }
+.aura-taphint--inside { top: 10px; right: 14px; }
+
+.aura-taphint__stage {
+  position: relative;
+  width: 34px;
+  height: 38px;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.aura-taphint__hand {
+  color: var(--color-ink);
+  transform-origin: 50% 20%;
+  animation: aura-taphint-dip 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 1px 4px rgb(0 0 0 / 0.25));
+}
+@keyframes aura-taphint-dip {
+  0%, 55%, 100% { transform: translateY(0) scale(1); }
+  30%, 40%      { transform: translateY(5px) scale(0.92); }
+}
+/* Ripple fires at the dip's "press" moment (keyframe offsets line up). */
+.aura-taphint__ripple {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-ink-soft);
+  opacity: 0;
+  animation: aura-taphint-ripple 1.6s ease-out infinite;
+}
+@keyframes aura-taphint-ripple {
+  0%, 28%    { transform: scale(0.4); opacity: 0; }
+  34%        { opacity: 0.55; }
+  70%, 100%  { transform: scale(1.6); opacity: 0; }
+}
+.aura-taphint__label {
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  color: var(--color-ink-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-taphint__hand { animation: none; }
+  .aura-taphint__ripple { display: none; }
+}

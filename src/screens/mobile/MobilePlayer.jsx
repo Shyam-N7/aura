@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MonoLabel, HeartButton } from '../../components/primitives';
 import { MorphingAlbumArt } from '../../components/album/MorphingAlbumArt';
 import { AlbumArt } from '../../components/album/AlbumArt';
@@ -10,6 +10,7 @@ import { openSleepTimer } from '../../lib/sleepTimerSheet';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { useLikes } from '../../hooks/useLikes';
+import { hintDone, bumpHint, killHint } from '../../lib/tapHint';
 import { useHeroGestures } from './useHeroGestures';
 import '../PlaylistsScreen.css';   // .aura-pl-menu / .aura-pl-menu-item — the ⋯ menu
 import './MobilePlayer.css';
@@ -35,10 +36,22 @@ export function MobilePlayer({
   // fires a centred heart burst (keyed so each tap restarts the animation).
   const { like } = useLikes();
   const [burst, setBurst] = useState(0);
+  // One-time gesture education (tapHint bookkeeping: ≤3 showings ever, dead
+  // forever after the first successful swipe-next or double-tap-like). The
+  // ambient per-track cues below retire with it.
+  const [gestureHint, setGestureHint] = useState(false);
+  useEffect(() => {
+    if (!open || hintDone('playerGestures')) return undefined;
+    const show = setTimeout(() => { if (bumpHint('playerGestures')) setGestureHint(true); }, 1200);
+    const hide = setTimeout(() => setGestureHint(false), 6000);
+    return () => { clearTimeout(show); clearTimeout(hide); setGestureHint(false); };
+    // re-arm per open, not per track — one lesson per player visit
+  }, [open]);
+  const gestureLearned = () => { killHint('playerGestures'); setGestureHint(false); };
   const heroGestures = useHeroGestures({
-    onNext,
+    onNext: () => { gestureLearned(); onNext?.(); },
     onClose: onBack,
-    onLike: () => { like(track.id).catch(() => {}); setBurst((b) => b + 1); },
+    onLike: () => { gestureLearned(); like(track.id).catch(() => {}); setBurst((b) => b + 1); },
   });
 
   return (
@@ -100,12 +113,18 @@ export function MobilePlayer({
                 </svg>
               </span>
             )}
-            {open && (
+            {open && !hintDone('playerGestures') && (
               <span key={track.id} className="aura-mp__hint" aria-hidden="true">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                 </svg>
                 double-tap to like
+              </span>
+            )}
+            {gestureHint && (
+              <span className="aura-mp__gesture-hint" aria-hidden="true">
+                <span className="aura-mp__gesture-hint-line">swipe up for the next song</span>
+                <span className="aura-mp__gesture-hint-line">double-tap the cover to like</span>
               </span>
             )}
           </div>

@@ -10,6 +10,12 @@ import { QUALITIES } from '../lib/audioQuality';
 import { useAudioQuality } from '../hooks/useAudioQuality';
 import { getLeveling, setLeveling, levelingAvailable } from '../lib/audioLeveling';
 import { listHidden, unhideTrack } from '../api/hidden';
+import { invalidateHomeCache } from '../lib/homeCache';
+import { openWhatsNew } from '../lib/whatsNew';
+import { RELEASES } from '../data/whatsNew';
+import { requestTour } from '../lib/tour';
+import { openShortcutsHelp } from '../lib/shortcutsHelp';
+import { useViewport, isDesktopBreakpoint } from '../hooks/useViewport';
 import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
@@ -132,6 +138,11 @@ export function SettingsPanel({ t, setTweak }) {
     } catch (err) { toast(err.message); }
   };
 
+  // Keyboard shortcuts only exist where a keyboard does (the app enables them
+  // on desktop breakpoints) — hide the help row elsewhere.
+  const { breakpoint } = useViewport();
+  const shortcutsAvailable = isDesktopBreakpoint(breakpoint);
+
   // Hidden songs — the visible "don't show this again" list (mixes/auto-radio
   // never pick these). Loaded on mount; unhide prunes locally so it reacts at once.
   const [hidden, setHidden] = useState([]);
@@ -150,6 +161,7 @@ export function SettingsPanel({ t, setTweak }) {
     try {
       await unhideTrack(id);
       setHidden(hs => hs.filter(h => h.id !== id));
+      invalidateHomeCache('autoPlaylists');   // same staleness as hiding, in reverse
       toast('back in the mix.');
     } catch (err) { toast(err.message); }
   };
@@ -387,6 +399,30 @@ export function SettingsPanel({ t, setTweak }) {
           </span>
           <span className={`aura-set__switch ${sensingOn ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
         </button>
+      </div>
+
+      <p className="aura-set__group-label">help</p>
+      <div className="aura-set__group">
+        <button type="button" className="aura-set__row" onClick={() => openWhatsNew({ releases: RELEASES })}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">what’s new</span>
+            <span className="aura-set__row-caption">what changed in recent updates.</span>
+          </span>
+        </button>
+        <button type="button" className="aura-set__row" onClick={requestTour}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">replay the tour</span>
+            <span className="aura-set__row-caption">the 30-second look around, again.</span>
+          </span>
+        </button>
+        {shortcutsAvailable && (
+          <button type="button" className="aura-set__row" onClick={openShortcutsHelp}>
+            <span className="aura-set__row-text">
+              <span className="aura-set__row-label">keyboard shortcuts</span>
+              <span className="aura-set__row-caption">press ? anytime.</span>
+            </span>
+          </button>
+        )}
       </div>
 
       <p className="aura-set__group-label">your devices</p>

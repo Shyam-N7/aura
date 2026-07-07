@@ -123,3 +123,12 @@ body {
   --mood-warm:     #c47080;
   --mood-social:   #e0a960;
 }
+
+/* ─── Long-pressable track rows (lib/trackContextMenu ctxPress) ────────── */
+/* The 500ms press opens OUR menu; without these iOS pops its text-selection
+   callout over it and Android may flash a selection highlight. */
+[data-ctx-press] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

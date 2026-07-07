@@ -104,7 +104,11 @@ import { SleepTimerSheet } from './components/SleepTimerSheet';
 import { SleepTimerOrb } from './components/SleepTimerOrb';
 import { TrackContextMenu } from './components/TrackContextMenu';
 import { hasOnboarded } from './lib/onboarding';
-import { hasSeenTour } from './lib/tour';
+import { hasSeenTour, subscribeTourRequest } from './lib/tour';
+import { initSeen, unseenReleases, openWhatsNew } from './lib/whatsNew';
+import { setHintsSuspended } from './lib/tapHint';
+import { WhatsNewSheet } from './components/WhatsNewSheet';
+import { getConsent, subscribeConsent } from './lib/consent';
 import { usePathRoute } from './hooks/usePathRoute';
 import { parsePath, pathIsActive } from './lib/routes';
 import { loadQueue, saveQueueSoon } from './lib/persistentQueue';
@@ -475,6 +479,45 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     const id = setTimeout(() => setTourActive(true), 900);
     return () => clearTimeout(id);
   }, [screen, overlay, talkOpen, isTabletPortrait, tourActive]);
+
+  // Settings → "replay the tour". SiteTour self-navigates home via onNav, so
+  // this works from any screen; tablet-portrait has no tour anchors (yet).
+  useEffect(() => subscribeTourRequest(() => {
+    if (isTabletPortrait) { toast('the tour needs a phone or desktop layout.'); return; }
+    setTourActive(true);
+  }), [isTabletPortrait]);
+
+  // Tap hints stay quiet while the tour owns the screen.
+  useEffect(() => { setHintsSuspended(tourActive); }, [tourActive]);
+
+  // What's-new auto-open: version-gated (lib/whatsNew), on a settled home,
+  // at most once per session, and NEVER in the same session as the tour —
+  // one piece of guidance at a time. Brand-new users are silently marked
+  // caught-up by initSeen(); the consent banner (z70, would cover the sheet)
+  // must be answered first; never while the user is typing.
+  const tourRanRef = useRef(false);
+  const wnShownRef = useRef(false);
+  // The banner blocks until answered (no dismiss-without-choice), so consent
+  // null === banner on screen; re-check when the answer lands.
+  const [consentTick, setConsentTick] = useState(0);
+  useEffect(() => subscribeConsent(() => setConsentTick(n => n + 1)), []);
+  useEffect(() => {
+    if (tourActive) { tourRanRef.current = true; return undefined; }
+    if (screen !== 'home' || overlay || talkOpen) return undefined;
+    if (wnShownRef.current || tourRanRef.current) return undefined;
+    if (!hasOnboarded() || !hasSeenTour()) return undefined;
+    if (getConsent() === null) return undefined;
+    initSeen();
+    const pending = unseenReleases();
+    if (!pending.length) return undefined;
+    const id = setTimeout(() => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      wnShownRef.current = true;
+      openWhatsNew({ releases: pending });
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [screen, overlay, talkOpen, tourActive, consentTick]);
 
   // Refs let event subscribers (player 'ended') read the latest state without
   // re-subscribing on every queue tick.
@@ -1947,6 +1990,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
         <TapRipple/>
         <ConfirmDialog/>
         <PromptDialog/>
+        <WhatsNewSheet/>
         <ShortcutsOverlay/>
         {tourActive && (
           <Suspense fallback={null}>
@@ -1975,11 +2019,12 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
               icon: (<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 12.5 A6.5 6.5 0 1 1 7.5 4 A5.5 5.5 0 0 0 16 12.5 Z" fill="currentColor"/></svg>) },
           ]}/>
         )}
-        {isDesktop && <TrackContextMenu
+        {/* All surfaces: right-click on desktop, long-press on phones (ctxPress). */}
+        <TrackContextMenu
           onPickLive={pickLiveTrack}
           onPlayNext={enqueueNext}
           onAddToQueue={enqueueLast}
-          onOpenArtist={onOpenArtist}/>}
+          onOpenArtist={onOpenArtist}/>
       </div>
       <TweaksHost t={t} setTweak={setTweak}/>
     </>

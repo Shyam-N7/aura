@@ -9,3 +9,15 @@ export function hasSeenTour() {
 export function markTourSeen() {
   try { localStorage.setItem(KEY, '1'); } catch { /* ignore */ }
 }
+
+// Replay bus (settings → "replay the tour"). Replaying never clears the
+// done flag — SiteTour re-marks it on every exit anyway.
+const subs = new Set();
+
+export function requestTour() {
+  for (const cb of subs) cb();
+}
+export function subscribeTourRequest(cb) {
+  subs.add(cb);
+  return () => { subs.delete(cb); };
+}

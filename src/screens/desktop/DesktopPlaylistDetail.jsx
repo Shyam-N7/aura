@@ -8,7 +8,7 @@ import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -231,7 +231,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
+              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(tracks, i, (hit.data?.name ?? '').toLowerCase(), e.currentTarget)}
                   className="aura-dpd__main">

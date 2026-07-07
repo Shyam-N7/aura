@@ -34,7 +34,7 @@ vi.mock('../../api/stats', () => ({
 }));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/addToPlaylistSheet', () => ({ openAddToPlaylist: vi.fn() }));
-vi.mock('../../lib/trackContextMenu', () => ({ ctxOpen: () => () => {} }));
+vi.mock('../../lib/trackContextMenu', () => ({ ctxPress: () => ({}) }));
 
 const shelfHead = (title) => screen.getByText(title).closest('button');
 const renderLib = (props = {}) =>

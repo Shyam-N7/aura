@@ -7,10 +7,12 @@ vi.mock('../../api/hidden', () => ({ hideTrack: vi.fn().mockResolvedValue(undefi
 vi.mock('../../lib/addToPlaylistSheet', () => ({ openAddToPlaylist: vi.fn() }));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/meta', () => ({ setMeta: vi.fn() }));
-vi.mock('../../lib/trackContextMenu', () => ({ ctxOpen: () => () => {} }));
+vi.mock('../../lib/trackContextMenu', () => ({ ctxPress: () => ({}) }));
+vi.mock('../../lib/homeCache', () => ({ invalidateHomeCache: vi.fn() }));
 
 import { getCatalogPlaylist } from '../../api/discover';
 import { hideTrack } from '../../api/hidden';
+import { invalidateHomeCache } from '../../lib/homeCache';
 
 const track = (id, reason) => ({
   id, title: `Song ${id}`, artist: `Artist ${id}`, language: 'tamil',
@@ -52,6 +54,8 @@ describe('DesktopCatalogPlaylistDetail — made-for-you extensions', () => {
     expect(hideTrack).toHaveBeenCalledWith('a');
     await vi.waitFor(() => expect(screen.queryByText('Song a')).not.toBeInTheDocument());
     expect(screen.getByText('Song b')).toBeInTheDocument();
+    // Home's cached mixes must be dropped so the shelf can't serve the hidden track.
+    expect(invalidateHomeCache).toHaveBeenCalledWith('autoPlaylists');
   });
 
   it('stays inert for catalog playlists — no edition/receipt lines, no hide item', async () => {

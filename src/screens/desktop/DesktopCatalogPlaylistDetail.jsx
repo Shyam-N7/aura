@@ -7,7 +7,8 @@ import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { hideTrack } from '../../api/hidden';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { invalidateHomeCache } from '../../lib/homeCache';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
@@ -57,8 +58,8 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
   };
 
   const playOne    = (t) => { setMenu(null); onPlayOne?.(t); };
-  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
+  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('queued next.'); };
+  const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('added to queue.'); };
   const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
 
   // "Don't show this again" — only on the made-for-you mixes (a catalog list
@@ -72,6 +73,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
       setHit(h => h.data
         ? { ...h, data: { ...h.data, tracks: (h.data.tracks ?? []).filter(x => x.id !== t.id) } }
         : h);
+      invalidateHomeCache('autoPlaylists');   // Home's mixes shelf must not serve it again
       toast("hidden — aura won't pick this for you again. undo in settings.");
     } catch {
       toast("couldn't hide that — try again.");
@@ -133,7 +135,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
+              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(tracks, i, (hit.data?.name ?? '').toLowerCase(), e.currentTarget)}
                   className="aura-dpd__main">

@@ -7,7 +7,7 @@ import { useLikes } from '../../hooks/useLikes';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxOpen } from '../../lib/trackContextMenu';
+import { ctxPress } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
@@ -103,7 +103,7 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
               <span>{fmtRuntime(liked.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {liked.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" onContextMenu={ctxOpen(t)}>
+              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(liked, i, 'your liked', e.currentTarget)}
                   className="aura-dpd__main">
