@@ -13,7 +13,16 @@
 }
 .aura-taphint--above { bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
 .aura-taphint--right { left: calc(100% + 10px); top: 50%; transform: translateY(-50%); flex-direction: row; }
-.aura-taphint--inside { top: 10px; right: 14px; }
+/* Inside a row-shaped host: a centered overlay on the right, label beside the
+   hand — stacked, it outgrows the row and the spill paints UNDER the next
+   sibling (the host's backdrop-filter traps the hint in its stacking context). */
+.aura-taphint--inside {
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  flex-direction: row-reverse;
+  gap: 8px;
+}
 
 .aura-taphint__stage {
   position: relative;

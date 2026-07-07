@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { hintDone, bumpHint, claimHint, releaseHint } from '../lib/tapHint';
+import { hintDone, bumpHint, claimHint, releaseHint, waitForHintSlot } from '../lib/tapHint';
 import './TapHint.css';
 
 // A proactive "this is tappable" hint — looping hand dip + ripple + a small
@@ -7,18 +7,32 @@ import './TapHint.css';
 // position:relative). Purely decorative: aria-hidden, no pointer events, and
 // the HOST kills it permanently (lib/tapHint killHint) inside its real
 // interaction handler; flipping `show` off hides it immediately.
-export function TapHint({ id, label, delayMs = 2400, placement = 'above', show = true }) {
+// If another hint holds the one-at-a-time slot, this one waits its turn; a
+// shown hint retires itself after autoHideMs so it can't hog the slot (or
+// nag) for the rest of the session.
+export function TapHint({ id, label, delayMs = 2400, placement = 'above', show = true, autoHideMs = 8000 }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (!show || hintDone(id)) return undefined;   // cleanup below hides on show-flip
-    const t = setTimeout(() => {
-      if (!claimHint(id)) return;
+    let hideTimer;
+    let unwait;
+    const attempt = () => {
+      if (hintDone(id)) return;                    // killed while waiting
+      if (!claimHint(id)) { unwait = waitForHintSlot(attempt); return; }
       if (!bumpHint(id)) { releaseHint(id); return; }
       setVisible(true);
-    }, delayMs);
-    return () => { clearTimeout(t); releaseHint(id); setVisible(false); };
-  }, [id, show, delayMs]);
+      hideTimer = setTimeout(() => { setVisible(false); releaseHint(id); }, autoHideMs);
+    };
+    const t = setTimeout(attempt, delayMs);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(hideTimer);
+      unwait?.();
+      releaseHint(id);
+      setVisible(false);
+    };
+  }, [id, show, delayMs, autoHideMs]);
 
   if (!visible) return null;
   return (

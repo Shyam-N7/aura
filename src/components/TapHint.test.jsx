@@ -43,4 +43,27 @@ describe('TapHint', () => {
     act(() => vi.advanceTimersByTime(300));
     expect(document.querySelectorAll('.aura-taphint')).toHaveLength(1);
   });
+
+  it('takes its turn when the holder is killed', () => {
+    const { rerender } = render(<TapHint id="fab" label="quick actions" delayMs={100}/>);
+    render(<TapHint id="shelf" label="tap to open" delayMs={100}/>);
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.getByText('quick actions')).toBeInTheDocument();
+    expect(screen.queryByText('tap to open')).toBeNull();
+    // the host's real handler kills the hint and flips show off in one tick
+    act(() => killHint('fab'));
+    rerender(<TapHint id="fab" label="quick actions" delayMs={100} show={false}/>);
+    expect(screen.queryByText('quick actions')).toBeNull();
+    expect(screen.getByText('tap to open')).toBeInTheDocument();
+  });
+
+  it('retires after autoHideMs and hands the slot to the waiter', () => {
+    render(<TapHint id="fab" label="quick actions" delayMs={100} autoHideMs={8000}/>);
+    render(<TapHint id="shelf" label="tap to open" delayMs={100} autoHideMs={8000}/>);
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.getByText('quick actions')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(8000));
+    expect(screen.queryByText('quick actions')).toBeNull();
+    expect(screen.getByText('tap to open')).toBeInTheDocument();
+  });
 });

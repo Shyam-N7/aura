@@ -31,6 +31,13 @@ export function bumpHint(id) {
 
 let live = null;
 let suspended = false;
+let waiters = [];
+
+const notifyWaiters = () => {
+  const ws = waiters;
+  waiters = [];
+  ws.forEach((cb) => cb());
+};
 
 export function claimHint(id) {
   if (suspended) return false;
@@ -40,11 +47,23 @@ export function claimHint(id) {
 }
 
 export function releaseHint(id) {
-  if (live === id) live = null;
+  if (live !== id) return;
+  live = null;
+  notifyWaiters();
+}
+
+// A refused claim isn't lost — the hint parks here and re-attempts when the
+// slot frees (holder killed/retired/unmounted) or the tour lets go.
+export function waitForHintSlot(cb) {
+  waiters.push(cb);
+  return () => { waiters = waiters.filter((w) => w !== cb); };
 }
 
 // App mirrors tourActive into this so a hint never renders under the tour scrim.
-export function setHintsSuspended(on) { suspended = !!on; }
+export function setHintsSuspended(on) {
+  suspended = !!on;
+  if (!suspended) notifyWaiters();
+}
 
 // Test hook — module singletons survive between specs otherwise.
-export function _resetHintBus() { live = null; suspended = false; }
+export function _resetHintBus() { live = null; suspended = false; waiters = []; }

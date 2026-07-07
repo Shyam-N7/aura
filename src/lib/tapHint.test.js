@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { hintDone, killHint, bumpHint, claimHint, releaseHint, setHintsSuspended, _resetHintBus } from './tapHint';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { hintDone, killHint, bumpHint, claimHint, releaseHint, waitForHintSlot, setHintsSuspended, _resetHintBus } from './tapHint';
 
 beforeEach(() => {
   localStorage.clear();
@@ -37,5 +37,28 @@ describe('tapHint arbitration', () => {
     expect(claimHint('a')).toBe(false);
     setHintsSuspended(false);
     expect(claimHint('a')).toBe(true);
+  });
+
+  it('notifies waiters when the slot frees', () => {
+    const cb = vi.fn();
+    claimHint('a');
+    waitForHintSlot(cb);
+    releaseHint('b');            // not the holder — nothing frees
+    expect(cb).not.toHaveBeenCalled();
+    releaseHint('a');
+    expect(cb).toHaveBeenCalledTimes(1);
+    releaseHint('a');            // one-shot: consumed waiters don't refire
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies waiters when suspension lifts, and unsubscribe works', () => {
+    const stays = vi.fn();
+    const leaves = vi.fn();
+    setHintsSuspended(true);
+    waitForHintSlot(stays);
+    waitForHintSlot(leaves)();   // subscribe then immediately unsubscribe
+    setHintsSuspended(false);
+    expect(stays).toHaveBeenCalledTimes(1);
+    expect(leaves).not.toHaveBeenCalled();
   });
 });
