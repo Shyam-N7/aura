@@ -42,6 +42,12 @@ describe('getScoredTracks SQL', () => {
     expect(params[params.length - 1]).toBe(30);   // limit
   });
 
+  it('exposes the liked flag alongside the like-boosted score (quick-picks reasons)', async () => {
+    await getScoredTracks('u1', { halfLifeDays: 28 });
+    const [sql] = pool.query.mock.calls[0];
+    expect(sql).toContain('(lt.track_id IS NOT NULL) AS liked');
+  });
+
   it('adds dormancy + language as outer filters when asked (bring it back / seeds)', async () => {
     await getScoredTracks('u1', { halfLifeDays: 180, dormantDays: 60, language: 'tamil' });
     const [sql, params] = pool.query.mock.calls[0];

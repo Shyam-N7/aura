@@ -37,16 +37,18 @@ function dateSeed() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 }
 
-// Cheap string hash for the daily picker.
-function hash(s) {
+// Cheap string hash for the daily picker. Exported — quickPicks.js seeds its
+// per-user daily rotation with the same primitive.
+export function hash(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return h;
 }
 
 // Deterministic shuffle: same seed → same order. Linear congruential generator
-// stepped per swap; good enough for picking 3-of-6 each day.
-function pickDaily(arr, n, seed) {
+// stepped per swap; good enough for picking 3-of-6 each day. Exported for the
+// same reason as hash().
+export function pickDaily(arr, n, seed) {
   const a = [...arr];
   let h = hash(seed);
   for (let i = a.length - 1; i > 0; i--) {

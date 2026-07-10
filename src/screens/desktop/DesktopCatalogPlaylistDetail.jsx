@@ -73,7 +73,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
       setHit(h => h.data
         ? { ...h, data: { ...h.data, tracks: (h.data.tracks ?? []).filter(x => x.id !== t.id) } }
         : h);
-      invalidateHomeCache('autoPlaylists');   // Home's mixes shelf must not serve it again
+      invalidateHomeCache('autoPlaylists', 'quickPicks');   // Home must not serve it again
       toast("hidden — aura won't pick this for you again. undo in settings.");
     } catch {
       toast("couldn't hide that — try again.");

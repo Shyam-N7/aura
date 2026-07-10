@@ -3,8 +3,10 @@ import { MOOD_BRIDGES } from '../../data';
 import { MonoLabel, ICON } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed } from '../../api/stats';
+import { getQuickPicks } from '../../api/quickPicks';
 import { listPlaylists } from '../../api/playlists';
 import { listAutoPlaylists } from '../../api/autoPlaylists';
+import { dropExplicit } from '../../lib/explicit';
 import { getDiscoverHome } from '../../api/discover';
 import { cleanTitle } from '../../utils/title';
 import { homeCache as _cache } from '../../lib/homeCache';
@@ -26,6 +28,7 @@ import './DesktopHome.css';
 
 export function DesktopHome({
   tracks, djName, currentTrackId, track, onOpenPlayer, loading = false,
+  explicitOff = false,
   activeMode = 'everyday', modes = [], onSetMode,
   onPick, onPickLive, onPlaySequence, onOpenJournal, onOpenDna, onOpenBridges, onOpenBridge,
   onOpenCatalogPlaylist, onOpenPlaylistDetail, onOpenAuto, onOpenPlaylists, onOpenSearch,
@@ -42,18 +45,24 @@ export function DesktopHome({
   const [recentlyPlayed, setRecentlyPlayed] = useState(() => _cache.recentlyPlayed ?? []);
   const [yourPlaylists,  setYourPlaylists]  = useState(() => _cache.yourPlaylists  ?? []);
   const [autoPlaylists,  setAutoPlaylists]  = useState(() => _cache.autoPlaylists  ?? []);
-  // Quick picks come from what you actually listen to — most-played first, then
-  // recently-played, then the featured pool only for brand-new accounts.
+  const [serverPicks,    setServerPicks]    = useState(() => _cache.quickPicks    ?? []);
+  // Quick picks: the server ring (frecency-ranked, top-3 anchored, rest rotating
+  // daily, each pick carrying its reason) once it can fill a meaningful set;
+  // until then (loading / offline / brand-new account) the old local derivation —
+  // most-played, then recently-played, then the featured pool.
+  const served = dropExplicit(serverPicks, explicitOff);
   const quickPicks = (
-    mostPlayed.length >= 4 ? mostPlayed
-      : recentlyPlayed.length >= 4 ? recentlyPlayed
-        : tracks
+    served.length >= 4 ? served
+      : mostPlayed.length >= 4 ? mostPlayed
+        : recentlyPlayed.length >= 4 ? recentlyPlayed
+          : tracks
   ).slice(0, 8);
   const [discover,       setDiscover]       = useState(() => _cache.discover ?? { trending: [], popularPlaylists: [], movieSongs: [] });
   useEffect(() => {
     const ctl = new AbortController();
     // Each fetch writes into the cache on success so remounts read it
     // synchronously above and skip the loading flash + cascade reveal.
+    if (!_cache.quickPicks)     getQuickPicks     ({ signal: ctl.signal }).then(d => { _cache.quickPicks     = d; setServerPicks(d);    }).catch(() => {});
     if (!_cache.mostPlayed)     getMostPlayed     ({ signal: ctl.signal }).then(d => { _cache.mostPlayed     = d; setMostPlayed(d);     }).catch(() => {});
     if (!_cache.topArtists)     getTopArtists     ({ signal: ctl.signal }).then(d => { _cache.topArtists     = d; setTopArtists(d);     }).catch(() => {});
     if (!_cache.recentlyPlayed) getRecentlyPlayed ({ signal: ctl.signal }).then(d => { _cache.recentlyPlayed = d; setRecentlyPlayed(d); }).catch(() => {});
@@ -123,9 +132,9 @@ export function DesktopHome({
         </section>
       )}
 
-      {/* Quick picks — an orbital ring drawn from your LISTENING (most-played,
-          then recently-played, then featured for brand-new users), above the
-          hero so it's the first thing to act on. */}
+      {/* Quick picks — an orbital ring drawn from your LISTENING (server-ranked
+          + daily-rotating, with local most-played/recently-played/featured as
+          the fallback), above the hero so it's the first thing to act on. */}
       {quickPicks.length > 0 && (
         <section className="aura-dh__qp">
           <SectionHeader title="Quick picks" sub="jump back into what you love" large/>
@@ -136,13 +145,29 @@ export function DesktopHome({
             <QuickPicksOrbit
               tracks={quickPicks}
               onPlay={(t) => onPickLive?.(t)}
-              onShuffle={() => {
-                const s = [...quickPicks];
-                for (let i = s.length - 1; i > 0; i--) {
-                  const j = Math.floor(Math.random() * (i + 1));
-                  [s[i], s[j]] = [s[j], s[i]];
-                }
-                onPlaySequence?.(s, 0, 'quick picks');
+              onShuffle={async () => {
+                const playShuffled = (list) => {
+                  const s = [...list];
+                  for (let i = s.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [s[i], s[j]] = [s[j], s[i]];
+                  }
+                  onPlaySequence?.(s, 0, 'quick picks');
+                };
+                // Shuffle-all rerolls the ring's MEMBERSHIP from the wider pool
+                // (anchors stay; user-initiated, so never disorienting), then
+                // plays the new ring shuffled. Plain reorder is the fallback.
+                try {
+                  const fresh = await getQuickPicks({ salt: Date.now().toString(36) });
+                  const next = dropExplicit(fresh, explicitOff).slice(0, 8);
+                  if (next.length >= 4) {
+                    _cache.quickPicks = fresh;
+                    setServerPicks(fresh);
+                    playShuffled(next);
+                    return;
+                  }
+                } catch { /* offline / thin data — reorder what's here */ }
+                playShuffled(quickPicks);
               }}/>
           </div>
           <div className="aura-dh__qp-spinner">

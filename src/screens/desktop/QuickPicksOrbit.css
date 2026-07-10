@@ -173,6 +173,18 @@
   text-overflow: ellipsis;
   max-width: 100%;
 }
+/* Why this pick is in the ring — the honest receipt under the hover title. */
+.aura-qpo__hub-reason {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 2px;
+}
 
 @media (max-width: 600px) {
   .aura-qpo { padding: 8px 16px 22px; }

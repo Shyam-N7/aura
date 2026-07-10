@@ -24,6 +24,7 @@ import { getLibrarySummary } from './library.js';
 import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
+import { getQuickPicks } from './quickPicks.js';
 import { getAutoPlaylists, refreshDueMixes } from './autoPlaylists.js';
 import { hideTrack, unhideTrack, listHidden } from './hiddenTracks.js';
 import { getDiscoverHome } from './discover.js';
@@ -546,6 +547,17 @@ app.get('/api/stats/recently-played', requireAuth, async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 10;
     res.json({ tracks: await getRecentlyPlayed(req.userId, { limit }) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Quick picks — anchored + daily-rotating home ring (quickPicks.js). `salt` is
+// the user's "shuffle all" reroll; capped so it can't bloat the rotation seed.
+app.get('/api/home/quick-picks', requireAuth, async (req, res) => {
+  try {
+    const salt = String(req.query.salt ?? '').slice(0, 32);
+    res.json(await getQuickPicks(req.userId, { tzOffset: req.query.tzOffset, salt }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

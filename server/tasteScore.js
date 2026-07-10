@@ -105,6 +105,7 @@ export async function getScoredTracks(userId, {
      )
      SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
             ev.ev_score + (CASE WHEN lt.track_id IS NOT NULL THEN 1.0 ELSE 0 END) AS score,
+            (lt.track_id IS NOT NULL) AS liked,
             ev.last_play_ts, ev.plays, ev.completions
      FROM ev
      JOIN tracks t ON t.id = ev.track_id

@@ -50,6 +50,7 @@ export function QuickPicksOrbit({ tracks, onPlay, onShuffle }) {
             <span className="aura-qpo__hub-now">
               <span className="aura-qpo__hub-title">{cleanTitle(active.title)}</span>
               <span className="aura-qpo__hub-artist">{(active.artist ?? '').toLowerCase()}</span>
+              {active.reason && <span className="aura-qpo__hub-reason">{active.reason}</span>}
             </span>
           ) : (
             <span className="aura-qpo__hub-cta">

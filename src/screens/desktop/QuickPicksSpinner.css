@@ -107,6 +107,19 @@
 }
 .aura-qps__card--playing .aura-qps__name { color: var(--color-accent); }
 
+/* Why the playing pick is in the ring — centered receipt under the wheel. */
+.aura-qps__why {
+  margin-top: 4px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* centre hub — decorative; pointer-events:none so the centre is grabbable too */
 .aura-qps__hub {
   position: absolute;

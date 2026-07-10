@@ -6,6 +6,7 @@ vi.mock('../../api/stats', () => ({
   getTopArtists: vi.fn().mockResolvedValue([]),
   getRecentlyPlayed: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../../api/quickPicks', () => ({ getQuickPicks: vi.fn().mockResolvedValue([]) }));
 vi.mock('../../api/playlists', () => ({ listPlaylists: vi.fn().mockResolvedValue([]) }));
 vi.mock('../../api/autoPlaylists', () => ({ listAutoPlaylists: vi.fn() }));
 vi.mock('../../api/discover', () => ({

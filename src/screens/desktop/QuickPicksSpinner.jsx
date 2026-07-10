@@ -187,6 +187,8 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
   const n = tracks.length;
   if (!n) return null;
 
+  const playingReason = tracks.find(t => t.id === currentTrackId)?.reason;
+
   return (
     <div className="aura-qps">
       <div ref={ringRef} className="aura-qps__ring" onPointerDown={onDown}>
@@ -236,6 +238,9 @@ export function QuickPicksSpinner({ tracks, currentTrackId, onPlay }) {
           </span>
         </div>
       </div>
+      {/* Why the playing pick is here — the wheel has no hover, so the reason
+          surfaces for the disc you actually chose. */}
+      {playingReason && <div className="aura-qps__why">{playingReason}</div>}
     </div>
   );
 }

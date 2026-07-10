@@ -1,4 +1,6 @@
 import { fetchAuthed } from '../lib/auth';
+import { invalidateHomeCache } from '../lib/homeCache';
+
 export async function listLikedIds({ signal } = {}) {
   const res = await fetchAuthed('/api/likes?ids=1', { signal });
   if (!res.ok) throw new Error(`likes fetch failed (${res.status})`);
@@ -20,9 +22,12 @@ export async function likeTrack(trackId) {
     body: JSON.stringify({ track_id: trackId }),
   });
   if (!res.ok) throw new Error(`like failed (${res.status})`);
+  // Likes boost the quick-picks ranking — refresh it on the next Home visit.
+  invalidateHomeCache('quickPicks');
 }
 
 export async function unlikeTrack(trackId) {
   const res = await fetchAuthed(`/api/likes/${encodeURIComponent(trackId)}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`unlike failed (${res.status})`);
+  invalidateHomeCache('quickPicks');
 }

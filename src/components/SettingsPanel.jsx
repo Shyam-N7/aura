@@ -161,7 +161,7 @@ export function SettingsPanel({ t, setTweak }) {
     try {
       await unhideTrack(id);
       setHidden(hs => hs.filter(h => h.id !== id));
-      invalidateHomeCache('autoPlaylists');   // same staleness as hiding, in reverse
+      invalidateHomeCache('autoPlaylists', 'quickPicks');   // same staleness as hiding, in reverse
       toast('back in the mix.');
     } catch (err) { toast(err.message); }
   };

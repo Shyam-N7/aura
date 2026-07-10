@@ -1696,6 +1696,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           <ScreenTransition key="home">
             <DesktopHome tracks={pool}
               loading={featured.status === 'loading'}
+              explicitOff={explicitOff}
               djName={t.djName} currentTrackId={track?.id}
               track={track} onOpenPlayer={() => { setPlayerReturn(screen); setScreen('player'); }}
               activeMode={activeMode} modes={user?.modes} onSetMode={switchMode}
