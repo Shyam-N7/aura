@@ -3,10 +3,12 @@ import { MonoLabel, BreathingDot } from '../components/primitives';
 import { AlbumArt } from '../components/album/AlbumArt';
 import { AuraLoader } from '../components/feedback/AuraLoader';
 import { BackToTop } from '../components/BackToTop';
-import { getPublicPlaylist } from '../api/playlists';
+import { getPublicPlaylist, savePlaylist, unsavePlaylist } from '../api/playlists';
 import { fmtTime, fmtRuntime } from '../utils/fmtTime';
+import { relTime } from '../utils/relTime';
 import { cleanTitle } from '../utils/title';
 import { setMeta } from '../lib/meta';
+import { toast } from '../lib/toast';
 import { stashPostAuthPath } from '../lib/routes';
 import './PublicPlaylistScreen.css';
 
@@ -21,6 +23,8 @@ import './PublicPlaylistScreen.css';
 // after signup (the stash), where the same play handoff is then available.
 export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
   const [hit, setHit] = useState({ data: null, error: null });
+  const [saved, setSaved] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useRef(null);   // the page IS the scroll container (for BackToTop)
 
@@ -49,7 +53,28 @@ export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
   }, [status, hit.data]);
 
   const tracks = hit.data?.tracks ?? [];
+  const updatedAt = hit.data?.updatedAt;
+  const saveCount = (hit.data?.saveCount ?? 0) + (saved ? 1 : 0);
   const hasCover = !!hit.data?.coverImageUrl;
+
+  // Signed-in visitors can keep a public playlist in their library without
+  // editing it. (Owners can't save their own — the server no-ops that.)
+  const toggleSave = async () => {
+    if (saveBusy || !hit.data?.id) return;
+    setSaveBusy(true);
+    const next = !saved;
+    setSaved(next);
+    try {
+      const res = next ? await savePlaylist(hit.data.id) : await unsavePlaylist(hit.data.id);
+      if (next && res?.own) { setSaved(false); toast('This is already your playlist.'); }
+      else toast(next ? 'Saved to your library.' : 'Removed from your library.');
+    } catch (err) {
+      setSaved(!next);
+      toast(`Couldn’t update — ${err.message}`);
+    } finally {
+      setSaveBusy(false);
+    }
+  };
   // Give the cover a clean radial disc if it has no artwork (the inherited
   // --p0/--p1/--p2 palette on .aura-pub colours it), so a missing image never
   // renders the bare initials monogram.
@@ -124,7 +149,16 @@ export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
               {tracks.length > 0 && (
                 <MonoLabel className="aura-pub__meta aura-pub--fx text-ink-soft" size={10} numeric style={{ '--d': '230ms' }}>
                   {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'} · {runtime}
+                  {updatedAt ? ` · updated ${relTime(updatedAt)}` : ''}
+                  {saveCount > 0 ? ` · saved by ${saveCount}` : ''}
                 </MonoLabel>
+              )}
+
+              {isAuthed && (
+                <button type="button" onClick={toggleSave} disabled={saveBusy}
+                  className={`aura-pub__save aura-pub--fx${saved ? ' aura-pub__save--on' : ''}`} style={{ '--d': '260ms' }}>
+                  {saved ? '✓ saved to your library' : '+ save to your library'}
+                </button>
               )}
 
               <div className="aura-pub__pulse aura-pub--fx" style={{ '--d': '290ms' }}>

@@ -34,17 +34,22 @@ function forbidden(msg = "you can't edit this playlist") {
 // joins the caller's collaborator row (if any) to the playlist's owner.
 async function getAccess(userId, playlistId) {
   const { rows } = await query(
-    `SELECT p.user_id AS owner_id, c.role AS collab_role
+    `SELECT p.user_id AS owner_id, p.is_public, c.role AS collab_role
      FROM playlists p
      LEFT JOIN playlist_collaborators c ON c.playlist_id = p.id AND c.user_id = $1
      WHERE p.id = $2`,
     [userId, playlistId],
   );
-  if (!rows.length) return { exists: false, role: null };
+  if (!rows.length) return { exists: false, role: null, member: false };
   const r = rows[0];
-  if (r.owner_id === userId) return { exists: true, role: 'owner' };
-  if (r.collab_role) return { exists: true, role: r.collab_role };
-  return { exists: true, role: null };
+  // `member` = owner or an actual collaborator (vs. a public-link viewer). It
+  // gates the collaborator list — a public playlist is viewable by any signed-in
+  // user (they get streams, unlike the anonymous /p/ link), but such a viewer is
+  // not a member and never sees who the collaborators are.
+  if (r.owner_id === userId) return { exists: true, role: 'owner', member: true };
+  if (r.collab_role) return { exists: true, role: r.collab_role, member: true };
+  if (r.is_public) return { exists: true, role: 'viewer', member: false };
+  return { exists: true, role: null, member: false };
 }
 const canView = (role) => role === 'owner' || role === 'editor' || role === 'viewer';
 const canEdit = (role) => role === 'owner' || role === 'editor';
@@ -144,7 +149,8 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
   const { rows: meta } = await query(
     `SELECT p.id, p.name, p.description, p.cover_track_id, p.updated_at, p.user_id AS owner_id,
             p.is_public, p.public_id,
-            t.raw AS cover_raw, ou.name AS owner_name
+            t.raw AS cover_raw, ou.name AS owner_name,
+            (SELECT COUNT(*) FROM saved_playlists sp WHERE sp.playlist_id = p.id)::int AS save_count
      FROM playlists p
      LEFT JOIN tracks t ON t.id = p.cover_track_id
      LEFT JOIN users  ou ON ou.id = p.user_id
@@ -197,6 +203,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
     trackCount:    tracks.length,
     coverImageUrl: row.cover_raw?.imageUrl ?? null,
     updatedAt:     Number(row.updated_at),
+    saveCount:     Number(row.save_count ?? 0),
     role,                                   // the caller's role: owner | editor | viewer | null
     canEdit:       canEdit(role),
     shared:        collaborators.length > 0 || (!!role && role !== 'owner'),
@@ -209,8 +216,10 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
 }
 
 export async function getPlaylist(userId, id) {
-  const role = await requireView(userId, id);
-  return loadPlaylistView(id, { role });
+  const access = await getAccess(userId, id);
+  if (!access.exists || !canView(access.role)) notFound();
+  // Public-link viewers (not members) get a streaming read but no member list.
+  return loadPlaylistView(id, { role: access.role, includeCollaborators: access.member });
 }
 
 // Anonymous, view-only fetch by the public share id. 404s (not 403) when the id
@@ -389,6 +398,56 @@ export async function removeCollaborator(userId, playlistId, targetUserId) {
     `DELETE FROM playlist_collaborators WHERE playlist_id = $1 AND user_id = $2`,
     [playlistId, targetUserId],
   );
+}
+
+// ── Save to library (the lightweight "keep it, don't edit it" tier) ──
+// Save any playlist you can view but don't own. Owners can't save their own.
+export async function savePlaylist(userId, id) {
+  const access = await getAccess(userId, id);
+  if (!access.exists) notFound();
+  if (access.role === 'owner') return { saved: false, own: true };
+  if (!canView(access.role)) forbidden("this playlist isn't shared with you");
+  await pool.query(
+    `INSERT INTO saved_playlists (user_id, playlist_id, saved_at) VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, playlist_id) DO NOTHING`,
+    [userId, id, Date.now()],
+  );
+  return { saved: true };
+}
+
+export async function unsavePlaylist(userId, id) {
+  await pool.query(`DELETE FROM saved_playlists WHERE user_id = $1 AND playlist_id = $2`, [userId, id]);
+  return { saved: false };
+}
+
+// The user's saved (not owned, not collaborated) playlists. `accessible` is false
+// when the owner has since unshared it — the row renders "no longer shared".
+export async function listSavedPlaylists(userId) {
+  const { rows } = await query(
+    `SELECT p.id, p.name, p.updated_at, p.user_id AS owner_id, p.is_public,
+            ou.name AS owner_name,
+            COALESCE(tc.cnt, 0)::int AS track_count,
+            t.raw AS cover_raw,
+            (p.is_public OR p.user_id = $1 OR col.user_id IS NOT NULL) AS accessible
+     FROM saved_playlists sp
+     JOIN playlists p ON p.id = sp.playlist_id
+     LEFT JOIN users ou ON ou.id = p.user_id
+     LEFT JOIN (SELECT playlist_id, COUNT(*) AS cnt FROM playlist_tracks GROUP BY playlist_id) tc ON tc.playlist_id = p.id
+     LEFT JOIN tracks t ON t.id = p.cover_track_id
+     LEFT JOIN playlist_collaborators col ON col.playlist_id = p.id AND col.user_id = $1
+     WHERE sp.user_id = $1
+     ORDER BY sp.saved_at DESC`,
+    [userId],
+  );
+  return rows.map(r => ({
+    id:            r.id,
+    name:          r.name,
+    trackCount:    r.track_count,
+    coverImageUrl: r.cover_raw?.imageUrl ?? null,
+    updatedAt:     Number(r.updated_at),
+    ownerName:     r.owner_name ?? null,
+    accessible:    r.accessible,
+  }));
 }
 
 // "Only you" — the hard-private state. Owner-only: revoke every collaborator,

@@ -593,6 +593,20 @@ const migrations = [
       `ALTER TABLE playlist_tracks ADD COLUMN added_by TEXT REFERENCES users(id) ON DELETE SET NULL`,
     );
   },
+  async function v25_saved_playlists(client) {
+    // "Save someone's playlist to your library" — the lightweight middle tier of
+    // sharing (want it in your library without editing it). Distinct from
+    // collaboration (which grants edit) and from the anonymous public link.
+    await client.query(`
+      CREATE TABLE saved_playlists (
+        user_id     TEXT   NOT NULL REFERENCES users(id)     ON DELETE CASCADE,
+        playlist_id TEXT   NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+        saved_at    BIGINT NOT NULL,
+        PRIMARY KEY (user_id, playlist_id)
+      );
+      CREATE INDEX idx_saved_playlists_playlist ON saved_playlists(playlist_id);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

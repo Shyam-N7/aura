@@ -127,6 +127,30 @@
 }
 .aura-pub__pulse { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; }
 
+/* Save-to-library — a glass pill for signed-in visitors. */
+.aura-pub__save {
+  margin-top: 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink), transparent 78%);
+  background: color-mix(in srgb, var(--color-surface), transparent 55%);
+  -webkit-backdrop-filter: blur(14px);
+          backdrop-filter: blur(14px);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.aura-pub__save:hover { color: var(--color-ink); border-color: color-mix(in srgb, var(--color-ink), transparent 60%); }
+.aura-pub__save--on {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent), transparent 55%);
+  background: color-mix(in srgb, var(--color-accent), transparent 88%);
+}
+.aura-pub__save:disabled { opacity: 0.6; cursor: default; }
+
 /* ── TRACKLIST ── solid bg; bottom padding clears the fixed CTA bar. */
 .aura-pub__list {
   max-width: 720px;

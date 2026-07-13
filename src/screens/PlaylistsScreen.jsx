@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { listPlaylists, createPlaylist, deletePlaylist, acceptPlaylistInvite, removePlaylistCollaborator } from '../api/playlists';
+import { listPlaylists, createPlaylist, deletePlaylist, acceptPlaylistInvite, removePlaylistCollaborator, listSavedPlaylists } from '../api/playlists';
 import { listAutoPlaylists } from '../api/autoPlaylists';
 import { getUser } from '../lib/auth';
 import { toast } from '../lib/toast';
@@ -23,6 +23,7 @@ const DAYPART_NOTE = {
 export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySequence }) {
   const [hit, setHit]       = useState({ data: null, error: null });
   const [auto, setAuto]     = useState([]);
+  const [savedLists, setSavedLists] = useState([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName]   = useState('');
   const [menu, setMenu]         = useState(null);
@@ -48,6 +49,15 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
     listAutoPlaylists({ signal: ctl.signal })
       .then(setAuto)
       .catch(() => { /* non-fatal — hide the shelf */ });
+    return () => ctl.abort();
+  }, []);
+
+  // Playlists you saved from someone else (best-effort; empty group just hides).
+  useEffect(() => {
+    const ctl = new AbortController();
+    listSavedPlaylists({ signal: ctl.signal })
+      .then(setSavedLists)
+      .catch(() => { /* non-fatal */ });
     return () => ctl.abort();
   }, []);
 
@@ -322,6 +332,34 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
           <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">Shared with you</span>
           <div className="pt-2.5 flex flex-col gap-2">
             {joined.map(renderRow)}
+          </div>
+        </div>
+      )}
+
+      {/* Saved — playlists you kept from someone else (not editable). An owner
+          who unshares one leaves it here, marked "no longer shared". */}
+      {savedLists.length > 0 && (
+        <div className="pt-7 px-[22px]">
+          <span className="aura-pl-eyebrow aura-pl-auto-eyebrow">Saved</span>
+          <div className="pt-2.5 flex flex-col gap-2">
+            {savedLists.map(p => (
+              <button key={p.id} type="button"
+                onClick={() => p.accessible && onOpenPlaylist?.(p.id)}
+                disabled={!p.accessible}
+                className={`aura-lib-pl-card flex items-center gap-3.5 w-full${p.accessible ? '' : ' opacity-55'}`}>
+                {p.coverImageUrl
+                  ? <img src={p.coverImageUrl} alt="" className="aura-lib-pl-cover" loading="lazy"/>
+                  : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">{p.name?.[0]?.toUpperCase() ?? '·'}</span>}
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="aura-pl-row-name truncate">{p.name}</div>
+                  <div className="aura-pl-row-count truncate">
+                    {p.accessible
+                      ? `${p.trackCount} ${p.trackCount === 1 ? 'track' : 'tracks'}${p.ownerName ? ` · by ${p.ownerName}` : ''}`
+                      : 'no longer shared'}
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       )}

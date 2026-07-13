@@ -6,6 +6,7 @@ import { query, pool } from './db.js';
 import {
   listPlaylists, createInvite, removeCollaborator,
   addTrackToPlaylist, acceptInvite, setPlaylistOnlyMe, getPlaylist, getPublicPlaylist,
+  savePlaylist, listSavedPlaylists,
 } from './playlists.js';
 
 // Access is one query joining the playlist owner + the caller's collaborator row.
@@ -125,5 +126,47 @@ describe('setPlaylistOnlyMe (hard revoke)', () => {
     access({ ownerId: 'owner', collabRole: 'editor' });
     await expect(setPlaylistOnlyMe('u2', 'pl1')).rejects.toMatchObject({ statusCode: 403 });
     expect(pool.query.mock.calls.length).toBe(0);
+  });
+});
+
+describe('save to library', () => {
+  it("owners can't save their own (no-op, no write)", async () => {
+    access({ ownerId: 'u1' });
+    expect(await savePlaylist('u1', 'pl1')).toEqual({ saved: false, own: true });
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('saves a public playlist for a non-owner', async () => {
+    query.mockResolvedValueOnce({ rows: [{ owner_id: 'owner', is_public: true, collab_role: null }] });
+    expect(await savePlaylist('u2', 'pl1')).toEqual({ saved: true });
+    const ins = pool.query.mock.calls.find(c => /INSERT INTO saved_playlists/.test(c[0]));
+    expect(ins[1]).toEqual(['u2', 'pl1', expect.any(Number)]);
+  });
+
+  it('refuses to save a playlist not shared with you', async () => {
+    query.mockResolvedValueOnce({ rows: [{ owner_id: 'owner', is_public: false, collab_role: null }] });
+    await expect(savePlaylist('u2', 'pl1')).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('lists saved playlists carrying an accessibility flag', async () => {
+    query.mockResolvedValueOnce({ rows: [
+      { id: 'pl1', name: 'A', updated_at: '1', owner_id: 'o', is_public: true, owner_name: 'x', track_count: 3, cover_raw: null, accessible: true },
+      { id: 'pl2', name: 'B', updated_at: '1', owner_id: 'o', is_public: false, owner_name: 'x', track_count: 0, cover_raw: null, accessible: false },
+    ] });
+    const out = await listSavedPlaylists('u2');
+    expect(out.map(p => p.accessible)).toEqual([true, false]);
+  });
+});
+
+describe('public playlists are viewable by any signed-in user', () => {
+  it('grants a streaming viewer read, but not the member list', async () => {
+    query.mockResolvedValueOnce({ rows: [{ owner_id: 'owner', is_public: true, collab_role: null }] });   // getAccess → viewer, member:false
+    query.mockResolvedValueOnce({ rows: [{ id: 'pl1', name: 'x', is_public: true, public_id: 'pub', owner_id: 'owner', owner_name: 'o', save_count: 2 }] });
+    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', stream_url: 's', duration_sec: 200, raw: null, added_by: null, added_by_name: null }] });
+    const view = await getPlaylist('u2', 'pl1');
+    expect(view.role).toBe('viewer');
+    expect(view.tracks[0].streamUrl).toBe('s');   // authed viewer gets streams (unlike /p/)
+    expect(view.collaborators).toEqual([]);        // never exposed to a non-member
+    expect(view.saveCount).toBe(2);
   });
 });

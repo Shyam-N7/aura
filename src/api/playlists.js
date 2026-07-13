@@ -108,6 +108,25 @@ export async function setPlaylistOnlyMe(id) {
   return body;   // { isPublic:false, onlyMe:true }
 }
 
+// ── Save to library (keep someone else's playlist without editing it) ──
+export async function savePlaylist(id) {
+  const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/save`, { method: 'POST' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `couldn't save (${res.status})`);
+  return body;   // { saved:true } | { saved:false, own:true }
+}
+export async function unsavePlaylist(id) {
+  const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/save`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`couldn't remove (${res.status})`);
+  return { saved: false };
+}
+export async function listSavedPlaylists({ signal } = {}) {
+  const res = await fetchAuthed('/api/playlists/saved', { signal });
+  if (!res.ok) throw new Error(`saved fetch failed (${res.status})`);
+  const { playlists } = await res.json();
+  return playlists ?? [];
+}
+
 // PUBLIC read by share id — no auth, plain fetch (works signed-out). Returns the
 // read-only playlist view, or throws on 404 (unknown / not public).
 export async function getPublicPlaylist(publicId, { signal } = {}) {

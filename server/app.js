@@ -19,7 +19,7 @@ import { generateWhy } from './prompts/why.js';
 import { getJournalEntries } from './journal.js';
 import { getSonicDna } from './sonicDna.js';
 import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
-import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, setPlaylistOnlyMe, getPublicPlaylist } from './playlists.js';
+import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, setPlaylistOnlyMe, savePlaylist, unsavePlaylist, listSavedPlaylists, getPublicPlaylist } from './playlists.js';
 import { getLibrarySummary } from './library.js';
 import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getGreeting } from './greeting.js';
@@ -823,6 +823,15 @@ app.get('/api/playlists/auto', requireAuth, async (req, res) => {
   }
 });
 
+// Saved (not owned) playlists — MUST precede /:id so 'saved' isn't read as an id.
+app.get('/api/playlists/saved', requireAuth, async (req, res) => {
+  try {
+    res.json({ playlists: await listSavedPlaylists(req.userId) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
 app.get('/api/playlists/:id', requireAuth, async (req, res) => {
   try {
     res.json(await getPlaylist(req.userId, req.params.id));
@@ -928,6 +937,22 @@ app.post('/api/playlists/:id/visibility', requireAuth, async (req, res) => {
 app.post('/api/playlists/:id/only-me', requireAuth, async (req, res) => {
   try {
     res.json(await setPlaylistOnlyMe(req.userId, req.params.id));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Save / unsave someone else's playlist to your library.
+app.post('/api/playlists/:id/save', requireAuth, async (req, res) => {
+  try {
+    res.json(await savePlaylist(req.userId, req.params.id));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+app.delete('/api/playlists/:id/save', requireAuth, async (req, res) => {
+  try {
+    res.json(await unsavePlaylist(req.userId, req.params.id));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
