@@ -52,6 +52,10 @@ export function DesktopHome({
   // until then (loading / offline / brand-new account) the old local derivation —
   // most-played, then recently-played, then the featured pool.
   const served = dropExplicit(serverPicks, explicitOff);
+  // Daypart label for the quick-picks shelf — mirrors the server's boundaries in
+  // server/quickPicks.js daypartOf (the rotation is re-seeded per daypart there).
+  const _qh = new Date().getHours();
+  const qpDaypart = _qh >= 5 && _qh < 12 ? 'morning' : _qh >= 12 && _qh < 17 ? 'afternoon' : _qh >= 17 && _qh < 21 ? 'evening' : 'night';
   const quickPicks = (
     served.length >= 4 ? served
       : mostPlayed.length >= 4 ? mostPlayed
@@ -146,7 +150,8 @@ export function DesktopHome({
           the fallback), above the hero so it's the first thing to act on. */}
       {quickPicks.length > 0 && (
         <section className="aura-dh__qp">
-          <SectionHeader title="Quick picks" sub="jump back into what you love" large/>
+          <SectionHeader title="Quick picks"
+            sub={served.length >= 4 ? `your ${qpDaypart} picks` : 'jump back into what you love'} large/>
           {/* Desktop = auto-orbit; phone = spinnable fidget wheel. Both render;
               the `dh` container query shows one and hides the other (display:none
               halts the hidden one's animations). */}

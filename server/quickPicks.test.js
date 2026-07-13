@@ -38,10 +38,11 @@ vi.mock('./impressions.js', () => ({
   applyPenalty: (score, days) => score * Math.pow(0.85, days || 0),
 }));
 
+import { pool } from './db.js';
 import { getScoredTracks, getSuppressedTrackIds, localDateKey } from './tasteScore.js';
 import { getRecentlyPlayed } from './stats.js';
 import { getImpressionSignals } from './impressions.js';
-import { getQuickPicks, ANCHOR_COUNT } from './quickPicks.js';
+import { getQuickPicks, ANCHOR_COUNT, daypartOf } from './quickPicks.js';
 
 const scored = (id, { artist, plays = 3, completions = 0, liked = false, explicit = false } = {}) => ({
   id, title: `Song ${id}`, artist: artist ?? `Artist ${id}`, album: null, language: 'tamil',
@@ -57,6 +58,7 @@ beforeEach(() => {
   getSuppressedTrackIds.mockResolvedValue(new Set());
   getRecentlyPlayed.mockResolvedValue([]);
   getImpressionSignals.mockResolvedValue(new Map());
+  pool.query.mockResolvedValue({ rows: [] });   // exploration graph empty by default
 });
 afterEach(() => vi.useRealTimers());
 
@@ -188,5 +190,52 @@ describe('getQuickPicks — impression demotion', () => {
     getImpressionSignals.mockResolvedValue(new Map([['t0', { unplayedShownDays: 10, cooledDown: true }]]));
     const r = await getQuickPicks('u1', { tzOffset: 0 });
     expect(ids(r).slice(0, ANCHOR_COUNT)).toContain('t0');
+  });
+});
+
+describe('daypartOf', () => {
+  it('buckets the local hour into four dayparts', () => {
+    const at = (h) => daypartOf(0, Date.UTC(2026, 6, 8, h, 0, 0));
+    expect(at(6)).toBe('morning');
+    expect(at(13)).toBe('afternoon');
+    expect(at(18)).toBe('evening');
+    expect(at(23)).toBe('night');
+    expect(at(2)).toBe('night');
+  });
+});
+
+describe('getQuickPicks — daypart rotation + exploration', () => {
+  it('re-seeds the rotation per daypart while the anchors hold', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));
+    vi.setSystemTime(new Date('2026-07-08T08:00:00Z'));   // morning at tz 0
+    const morning = await getQuickPicks('u1', { tzOffset: 0 });
+    vi.setSystemTime(new Date('2026-07-08T18:00:00Z'));   // evening, same day
+    const evening = await getQuickPicks('u1', { tzOffset: 0 });
+    expect(morning.daypart).toBe('morning');
+    expect(evening.daypart).toBe('evening');
+    expect(ids(morning).slice(0, ANCHOR_COUNT)).toEqual(ids(evening).slice(0, ANCHOR_COUNT));
+    expect(ids(morning)).not.toEqual(ids(evening));   // rotating slots re-themed
+  });
+
+  it('places a "something new" exploration pick as the 8th shown slot', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));
+    pool.query.mockResolvedValue({ rows: [
+      { id: 'x1', title: 'New 1', artist: 'ZZ', duration_sec: 200, raw: {}, shown: 0 },
+      { id: 'x2', title: 'New 2', artist: 'YY', duration_sec: 200, raw: {}, shown: 0 },
+    ] });
+    const r = await getQuickPicks('u1', { tzOffset: 0 });
+    const shown = r.tracks.slice(0, 8);
+    expect(shown[7].exploration).toBe(true);
+    expect(shown[7].reason).toBe('something new');
+    expect(shown.slice(0, ANCHOR_COUNT).every(t => t.anchor)).toBe(true);   // anchors intact
+    expect(ids(r)).not.toContain(undefined);
+  });
+
+  it('skips the exploration slot (and never errors) when the graph is thin', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));
+    pool.query.mockResolvedValue({ rows: [] });
+    const r = await getQuickPicks('u1', { tzOffset: 0 });
+    expect(r.tracks.some(t => t.exploration)).toBe(false);
+    expect(r.tracks).toHaveLength(12);
   });
 });
