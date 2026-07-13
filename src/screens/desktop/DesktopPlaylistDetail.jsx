@@ -19,6 +19,38 @@ import { BackToTop } from '../../components/BackToTop';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
+// A playlist is in exactly one of three visible states, worn as the Share
+// button's icon + label so the owner always sees who can see it: a lock for
+// private, an overlapping-people mark for invited-only, a globe for a public
+// link. (Public wins the label when both a link and collaborators exist.)
+const VIS_ICON = {
+  private: (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="3.5" y="7.2" width="9" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M5.6 7.2 V5.3 a2.4 2.4 0 0 1 4.8 0 V7.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  shared: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6" cy="5.6" r="2.3" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M2.2 13 c0 -2.4 1.9 -3.9 3.8 -3.9 s3.8 1.5 3.8 3.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M11 4.2 a2.1 2.1 0 0 1 0 4.1 M11.6 9.3 c1.7 0.3 2.8 1.6 2.8 3.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  ),
+  public: (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.6" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M2.6 8 H13.4 M8 2.4 c2.1 2.4 2.1 8.8 0 11.2 M8 2.4 c-2.1 2.4 -2.1 8.8 0 11.2" stroke="currentColor" strokeWidth="1.1"/>
+    </svg>
+  ),
+};
+const VIS_LABEL = { private: 'Private', shared: 'Shared', public: 'Public' };
+const CheckMark = () => (
+  <svg className="aura-vis-check" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3.5 8.5 L6.5 11.5 L12.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
 export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const [hit, setHit]     = useState({ data: null, error: null });
   const [shareEl, setShareEl] = useState(null);   // Share button → options menu anchor
@@ -54,6 +86,8 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const isPublic = hit.data?.isPublic ?? false;
   const publicId = hit.data?.publicId ?? null;
   const coverImageUrl = hit.data?.coverImageUrl ?? null;
+  // The playlist's current reach — public link beats invited-only beats private.
+  const visibility = isPublic ? 'public' : collaborators.length ? 'shared' : 'private';
 
   // Set the cover to a chosen track's art (owner/editor). Optimistic.
   const chooseCover = async (t) => {
@@ -295,26 +329,37 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
                 <>
                   <button type="button"
                     onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setShareEl(s => s ? null : el); }}
-                    className="aura-dpd__share">
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M6.5 9.5 L9.5 6.5 M7 4.5 L8.5 3 a2.5 2.5 0 0 1 3.5 3.5 L10.5 8 M9 11.5 L7.5 13 a2.5 2.5 0 0 1 -3.5 -3.5 L5.5 8"
-                        stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Share
+                    className={`aura-dpd__share aura-dpd__share--${visibility}`}
+                    aria-label={`${VIS_LABEL[visibility].toLowerCase()} — change who can see this`}>
+                    {VIS_ICON[visibility]}
+                    {VIS_LABEL[visibility]}
                   </button>
                   {shareEl && (
-                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={240}>
+                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={300}>
                       <div className="aura-pl-menu-label">who can see this</div>
-                      {(collaborators.length > 0 || isPublic) && (
-                        <button onClick={makeOnlyMe} className="aura-pl-menu-item">only you</button>
-                      )}
-                      <div className="aura-pl-menu-sub">people you invite</div>
+
+                      {/* "only you" is always here — checked when it's the current
+                          state (so you can see you're private) and the way back to
+                          private from any shared state. */}
+                      <button onClick={makeOnlyMe} disabled={visibility === 'private'}
+                        className="aura-pl-menu-item aura-vis-item">
+                        <span className="aura-vis-ico">{VIS_ICON.private}</span>
+                        <span className="aura-vis-main">only you<span className="aura-vis-note">just for you</span></span>
+                        {visibility === 'private' && <CheckMark/>}
+                      </button>
+
+                      <div className="aura-pl-menu-sub aura-vis-head">
+                        people you invite{collaborators.length > 0 && <CheckMark/>}
+                      </div>
                       <button onClick={copyShareLink} className="aura-pl-menu-item">copy edit-invite link</button>
                       <button onClick={copyViewInvite} className="aura-pl-menu-item">copy view-invite link</button>
                       {typeof navigator !== 'undefined' && navigator.share && (
                         <button onClick={shareVia} className="aura-pl-menu-item">invite someone…</button>
                       )}
-                      <div className="aura-pl-menu-sub">anyone with the link</div>
+
+                      <div className="aura-pl-menu-sub aura-vis-head">
+                        anyone with the link{isPublic && <CheckMark/>}
+                      </div>
                       <button onClick={togglePublic} disabled={shareBusy} className="aura-pl-menu-item">
                         {isPublic ? 'turn off public link' : 'make a public view link'}
                       </button>

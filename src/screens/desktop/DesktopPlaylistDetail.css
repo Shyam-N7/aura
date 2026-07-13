@@ -356,6 +356,21 @@
   background: color-mix(in srgb, var(--color-ink), transparent 94%);
   border-color: var(--color-accent);
 }
+/* Private reads a touch quieter than a live shared/public state — the lock icon
+   carries the meaning; the softer ink says "nothing's out there yet". */
+.aura-dpd__share--private { color: var(--color-ink-soft); }
+.aura-dpd__share--private:hover { color: var(--color-ink); }
+
+/* Visibility menu: the "only you" row wears the lock + a sub-note and a check
+   when it's the current state; the two tier headers show a check when active,
+   so the whole "who can see this" state is legible at a glance. */
+.aura-vis-item { display: flex; align-items: center; gap: 10px; }
+.aura-vis-item:disabled { opacity: 1; cursor: default; }         /* the active state, not a dead control */
+.aura-vis-ico { display: inline-flex; flex-shrink: 0; color: var(--color-ink-soft); }
+.aura-vis-main { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.2; }
+.aura-vis-note { margin-top: 2px; font-size: 10.5px; text-transform: none; letter-spacing: 0; color: var(--color-ink-faint); }
+.aura-vis-head { display: flex; align-items: center; gap: 6px; }
+.aura-vis-check { color: var(--color-accent); flex-shrink: 0; margin-left: auto; }
 
 .aura-dpd__error {
   margin-top: 28px;

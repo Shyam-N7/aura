@@ -113,12 +113,22 @@ describe('DesktopPlaylistDetail — attribution & visibility', () => {
     expect(setPlaylistCover).toHaveBeenCalledWith('pl1', { imageUrl: 'https://x.public.blob.vercel-storage.com/cover/me-1.jpg' });
   });
 
-  it('"only you" confirms then hard-revokes sharing', async () => {
+  it('the share button wears the current visibility — "Shared" here, then "Private" after revoke', async () => {
     await renderDetail();
-    fireEvent.click(await screen.findByText('Share'));
+    expect(await screen.findByText('Shared')).toBeInTheDocument();   // has collaborators
+    fireEvent.click(screen.getByText('Shared'));
     await act(async () => { fireEvent.click(screen.getByText('only you')); });
     expect(confirm).toHaveBeenCalled();
     expect(setPlaylistOnlyMe).toHaveBeenCalledWith('pl1');
     await vi.waitFor(() => expect(screen.queryByText('ravi, meera')).not.toBeInTheDocument());
+    expect(screen.getByText('Private')).toBeInTheDocument();          // button now reflects private
+  });
+
+  it('a public playlist shows "Public"; a plain private one shows "Private"', async () => {
+    const { unmount } = await renderDetail(view({ isPublic: true, publicId: 'pub1' }));
+    expect(await screen.findByText('Public')).toBeInTheDocument();
+    unmount();
+    await renderDetail(view({ collaborators: [], shared: false }));
+    expect(await screen.findByText('Private')).toBeInTheDocument();
   });
 });
