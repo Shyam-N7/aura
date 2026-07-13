@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "server": "node --env-file=.env.local server/index.js",
+    "server": "node --watch --env-file=.env.local server/index.js",
     "migrate": "node server/migrate.js",
     "dev:all": "run-p dev server",
     "build": "vite build",
