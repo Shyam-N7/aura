@@ -150,3 +150,35 @@
   color: var(--color-ink-soft);
   text-wrap: pretty;
 }
+
+/* Phone — the side-by-side hero crams the name into a sliver beside the avatar,
+   so a big serif name breaks mid-word. Stack instead: avatar on its own line,
+   the name below with the full width to breathe (and break only between words).
+   These MUST live here (imported after DesktopPlaylistDetail.css) so they win the
+   source-order cascade over the unconditional desktop sizes above. */
+@container dpd (max-width: 600px) {
+  .aura-dar__hero-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-top: 18px;
+  }
+  .aura-dar__avatar { width: 92px; height: 92px; }
+  .aura-dar__avatar--fallback { font-size: 44px; }
+  .aura-dar__hero-row .aura-dpd__hero {
+    font-size: clamp(34px, 12vw, 52px);
+    line-height: 0.98;
+    overflow-wrap: break-word;   /* break between words, not through "nigam" */
+  }
+  .aura-dar__albums,
+  .aura-dar__similar {
+    padding: 8px 22px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .aura-dar__album-name,
+  .aura-dar__similar-name { font-size: 14px; }
+  .aura-dar__similar-avatar { width: 64px; height: 64px; }
+  .aura-dar__similar-avatar--fallback { font-size: 28px; }
+  .aura-dar__bio { padding: 8px 22px 0; font-size: 15px; }
+}

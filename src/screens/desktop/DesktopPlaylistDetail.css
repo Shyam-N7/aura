@@ -222,21 +222,7 @@
   .aura-dpd__idx { display: none; }
   .aura-dpd__title { font-size: 17px; }
   .aura-dpd__more { opacity: 0.6; }
-  /* DesktopArtist piggybacks — narrow the hero row, shrink the avatar, and
-     stack albums/similar into two columns. */
-  .aura-dar__hero-row { gap: 18px; margin-top: 16px; }
-  .aura-dar__avatar { width: 72px; height: 72px; }
-  .aura-dar__avatar--fallback { font-size: 36px; }
-  .aura-dar__hero-row .aura-dpd__hero { font-size: clamp(26px, 8vw, 36px); }
-  .aura-dar__albums,
-  .aura-dar__similar {
-    padding: 8px 22px 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-  .aura-dar__album-name,
-  .aura-dar__similar-name { font-size: 14px; }
-  .aura-dar__similar-avatar { width: 64px; height: 64px; }
-  .aura-dar__similar-avatar--fallback { font-size: 28px; }
-  .aura-dar__bio { padding: 8px 22px 0; font-size: 15px; }
+  /* Artist-specific compact rules live in DesktopArtist.css — it's imported
+     AFTER this file, so putting them here would lose the source-order cascade
+     to the artist base rules and never apply on phones. */
 }
