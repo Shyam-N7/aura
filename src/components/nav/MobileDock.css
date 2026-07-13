@@ -219,14 +219,16 @@
 /* During the contraction each nav item gets a solid blob backing (mass for the
    goo) and the items converge to centre so #aura-goo metaball-fuses them as the
    dock collapses. Scoped to --btt so a plain track-change bud doesn't flash the
-   blobs. */
+   blobs. The blob only needs to be OPAQUE mass for the metaball — colour it like
+   the contracting pill (not accent) so it melts INTO the pill instead of flashing
+   an odd orange mid-transition. */
 .aura-dock--btt .aura-dock__item::before {
   content: "";
   position: absolute;
   inset: 4px 6px;
   z-index: -1;
   border-radius: 9999px;
-  background: var(--color-accent);
+  background: color-mix(in srgb, var(--color-surface), white 9%);
 }
 .aura-dock--btt .aura-dock__item:nth-child(1) { transform: translateX(150%); }
 .aura-dock--btt .aura-dock__item:nth-child(2) { transform: translateX(50%); }
