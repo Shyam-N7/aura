@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
@@ -9,6 +9,7 @@ import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
 import { getUser } from '../../lib/auth';
+import { uploadImage } from '../../api/uploads';
 import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
@@ -59,11 +60,29 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
     const prev = hit.data;
     setHit(h => ({ ...h, data: { ...h.data, coverImageUrl: t.imageUrl ?? h.data.coverImageUrl } }));
     try {
-      await setPlaylistCover(playlistId, t.id);
+      await setPlaylistCover(playlistId, { trackId: t.id });
       toast('Cover updated.');
     } catch (err) {
       setHit({ data: prev, error: null });
       toast(`Couldn’t set cover — ${err.message}`);
+    }
+  };
+
+  // Upload a custom cover image (resized client-side → Blob → set as cover).
+  const coverFileRef = useRef(null);
+  const uploadCover = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCoverPicking(false);
+    try {
+      toast('Uploading cover…');
+      const { url } = await uploadImage(file, { kind: 'cover' });
+      const { coverImageUrl } = await setPlaylistCover(playlistId, { imageUrl: url });
+      setHit(h => ({ ...h, data: { ...h.data, coverImageUrl } }));
+      toast('Cover updated.');
+    } catch (err) {
+      toast(`Couldn’t upload — ${err.message}`);
     }
   };
 
@@ -383,6 +402,12 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
               <span>choose a cover</span>
               <button type="button" onClick={() => setCoverPicking(false)} aria-label="close">×</button>
             </div>
+            <button type="button" className="aura-dpd__cover-upload" onClick={() => coverFileRef.current?.click()}>
+              + upload your own image
+            </button>
+            <input ref={coverFileRef} type="file" accept="image/jpeg,image/png,image/webp"
+              onChange={uploadCover} hidden/>
+            <div className="aura-dpd__cover-picker-sub">or pick from this playlist</div>
             <div className="aura-dpd__cover-picker-grid">
               {tracks.map(t => (
                 <button key={t.id} type="button" className="aura-dpd__cover-opt"

@@ -197,11 +197,33 @@
   line-height: 1;
   cursor: pointer;
 }
+.aura-dpd__cover-upload {
+  margin: 14px 18px 0;
+  padding: 11px;
+  border: 1px dashed color-mix(in srgb, var(--color-ink), transparent 70%);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.aura-dpd__cover-upload:hover { border-color: var(--color-accent); color: var(--color-ink); }
+.aura-dpd__cover-picker-sub {
+  padding: 14px 18px 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
 .aura-dpd__cover-picker-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  padding: 18px;
+  padding: 12px 18px 18px;
   overflow-y: auto;
 }
 .aura-dpd__cover-opt {

@@ -26,6 +26,7 @@ import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getQuickPicks } from './quickPicks.js';
 import { recordImpressions, pruneOldImpressions } from './impressions.js';
+import { uploadImage } from './uploads.js';
 import { getAutoPlaylists, refreshDueMixes } from './autoPlaylists.js';
 import { hideTrack, unhideTrack, listHidden } from './hiddenTracks.js';
 import { getDiscoverHome } from './discover.js';
@@ -60,6 +61,9 @@ app.use((req, res, next) => {
   // output) — it has its own higher-limit parser on the route, so skip the
   // 64kb guard here for that path only.
   if (req.path === '/api/lyrics-jobs/webhook') return next();
+  // Image uploads send a raw (non-JSON) body parsed on the route itself — skip
+  // both the JSON parser and the 64kb guard here (the route caps size).
+  if (req.path === '/api/uploads/image') return next();
   // Enforce the size ceiling from Content-Length too: the express.json limit
   // below is skipped when the platform pre-parsed the body (exactly the
   // serverless case it's meant to protect), so guard here unconditionally. (#18)
@@ -942,10 +946,27 @@ app.post('/api/playlists/:id/only-me', requireAuth, async (req, res) => {
   }
 });
 
-// Set the cover to one of the playlist's tracks (owner/editor). body: { trackId }.
+// Image upload → Vercel Blob. Raw image body (client resizes first); ?kind=cover|avatar.
+app.post('/api/uploads/image', requireAuth, express.raw({ type: () => true, limit: '2560kb' }), async (req, res) => {
+  try {
+    res.json(await uploadImage(req.userId, {
+      kind: String(req.query.kind ?? ''),
+      contentType: req.headers['content-type'],
+      body: req.body,
+    }));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Set the playlist cover (owner/editor). body: { trackId } OR { imageUrl } (a
+// Blob URL from /api/uploads/image; it takes precedence).
 app.post('/api/playlists/:id/cover', requireAuth, async (req, res) => {
   try {
-    res.json(await setPlaylistCover(req.userId, req.params.id, String(req.body?.trackId ?? '')));
+    res.json(await setPlaylistCover(req.userId, req.params.id, {
+      trackId: req.body?.trackId ? String(req.body.trackId) : undefined,
+      imageUrl: req.body?.imageUrl ? String(req.body.imageUrl) : undefined,
+    }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

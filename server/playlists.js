@@ -72,7 +72,7 @@ export async function listPlaylists(userId) {
   // Owned playlists PLUS those the user collaborates on. `shared` is true when a
   // playlist has any collaborators (owner's view) or the caller is a collaborator.
   const { rows } = await query(`
-    SELECT p.id, p.name, p.description, p.cover_track_id, p.created_at, p.updated_at, p.user_id AS owner_id,
+    SELECT p.id, p.name, p.description, p.cover_track_id, p.cover_image_url, p.created_at, p.updated_at, p.user_id AS owner_id,
            COALESCE(c.cnt, 0)::int  AS track_count,
            COALESCE(cc.ccnt, 0)::int AS collaborator_count,
            t.raw                    AS cover_raw,
@@ -96,7 +96,7 @@ export async function listPlaylists(userId) {
       name:          r.name,
       description:   r.description,
       trackCount:    r.track_count,
-      coverImageUrl: r.cover_raw?.imageUrl ?? null,
+      coverImageUrl: r.cover_image_url ?? r.cover_raw?.imageUrl ?? null,
       updatedAt:     Number(r.updated_at),
       role:          mine ? 'owner' : r.my_role,
       shared:        !mine || r.collaborator_count > 0,
@@ -147,7 +147,7 @@ export async function searchPlaylists(userId, q, { limit = 5 } = {}) {
 // are never exposed on a public link.
 async function loadPlaylistView(id, { role = null, includeCollaborators = true } = {}) {
   const { rows: meta } = await query(
-    `SELECT p.id, p.name, p.description, p.cover_track_id, p.updated_at, p.user_id AS owner_id,
+    `SELECT p.id, p.name, p.description, p.cover_track_id, p.cover_image_url, p.updated_at, p.user_id AS owner_id,
             p.is_public, p.public_id,
             t.raw AS cover_raw, ou.name AS owner_name,
             (SELECT COUNT(*) FROM saved_playlists sp WHERE sp.playlist_id = p.id)::int AS save_count
@@ -204,7 +204,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
     name:          row.name,
     description:   row.description,
     trackCount:    tracks.length,
-    coverImageUrl: row.cover_raw?.imageUrl ?? null,
+    coverImageUrl: row.cover_image_url ?? row.cover_raw?.imageUrl ?? null,   // custom image wins
     updatedAt:     Number(row.updated_at),
     saveCount:     Number(row.save_count ?? 0),
     role,                                   // the caller's role: owner | editor | viewer | null
@@ -319,10 +319,30 @@ export async function addTrackToPlaylist(userId, playlistId, trackId) {
   );
 }
 
-// Set the playlist cover to a chosen track's art (owner/editor). The track must
-// be in the playlist. Custom uploaded images (P3) take precedence over this.
-export async function setPlaylistCover(userId, playlistId, trackId) {
+// Only our own Blob-hosted images may be set as a cover/avatar — reject an
+// arbitrary URL an editor might POST (which would render on the public page).
+export function isBlobUrl(url) {
+  try { return new URL(url).hostname.endsWith('.public.blob.vercel-storage.com'); }
+  catch { return false; }
+}
+
+// Set the playlist cover (owner/editor). Either a custom uploaded image
+// ({ imageUrl } — a Blob URL, which takes precedence) or a track already in the
+// playlist ({ trackId }, which also clears any custom image).
+export async function setPlaylistCover(userId, playlistId, { trackId, imageUrl } = {}) {
   await requireEdit(userId, playlistId);
+  if (imageUrl) {
+    if (!isBlobUrl(imageUrl)) {
+      const err = new Error('invalid image');
+      err.statusCode = 400;
+      throw err;
+    }
+    await pool.query(
+      `UPDATE playlists SET cover_image_url = $2, updated_at = $3 WHERE id = $1`,
+      [playlistId, imageUrl, Date.now()],
+    );
+    return { coverImageUrl: imageUrl };
+  }
   const { rows } = await query(
     `SELECT t.raw FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
      WHERE pt.playlist_id = $1 AND pt.track_id = $2`,
@@ -334,7 +354,7 @@ export async function setPlaylistCover(userId, playlistId, trackId) {
     throw err;
   }
   await pool.query(
-    `UPDATE playlists SET cover_track_id = $2, updated_at = $3 WHERE id = $1`,
+    `UPDATE playlists SET cover_track_id = $2, cover_image_url = NULL, updated_at = $3 WHERE id = $1`,
     [playlistId, trackId, Date.now()],
   );
   return { coverImageUrl: rows[0].raw?.imageUrl ?? null };
@@ -448,7 +468,7 @@ export async function unsavePlaylist(userId, id) {
 // when the owner has since unshared it — the row renders "no longer shared".
 export async function listSavedPlaylists(userId) {
   const { rows } = await query(
-    `SELECT p.id, p.name, p.updated_at, p.user_id AS owner_id, p.is_public,
+    `SELECT p.id, p.name, p.updated_at, p.user_id AS owner_id, p.is_public, p.cover_image_url,
             ou.name AS owner_name,
             COALESCE(tc.cnt, 0)::int AS track_count,
             t.raw AS cover_raw,
@@ -471,7 +491,7 @@ export async function listSavedPlaylists(userId) {
         id:            r.id,
         name:          r.name,
         trackCount:    r.track_count,
-        coverImageUrl: r.cover_raw?.imageUrl ?? null,
+        coverImageUrl: r.cover_image_url ?? r.cover_raw?.imageUrl ?? null,
         updatedAt:     Number(r.updated_at),
         ownerName:     r.owner_name ?? null,
         accessible:    true,

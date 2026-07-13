@@ -108,12 +108,13 @@ export async function setPlaylistOnlyMe(id) {
   return body;   // { isPublic:false, onlyMe:true }
 }
 
-// Set the cover to one of the playlist's tracks. Returns { coverImageUrl }.
-export async function setPlaylistCover(id, trackId) {
+// Set the cover — pass { trackId } (a playlist track's art) or { imageUrl } (an
+// uploaded Blob URL). Returns { coverImageUrl }.
+export async function setPlaylistCover(id, { trackId, imageUrl } = {}) {
   const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/cover`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trackId }),
+    body: JSON.stringify({ trackId, imageUrl }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `couldn't set cover (${res.status})`);

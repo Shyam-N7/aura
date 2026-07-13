@@ -15,8 +15,10 @@ vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/confirm', () => ({ confirm: vi.fn().mockResolvedValue(true) }));
 vi.mock('../../lib/trackContextMenu', () => ({ toggleTrackMenu: vi.fn() }));
 vi.mock('../../lib/auth', () => ({ getUser: () => ({ id: 'me' }) }));
+vi.mock('../../api/uploads', () => ({ uploadImage: vi.fn().mockResolvedValue({ url: 'https://x.public.blob.vercel-storage.com/cover/me-1.jpg' }) }));
 
 import { getPlaylist, removePlaylistCollaborator, setPlaylistOnlyMe, setPlaylistCover } from '../../api/playlists';
+import { uploadImage } from '../../api/uploads';
 import { confirm } from '../../lib/confirm';
 import { DesktopPlaylistDetail } from './DesktopPlaylistDetail';
 
@@ -36,11 +38,13 @@ const view = (over = {}) => ({
   ...over,
 });
 
+let lastRender;
 const renderDetail = async (data = view()) => {
   getPlaylist.mockResolvedValue(data);
   await act(async () => {
-    render(<DesktopPlaylistDetail playlistId="pl1" onClose={vi.fn()} onPlaySequence={vi.fn()}/>);
+    lastRender = render(<DesktopPlaylistDetail playlistId="pl1" onClose={vi.fn()} onPlaySequence={vi.fn()}/>);
   });
+  return lastRender;
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -91,7 +95,17 @@ describe('DesktopPlaylistDetail — attribution & visibility', () => {
     fireEvent.click(await screen.findByText('change cover'));
     expect(screen.getByRole('dialog', { name: 'choose a cover' })).toBeInTheDocument();
     await act(async () => { fireEvent.click(screen.getByTitle('Song One')); });
-    expect(setPlaylistCover).toHaveBeenCalledWith('pl1', 't1');
+    expect(setPlaylistCover).toHaveBeenCalledWith('pl1', { trackId: 't1' });
+  });
+
+  it('uploads a custom cover image and sets it', async () => {
+    const { container } = await renderDetail();
+    fireEvent.click(await screen.findByText('change cover'));
+    const input = container.querySelector('input[type="file"]');
+    const file = new File(['x'], 'cover.jpg', { type: 'image/jpeg' });
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
+    expect(uploadImage).toHaveBeenCalledWith(file, { kind: 'cover' });
+    expect(setPlaylistCover).toHaveBeenCalledWith('pl1', { imageUrl: 'https://x.public.blob.vercel-storage.com/cover/me-1.jpg' });
   });
 
   it('"only you" confirms then hard-revokes sharing', async () => {

@@ -607,6 +607,12 @@ const migrations = [
       CREATE INDEX idx_saved_playlists_playlist ON saved_playlists(playlist_id);
     `);
   },
+  async function v26_playlist_cover_image(client) {
+    // A custom uploaded cover (Vercel Blob URL). Takes precedence over the
+    // cover_track_id art; nullable, so a playlist without one falls back to a
+    // chosen/first track's art exactly as before.
+    await client.query(`ALTER TABLE playlists ADD COLUMN cover_image_url TEXT`);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

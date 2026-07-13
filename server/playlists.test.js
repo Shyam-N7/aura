@@ -161,25 +161,43 @@ describe('save to library', () => {
 });
 
 describe('setPlaylistCover', () => {
-  it('sets the cover to an in-playlist track (owner/editor)', async () => {
+  const BLOB = 'https://abc123.public.blob.vercel-storage.com/cover/u1-deadbeef.jpg';
+
+  it('sets the cover to an in-playlist track (clears any custom image)', async () => {
     access({ ownerId: 'u1' });                                  // requireEdit → owner
     query.mockResolvedValueOnce({ rows: [{ raw: { imageUrl: 'img-x' } }] });   // track-in-playlist
-    const out = await setPlaylistCover('u1', 'pl1', 'trk');
+    const out = await setPlaylistCover('u1', 'pl1', { trackId: 'trk' });
     expect(out).toEqual({ coverImageUrl: 'img-x' });
     const upd = pool.query.mock.calls.find(c => /UPDATE playlists SET cover_track_id/.test(c[0]));
+    expect(upd[0]).toContain('cover_image_url = NULL');
     expect(upd[1]).toEqual(['pl1', 'trk', expect.any(Number)]);
+  });
+
+  it('sets a custom uploaded image (a valid Blob URL)', async () => {
+    access({ ownerId: 'u1' });
+    const out = await setPlaylistCover('u1', 'pl1', { imageUrl: BLOB });
+    expect(out).toEqual({ coverImageUrl: BLOB });
+    const upd = pool.query.mock.calls.find(c => /UPDATE playlists SET cover_image_url/.test(c[0]));
+    expect(upd[1]).toEqual(['pl1', BLOB, expect.any(Number)]);
+  });
+
+  it('rejects a non-Blob image URL (no arbitrary URLs on the public page)', async () => {
+    access({ ownerId: 'u1' });
+    await expect(setPlaylistCover('u1', 'pl1', { imageUrl: 'https://evil.example/x.jpg' }))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(pool.query).not.toHaveBeenCalled();
   });
 
   it('rejects a track that is not in the playlist', async () => {
     access({ ownerId: 'u1' });
     query.mockResolvedValueOnce({ rows: [] });
-    await expect(setPlaylistCover('u1', 'pl1', 'nope')).rejects.toMatchObject({ statusCode: 400 });
+    await expect(setPlaylistCover('u1', 'pl1', { trackId: 'nope' })).rejects.toMatchObject({ statusCode: 400 });
     expect(pool.query.mock.calls.some(c => /UPDATE playlists SET cover_track_id/.test(c[0]))).toBe(false);
   });
 
   it('forbids a viewer from changing the cover', async () => {
     access({ ownerId: 'owner', collabRole: 'viewer' });         // requireEdit → viewer → 403
-    await expect(setPlaylistCover('u2', 'pl1', 'trk')).rejects.toMatchObject({ statusCode: 403 });
+    await expect(setPlaylistCover('u2', 'pl1', { trackId: 'trk' })).rejects.toMatchObject({ statusCode: 403 });
   });
 });
 
