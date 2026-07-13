@@ -44,6 +44,54 @@
   font-weight: 500;
   color: var(--color-ink-soft);
 }
+
+/* Collaborator chips — who else is in this playlist. The owner can tap a chip
+   to remove that person (× reveals on hover/focus); others are read-only. */
+.aura-dpd__collabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.aura-dpd__collab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface), transparent 40%);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+}
+.aura-dpd__collab--removable { cursor: pointer; transition: border-color 140ms ease, color 140ms ease; }
+.aura-dpd__collab--removable:hover { border-color: color-mix(in srgb, var(--color-ink-soft), #e5675f 55%); color: var(--color-ink); }
+.aura-dpd__collab-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 40%),
+    color-mix(in srgb, var(--color-accent), transparent 70%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+}
+.aura-dpd__collab-name { font-weight: 500; color: var(--color-ink); }
+.aura-dpd__collab-role {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-faint);
+}
+.aura-dpd__collab-x { color: var(--color-ink-faint); opacity: 0; transition: opacity 140ms ease; margin-left: -2px; }
+.aura-dpd__collab--removable:hover .aura-dpd__collab-x,
+.aura-dpd__collab--removable:focus-visible .aura-dpd__collab-x { opacity: 1; }
 /* Track count + total runtime, left-aligned above the list (moved out of the
    header eyebrow). Two spans laid out with a gap — no separator dot. */
 .aura-dpd__count {

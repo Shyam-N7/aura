@@ -9,6 +9,7 @@ import { TapHint } from '../components/TapHint';
 import { killHint } from '../lib/tapHint';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import { BackToTop } from '../components/BackToTop';
+import { relTime } from '../utils/relTime';
 import './PlaylistsScreen.css';
 
 // Why home sometimes shows fewer mixes than this screen: home windows the
@@ -149,9 +150,10 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
             </span>}
         <div className="flex-1 min-w-0">
           <div className="aura-pl-row-name truncate">{p.name}</div>
-          <div className="aura-pl-row-count">
+          <div className="aura-pl-row-count truncate">
             {p.trackCount} {p.trackCount === 1 ? 'track' : 'tracks'}
             {p.shared && ` · ${p.role === 'owner' ? 'shared' : 'shared with you'}`}
+            {p.updatedAt ? ` · updated ${relTime(p.updatedAt)}` : ''}
           </div>
         </div>
         <button

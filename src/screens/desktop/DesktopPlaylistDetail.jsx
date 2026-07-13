@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
-import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility } from '../../api/playlists';
+import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility, removePlaylistCollaborator } from '../../api/playlists';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
+import { relTime } from '../../utils/relTime';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
@@ -89,19 +90,41 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
     catch { toast(link); }
   };
 
-  // ── Collaborate invite link (anyone with it can EDIT, after signing in) ──
-  const makeShareLink = async () => {
-    const { token } = await createPlaylistInvite(playlistId);
+  // ── Invite links (recipient signs in, then can edit OR just view) ──
+  const makeShareLink = async (role) => {
+    const { token } = await createPlaylistInvite(playlistId, role ? { role } : {});
     return `${window.location.origin}/playlists?join=${token}`;
   };
-  const copyShareLink = async () => {
+  const copyInviteLink = (role, done) => async () => {
     setShareEl(null);
     try {
-      const link = await makeShareLink();
-      try { await navigator.clipboard.writeText(link); toast('Share link copied — anyone you send it to can edit.'); }
+      const link = await makeShareLink(role);
+      try { await navigator.clipboard.writeText(link); toast(done); }
       catch { toast(link); }
     } catch (err) {
       toast(`Couldn’t create a link — ${err.message}`);
+    }
+  };
+  const copyShareLink = copyInviteLink('editor', 'Edit-invite link copied — they can edit after signing in.');
+  const copyViewInvite = copyInviteLink('viewer', 'View-invite link copied — they can view after signing in.');
+
+  // Owner removes a collaborator by tapping their chip (with a confirm).
+  const dropCollaborator = async (c) => {
+    const ok = await confirm({
+      title: `Remove ${c.name}?`,
+      body:  'They lose access to this playlist. You can re-invite them anytime.',
+      confirmLabel: 'remove',
+      danger: true,
+    });
+    if (!ok) return;
+    const prev = hit.data;
+    setHit(h => ({ ...h, data: { ...h.data, collaborators: h.data.collaborators.filter(x => x.userId !== c.userId) } }));
+    try {
+      await removePlaylistCollaborator(playlistId, c.userId);
+      toast(`Removed ${c.name}.`);
+    } catch (err) {
+      setHit({ data: prev, error: null });
+      toast(`Couldn’t remove — ${err.message}`);
     }
   };
   const shareVia = async () => {
@@ -161,8 +184,24 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
             <h1 className="aura-dpd__hero">{hit.data.name}</h1>
             <div className="aura-dpd__by">
               {isOwner ? 'by you' : `by ${hit.data.ownerName ?? 'someone'}`}
-              {collaborators.length > 0 && ` · ${collaborators.length} ${collaborators.length === 1 ? 'collaborator' : 'collaborators'}`}
+              {updatedAt ? ` · updated ${relTime(updatedAt)}` : ''}
             </div>
+            {collaborators.length > 0 && (
+              <div className="aura-dpd__collabs">
+                {collaborators.map(c => (
+                  <button key={c.userId} type="button"
+                    className={`aura-dpd__collab${isOwner ? ' aura-dpd__collab--removable' : ''}`}
+                    disabled={!isOwner}
+                    onClick={isOwner ? () => dropCollaborator(c) : undefined}
+                    title={isOwner ? `remove ${c.name}` : `${c.name} · can ${c.role === 'viewer' ? 'view' : 'edit'}`}>
+                    <span className="aura-dpd__collab-avatar">{(c.name?.[0] ?? '·').toLowerCase()}</span>
+                    <span className="aura-dpd__collab-name">{c.name}</span>
+                    <span className="aura-dpd__collab-role">{c.role === 'viewer' ? 'can view' : 'can edit'}</span>
+                    {isOwner && <span className="aura-dpd__collab-x" aria-hidden="true">×</span>}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="aura-dpd__actions">
               {tracks.length > 0 && (
                 <button onClick={playAll} className="aura-dpd__play-all">
@@ -197,6 +236,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
                         <button onClick={shareVia} className="aura-pl-menu-item">invite someone to edit…</button>
                       )}
                       <button onClick={copyShareLink} className="aura-pl-menu-item">copy edit-invite link</button>
+                      <button onClick={copyViewInvite} className="aura-pl-menu-item">copy view-invite link</button>
                     </AnchoredMenu>
                   )}
                 </>

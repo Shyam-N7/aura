@@ -82,7 +82,7 @@ export async function listPlaylists(userId) {
     LEFT JOIN tracks t ON t.id = p.cover_track_id
     LEFT JOIN playlist_collaborators col ON col.playlist_id = p.id AND col.user_id = $1
     WHERE p.user_id = $1 OR col.user_id = $1
-    ORDER BY p.created_at DESC
+    ORDER BY p.updated_at DESC
   `, [userId]);
   return rows.map(r => {
     const mine = r.owner_id === userId;
