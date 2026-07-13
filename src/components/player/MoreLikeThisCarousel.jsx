@@ -1,7 +1,7 @@
 import { MonoLabel } from '../primitives';
 import { AlbumArt } from '../album/AlbumArt';
 import { cleanTitle } from '../../utils/title';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import './MoreLikeThisCarousel.css';
 
 // "more like this" — related-songs list for the phone/tablet player
@@ -51,11 +51,11 @@ export function MoreLikeThisCarousel({ status, tracks, error, onPlay }) {
                   </MonoLabel>
                 </span>
               </button>
-              <button type="button" aria-label="more"
+              <button type="button" aria-label="more" data-track-menu-trigger
                 onClick={(e) => {
                   e.stopPropagation();
                   const r = e.currentTarget.getBoundingClientRect();
-                  openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                  toggleTrackMenu({ track: t, x: r.right, y: r.bottom });
                 }}
                 className="aura-mlt__more">
                 <svg width="4" height="16" viewBox="0 0 4 16">

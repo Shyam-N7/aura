@@ -6,7 +6,7 @@ import { listLiked } from '../../api/likes';
 import { useLikes } from '../../hooks/useLikes';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
@@ -116,9 +116,9 @@ export function DesktopLiked({ onClose, onPlaySequence }) {
                     onClick={(e) => {
                       e.stopPropagation();
                       const r = e.currentTarget.getBoundingClientRect();
-                      openTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['like'] } });
+                      toggleTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['like'] } });
                     }}
-                    aria-label="more"
+                    aria-label="more" data-track-menu-trigger
                     className="aura-dpd__more">
                     <svg width="4" height="16" viewBox="0 0 4 16">
                       <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

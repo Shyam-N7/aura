@@ -5,7 +5,7 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getArtist } from '../../api/artists';
 import { cleanTitle } from '../../utils/title';
 import { fmtTime } from '../../utils/fmtTime';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -123,9 +123,9 @@ export function DesktopArtist({
                     onClick={(e) => {
                       e.stopPropagation();
                       const r = e.currentTarget.getBoundingClientRect();
-                      openTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['artist'] } });
+                      toggleTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['artist'] } });
                     }}
-                    aria-label="more"
+                    aria-label="more" data-track-menu-trigger
                     className="aura-dpd__more">
                     <svg width="4" height="16" viewBox="0 0 4 16">
                       <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

@@ -12,7 +12,7 @@ vi.mock('../../api/playlists', () => ({
 }));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/confirm', () => ({ confirm: vi.fn().mockResolvedValue(true) }));
-vi.mock('../../lib/trackContextMenu', () => ({ openTrackMenu: vi.fn() }));
+vi.mock('../../lib/trackContextMenu', () => ({ toggleTrackMenu: vi.fn() }));
 vi.mock('../../lib/auth', () => ({ getUser: () => ({ id: 'me' }) }));
 
 import { getPlaylist, removePlaylistCollaborator, setPlaylistOnlyMe } from '../../api/playlists';
@@ -45,29 +45,29 @@ const renderDetail = async (data = view()) => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('DesktopPlaylistDetail — collaborators', () => {
-  it('renders a chip per collaborator with name + role', async () => {
+  it('renders an avatar cluster + a names caption', async () => {
     await renderDetail();
-    expect(await screen.findByText('ravi')).toBeInTheDocument();
-    expect(screen.getByText('meera')).toBeInTheDocument();
-    expect(screen.getByText('can edit')).toBeInTheDocument();
-    expect(screen.getByText('can view')).toBeInTheDocument();
+    expect(await screen.findByText('ravi, meera')).toBeInTheDocument();   // caption
+    expect(screen.getByTitle('remove ravi')).toBeInTheDocument();          // owner-removable circle
+    expect(screen.getByTitle('remove meera')).toBeInTheDocument();
     expect(screen.getByText(/updated 3h ago/)).toBeInTheDocument();
   });
 
-  it('lets the owner remove a collaborator (confirm → API → chip gone)', async () => {
+  it('lets the owner remove a collaborator (confirm → API → circle gone)', async () => {
     await renderDetail();
-    await act(async () => { fireEvent.click(screen.getByText('ravi')); });
+    await act(async () => { fireEvent.click(screen.getByTitle('remove ravi')); });
     expect(confirm).toHaveBeenCalled();
     expect(removePlaylistCollaborator).toHaveBeenCalledWith('pl1', 'u2');
-    await vi.waitFor(() => expect(screen.queryByText('ravi')).not.toBeInTheDocument());
-    expect(screen.getByText('meera')).toBeInTheDocument();   // the other stays
+    // ravi gone → the single remaining collaborator's caption shows their role.
+    await vi.waitFor(() => expect(screen.queryByTitle('remove ravi')).not.toBeInTheDocument());
+    expect(screen.getByText('meera · can view')).toBeInTheDocument();
   });
 
-  it('shows non-owner chips as read-only (no remove)', async () => {
+  it('shows non-owner circles as read-only (no remove)', async () => {
     await renderDetail(view({ role: 'viewer', canEdit: false }));
-    const chip = (await screen.findByText('ravi')).closest('button');
-    expect(chip).toBeDisabled();
-    fireEvent.click(chip);
+    const av = (await screen.findByTitle('ravi · can edit')).closest('button');
+    expect(av).toBeDisabled();
+    fireEvent.click(av);
     expect(confirm).not.toHaveBeenCalled();
   });
 });
@@ -91,6 +91,6 @@ describe('DesktopPlaylistDetail — attribution & visibility', () => {
     await act(async () => { fireEvent.click(screen.getByText('only you')); });
     expect(confirm).toHaveBeenCalled();
     expect(setPlaylistOnlyMe).toHaveBeenCalledWith('pl1');
-    await vi.waitFor(() => expect(screen.queryByText('ravi')).not.toBeInTheDocument());
+    await vi.waitFor(() => expect(screen.queryByText('ravi, meera')).not.toBeInTheDocument());
   });
 });

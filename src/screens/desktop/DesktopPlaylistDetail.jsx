@@ -9,7 +9,7 @@ import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
 import { getUser } from '../../lib/auth';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -41,6 +41,11 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const isOwner = hit.data?.role === 'owner';
   const shared = hit.data?.shared ?? false;
   const collaborators = hit.data?.collaborators ?? [];
+  // Caption beside the avatar cluster: name + role for one, names (+overflow)
+  // for several.
+  const collabCaption = collaborators.length === 1
+    ? `${collaborators[0].name} · can ${collaborators[0].role === 'viewer' ? 'view' : 'edit'}`
+    : `${collaborators.slice(0, 2).map(c => c.name).join(', ')}${collaborators.length > 2 ? ` +${collaborators.length - 2} more` : ''}`;
   const updatedAt = hit.data?.updatedAt;
   const isPublic = hit.data?.isPublic ?? false;
   const publicId = hit.data?.publicId ?? null;
@@ -215,18 +220,22 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
             </div>
             {collaborators.length > 0 && (
               <div className="aura-dpd__collabs">
-                {collaborators.map(c => (
-                  <button key={c.userId} type="button"
-                    className={`aura-dpd__collab${isOwner ? ' aura-dpd__collab--removable' : ''}`}
-                    disabled={!isOwner}
-                    onClick={isOwner ? () => dropCollaborator(c) : undefined}
-                    title={isOwner ? `remove ${c.name}` : `${c.name} · can ${c.role === 'viewer' ? 'view' : 'edit'}`}>
-                    <span className="aura-dpd__collab-avatar">{(c.name?.[0] ?? '·').toLowerCase()}</span>
-                    <span className="aura-dpd__collab-name">{c.name}</span>
-                    <span className="aura-dpd__collab-role">{c.role === 'viewer' ? 'can view' : 'can edit'}</span>
-                    {isOwner && <span className="aura-dpd__collab-x" aria-hidden="true">×</span>}
-                  </button>
-                ))}
+                <div className="aura-dpd__collab-cluster">
+                  {collaborators.slice(0, 5).map(c => (
+                    <button key={c.userId} type="button"
+                      className={`aura-dpd__collab-av${isOwner ? ' is-removable' : ''}`}
+                      disabled={!isOwner}
+                      onClick={isOwner ? () => dropCollaborator(c) : undefined}
+                      title={isOwner ? `remove ${c.name}` : `${c.name} · can ${c.role === 'viewer' ? 'view' : 'edit'}`}>
+                      {(c.name?.[0] ?? '·').toLowerCase()}
+                      {isOwner && <span className="aura-dpd__collab-av-x" aria-hidden="true">×</span>}
+                    </button>
+                  ))}
+                  {collaborators.length > 5 && (
+                    <span className="aura-dpd__collab-av aura-dpd__collab-av--more">+{collaborators.length - 5}</span>
+                  )}
+                </div>
+                <span className="aura-dpd__collab-cap">{collabCaption}</span>
               </div>
             )}
             <div className="aura-dpd__actions">
@@ -318,12 +327,12 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
                   onClick={(e) => {
                     e.stopPropagation();
                     const r = e.currentTarget.getBoundingClientRect();
-                    openTrackMenu({
+                    toggleTrackMenu({
                       track: t, x: r.right, y: r.bottom,
                       menu: { extras: canEdit ? [{ label: 'remove from this playlist', danger: true, onClick: () => remove(t) }] : [] },
                     });
                   }}
-                  aria-label="more"
+                  aria-label="more" data-track-menu-trigger
                   className="aura-dpd__more">
                   <svg width="4" height="16" viewBox="0 0 4 16">
                     <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

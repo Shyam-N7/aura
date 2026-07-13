@@ -7,7 +7,7 @@ import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { hideTrack } from '../../api/hidden';
 import { invalidateHomeCache } from '../../lib/homeCache';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -147,12 +147,12 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
                   onClick={(e) => {
                     e.stopPropagation();
                     const r = e.currentTarget.getBoundingClientRect();
-                    openTrackMenu({
+                    toggleTrackMenu({
                       track: t, x: r.right, y: r.bottom,
                       menu: { extras: isAutoMix ? [{ label: "don't show this again", onClick: () => hideOne(t) }] : [] },
                     });
                   }}
-                  aria-label="more"
+                  aria-label="more" data-track-menu-trigger
                   className="aura-dpd__more">
                   <svg width="4" height="16" viewBox="0 0 4 16">
                     <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

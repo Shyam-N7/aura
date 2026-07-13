@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ctxOpen, ctxPress, subscribeTrackMenu } from './trackContextMenu';
+import { ctxOpen, ctxPress, toggleTrackMenu, closeTrackMenu, subscribeTrackMenu } from './trackContextMenu';
 
 const track = { id: 't1', title: 'Song' };
 const down = (x = 100, y = 100) => ({ pointerType: 'touch', clientX: x, clientY: y });
@@ -8,6 +8,7 @@ const ctxEvent = () => ({ clientX: 100, clientY: 100, preventDefault: vi.fn() })
 let events, off;
 beforeEach(() => {
   vi.useFakeTimers();
+  closeTrackMenu();   // reset the module's open-track state between specs
   events = [];
   off = subscribeTrackMenu(e => events.push(e));
 });
@@ -22,6 +23,24 @@ describe('ctxOpen (right-click, unchanged contract)', () => {
     ctxOpen(track)(e);
     expect(e.preventDefault).toHaveBeenCalled();
     expect(events).toEqual([{ track, x: 100, y: 100 }]);
+  });
+});
+
+describe('toggleTrackMenu (⋯ trigger)', () => {
+  afterEach(() => closeTrackMenu());
+
+  it('opens on first tap, closes on a second tap of the same track', () => {
+    toggleTrackMenu({ track, x: 5, y: 6 });
+    expect(events.at(-1)).toEqual({ track, x: 5, y: 6 });   // opened
+    toggleTrackMenu({ track, x: 5, y: 6 });
+    expect(events.at(-1)).toBe(null);                        // toggled closed
+  });
+
+  it('switches to another track rather than closing', () => {
+    const other = { id: 't2', title: 'Other' };
+    toggleTrackMenu({ track, x: 5, y: 6 });
+    toggleTrackMenu({ track: other, x: 7, y: 8 });
+    expect(events.at(-1)).toEqual({ track: other, x: 7, y: 8 });   // opened the new one, not closed
   });
 });
 

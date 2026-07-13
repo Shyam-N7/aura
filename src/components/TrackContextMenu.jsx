@@ -13,7 +13,7 @@ const ICONS = {
   playNext: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3 L8 6.5 L2 10 Z M10 3 V10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="currentColor"/></svg>,
   addToQueue: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3 H10 M2 6.5 H8 M2 10 H10 M11 5 V8 M9.5 6.5 H12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   addToPlaylist: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3 H10 M2 6.5 H7 M2 10 H7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="10" cy="9.5" r="2.6" stroke="currentColor" strokeWidth="1.3"/><path d="M10 8 V11 M8.5 9.5 H11.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
-  like: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 11.2 C2 8.4 1 6 2.1 4.2 2.9 3 4.6 3 6.1 4.4 6.5 4.8 6.9 4.4 C8.4 3 10.1 3 10.9 4.2 12 6 11 8.4 6.5 11.2 Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  like: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 11.2 C2 8.4 1 6 2.1 4.2 2.9 3 4.6 3 6.1 4.4 M6.9 4.4 C8.4 3 10.1 3 10.9 4.2 12 6 11 8.4 6.5 11.2 Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   unlike: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 11.2 C2 8.4 1 6 2.1 4.2 2.9 3 4.6 3 6.1 4.4 M6.9 4.4 C8.4 3 10.1 3 10.9 4.2 12 6 11 8.4 6.5 11.2 Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.5 2 L10.5 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
   artist: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M2 11.5 Q6.5 7.5 11 11.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/></svg>,
 };
@@ -63,6 +63,9 @@ export function TrackContextMenu({ onPickLive, onPlayNext, onAddToQueue, onOpenA
     };
     const onDown = (e) => {
       if (e.button === 2) return;
+      // A ⋯ trigger owns its own toggle — don't let this outside-click handler
+      // close on its mousedown (which would then re-open on click = never closes).
+      if (e.target.closest?.('[data-track-menu-trigger]')) return;
       if (!ref.current?.contains(e.target)) closeTrackMenu();
     };
     const onScroll = () => closeTrackMenu();

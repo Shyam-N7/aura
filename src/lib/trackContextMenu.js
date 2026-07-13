@@ -3,6 +3,7 @@
 // TrackContextMenu (mounted in App.jsx) subscribes and renders.
 
 const subscribers = new Set();
+let openTrackId = null;   // which track's menu is currently open (for toggle)
 
 // payload: { track, x, y, menu? }. `menu` tailors the items to the surface:
 //   omit:   array of base-action ids to hide ('play'|'playNext'|'addToQueue'|
@@ -12,11 +13,22 @@ const subscribers = new Set();
 //           divider — e.g. "remove from this playlist", "don't show this again".
 export function openTrackMenu(payload) {
   if (!payload?.track?.id) return;
+  openTrackId = payload.track.id;
   for (const cb of subscribers) cb(payload);
 }
 
 export function closeTrackMenu() {
+  openTrackId = null;
   for (const cb of subscribers) cb(null);
+}
+
+// A ⋯ trigger uses this so a second click on the same row's button CLOSES the
+// menu (standard toggle) instead of re-opening it. The trigger also carries
+// [data-track-menu-trigger] so the menu's outside-click handler ignores it.
+export function toggleTrackMenu(payload) {
+  if (!payload?.track?.id) return;
+  if (openTrackId === payload.track.id) closeTrackMenu();
+  else openTrackMenu(payload);
 }
 
 export function subscribeTrackMenu(cb) {

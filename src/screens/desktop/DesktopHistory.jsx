@@ -6,7 +6,7 @@ import { getHistory, getMusicClockPlays } from '../../api/stats';
 import { summarizeClock } from '../../lib/musicClock';
 import { formatTime12 } from '../../hooks/useNow';
 import { cleanTitle } from '../../utils/title';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
@@ -168,11 +168,11 @@ export function DesktopHistory({ onClose, onPickLive }) {
                           {formatTime12(new Date(t.playedAt))}
                         </MonoLabel>
                       </button>
-                      <button type="button" aria-label="more" className="aura-dpd__more"
+                      <button type="button" aria-label="more" data-track-menu-trigger className="aura-dpd__more"
                         onClick={(e) => {
                           e.stopPropagation();
                           const r = e.currentTarget.getBoundingClientRect();
-                          openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                          toggleTrackMenu({ track: t, x: r.right, y: r.bottom });
                         }}>
                         <svg width="4" height="16" viewBox="0 0 4 16">
                           <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

@@ -7,20 +7,20 @@ vi.mock('../../api/hidden', () => ({ hideTrack: vi.fn().mockResolvedValue(undefi
 vi.mock('../../lib/addToPlaylistSheet', () => ({ openAddToPlaylist: vi.fn() }));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/meta', () => ({ setMeta: vi.fn() }));
-vi.mock('../../lib/trackContextMenu', () => ({ openTrackMenu: vi.fn() }));
+vi.mock('../../lib/trackContextMenu', () => ({ toggleTrackMenu: vi.fn() }));
 vi.mock('../../lib/homeCache', () => ({ invalidateHomeCache: vi.fn() }));
 
 import { getCatalogPlaylist } from '../../api/discover';
 import { hideTrack } from '../../api/hidden';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { invalidateHomeCache } from '../../lib/homeCache';
 
-// The ⋯ opens the shared global menu (openTrackMenu) — this component only
+// The ⋯ opens the shared global menu (toggleTrackMenu) — this component only
 // supplies the row's track + a per-surface `menu` config, so we assert on the
 // config it passes (and invoke the "hide" extra's onClick to drive that flow).
 const menuArgFor = (rowIdx = 0) => {
   fireEvent.click(screen.getAllByLabelText('more')[rowIdx]);
-  return openTrackMenu.mock.calls.at(-1)[0];
+  return toggleTrackMenu.mock.calls.at(-1)[0];
 };
 
 const track = (id, reason) => ({

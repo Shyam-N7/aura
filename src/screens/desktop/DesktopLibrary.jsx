@@ -8,7 +8,7 @@ import { listLiked } from '../../api/likes';
 import { listPlaylists } from '../../api/playlists';
 import { getHistory } from '../../api/stats';
 import { cleanTitle } from '../../utils/title';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { SettingsPanel } from '../../components/SettingsPanel';
 import { TapHint } from '../../components/TapHint';
 import { killHint } from '../../lib/tapHint';
@@ -153,9 +153,9 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onOpenLiked, onOpen
                   onClick={(e) => {
                     e.stopPropagation();
                     const r = e.currentTarget.getBoundingClientRect();
-                    openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                    toggleTrackMenu({ track: t, x: r.right, y: r.bottom });
                   }}
-                  aria-label="more"
+                  aria-label="more" data-track-menu-trigger
                   className="aura-dlib__more">
                   <svg width="4" height="16" viewBox="0 0 4 16">
                     <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

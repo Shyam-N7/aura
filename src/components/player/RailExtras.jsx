@@ -2,7 +2,7 @@ import { MonoLabel } from '../primitives';
 import { AlbumArt } from '../album/AlbumArt';
 import { useRelated } from './useRelated';
 import { cleanTitle } from '../../utils/title';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import './RailExtras.css';
 
 // "more like this" — small shelf of related tracks under NowPlaying in the
@@ -56,11 +56,11 @@ export function RailExtras({ track, onPickLive }) {
                   className="aura-rail-extras__row-play">
                   <svg width="9" height="11" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
                 </button>
-                <button type="button" aria-label="more"
+                <button type="button" aria-label="more" data-track-menu-trigger
                   onClick={(e) => {
                     e.stopPropagation();
                     const r = e.currentTarget.getBoundingClientRect();
-                    openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                    toggleTrackMenu({ track: t, x: r.right, y: r.bottom });
                   }}
                   className="aura-rail-extras__row-more">
                   <svg width="3" height="14" viewBox="0 0 4 16">

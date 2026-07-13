@@ -5,7 +5,7 @@ import { AlbumArt } from '../../components/album/AlbumArt';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { tap } from '../../lib/haptics';
 import { CrumbBack } from './CrumbBack';
 import './DesktopQueue.css';
@@ -261,9 +261,9 @@ export function DesktopQueue({
             // On the queue, play / add-to-queue / play-next are redundant (the
             // song's already queued; drag reorders, the ✕ removes) — so the menu
             // is just the actions that make sense here.
-            openTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['play', 'playNext', 'addToQueue'] } });
+            toggleTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['play', 'playNext', 'addToQueue'] } });
           }}
-          aria-label="more"
+          aria-label="more" data-track-menu-trigger
           className="aura-dq__more">
           <svg width="4" height="16" viewBox="0 0 4 16">
             <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>

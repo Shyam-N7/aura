@@ -14,7 +14,7 @@ import { LANGUAGES } from '../../data/languages';
 import { dropExplicit } from '../../lib/explicit';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
-import { openTrackMenu } from '../../lib/trackContextMenu';
+import { toggleTrackMenu } from '../../lib/trackContextMenu';
 import { SearchSidebar } from './SearchSidebar';
 import '../PlaylistsScreen.css';
 import './DesktopSearch.css';
@@ -168,9 +168,9 @@ export function DesktopSearch({
               onClick={(e) => {
                 e.stopPropagation();
                 const r = e.currentTarget.getBoundingClientRect();
-                openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                toggleTrackMenu({ track: t, x: r.right, y: r.bottom });
               }}
-              aria-label="more" className="aura-dse__more">
+              aria-label="more" data-track-menu-trigger className="aura-dse__more">
               <svg width="4" height="16" viewBox="0 0 4 16">
                 <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
                 <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
