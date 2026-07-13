@@ -6,7 +6,6 @@ import { searchCatalog } from '../../api/catalog';
 import { useDebounced } from '../../hooks/useDebounced';
 import { pushRecentSearch } from '../../hooks/useRecentSearches';
 import { cleanTitle } from '../../utils/title';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { subscribeSearchFocus, requestSearchFocus } from '../../lib/searchFocus';
 import { useSearchQuery, setSearchQuery } from '../../lib/searchQuery';
 import { getSearchResult, setSearchResult, getSearchLang, setSearchLang } from '../../lib/searchCache';
@@ -15,9 +14,7 @@ import { LANGUAGES } from '../../data/languages';
 import { dropExplicit } from '../../lib/explicit';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
-import { toast } from '../../lib/toast';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { SearchSidebar } from './SearchSidebar';
 import '../PlaylistsScreen.css';
 import './DesktopSearch.css';
@@ -47,14 +44,13 @@ function EntityTile({ image, name, sub, badge, round = false, onClick }) {
 // `headerless` (mobile): the top bar IS the search input, so hide this screen's
 // own input + intro labels and keep only the language filters + results below.
 export function DesktopSearch({
-  djName, onClose, onPickLive, onPlayNext, onAddToQueue,
+  djName, onClose, onPickLive,
   onOpenPlaylist, onOpenArtist, onOpenAlbum, onOpenCatalogPlaylist, headerless = false,
   familyMode = false,
 }) {
   const { query: q, setQuery: setQ } = useSearchQuery();
   const [lang, setLang] = useState(getSearchLang());
   const [hit, setHit] = useState(EMPTY);   // last fetched result; set only in the async callback
-  const [menu, setMenu] = useState(null);
   const debouncedQ = useDebounced(q, 300);
   const wantKey = `${debouncedQ}|${lang}`;
   const inputRef = useRef(null);
@@ -123,11 +119,6 @@ export function DesktopSearch({
     return () => ctl.abort();
   }, [debouncedQ, lang, wantKey, trimmed, prefLangs]);
 
-  const playNow      = (t) => { setMenu(null); onPickLive?.(t); };
-  const playNextItem = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue   = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList    = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   // The best match routes to the right page by entity type.
   const openTop = () => {
     const t = view.top;
@@ -165,7 +156,7 @@ export function DesktopSearch({
       <div className="aura-dse__section-title">Songs</div>
       <div className="aura-dse__results">
         {songs.map(t => (
-          <div key={t.id} className="aura-dse__result-wrap" {...ctxPress(t)}>
+          <div key={t.id} className="aura-dse__result-wrap">
             <button onClick={(e) => onPickLive?.(t, e.currentTarget)} className="aura-dse__result">
               <AlbumArt track={t} radius={6} style={{ width: '100%', height: 'auto', aspectRatio: 1 }}/>
               <div>
@@ -174,7 +165,11 @@ export function DesktopSearch({
               </div>
             </button>
             <button type="button"
-              onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                openTrackMenu({ track: t, x: r.right, y: r.bottom });
+              }}
               aria-label="more" className="aura-dse__more">
               <svg width="4" height="16" viewBox="0 0 4 16">
                 <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
@@ -182,14 +177,6 @@ export function DesktopSearch({
                 <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
               </svg>
             </button>
-            {menu?.id === t.id && (
-              <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                <button onClick={() => playNow(t)}      className="aura-pl-menu-item">Play song</button>
-                <button onClick={() => playNextItem(t)} className="aura-pl-menu-item">Play next</button>
-                <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">Add to queue</button>
-                <button onClick={() => addToList(t)}    className="aura-pl-menu-item">Add to playlist</button>
-              </AnchoredMenu>
-            )}
           </div>
         ))}
       </div>
@@ -250,7 +237,7 @@ export function DesktopSearch({
   );
 
   return (
-    <div ref={scrollRef} className={`aura-dse ${headerless ? 'aura-dse--headerless' : ''}`} onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className={`aura-dse ${headerless ? 'aura-dse--headerless' : ''}`}>
       {onClose && !headerless && (
         <button type="button" onClick={() => { setSearchQuery(''); onClose(); }} aria-label="close search" className="aura-dse__close">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">

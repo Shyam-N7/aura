@@ -8,11 +8,8 @@ import { listLiked } from '../../api/likes';
 import { listPlaylists } from '../../api/playlists';
 import { getHistory } from '../../api/stats';
 import { cleanTitle } from '../../utils/title';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { SettingsPanel } from '../../components/SettingsPanel';
-import { toast } from '../../lib/toast';
 import { TapHint } from '../../components/TapHint';
 import { killHint } from '../../lib/tapHint';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -53,14 +50,13 @@ function Shelf({ id, title, peek, open, onToggle, hint, children }) {
   );
 }
 
-export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddToQueue, onOpenLiked, onOpenPlaylists, onOpenHistory, onOpenPlaylistDetail, onOpenLangHub, onOpenJournal, onOpenDna, t, setTweak }) {
+export function DesktopLibrary({ onPlaySequence, onPickLive, onOpenLiked, onOpenPlaylists, onOpenHistory, onOpenPlaylistDetail, onOpenLangHub, onOpenJournal, onOpenDna, t, setTweak }) {
   const { user } = useAuth();
   const [summary, setSummary]     = useState(null);
   const [liked, setLiked]         = useState(null);
   const [playlists, setPlaylists] = useState(null);
   const [history, setHistory]     = useState(null);
   const [loading, setLoading]     = useState(true);
-  const [menu, setMenu]           = useState(null);
   const [openShelf, setOpenShelf] = useState(() => {
     try { return sessionStorage.getItem(SHELF_KEY); } catch { return null; }
   });
@@ -89,11 +85,6 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   const hasAnyData = summary && summary.tracksPlayed > 0;
   const scrollRef = useScrollMemory('library', { ready: !loading });
 
-  const playNow    = (t) => { setMenu(null); onPickLive?.(t); };
-  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addQueue   = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   const profileName  = (user?.name && user.name.trim()) || user?.email || 'you';
   const profileEmail = user?.email || '';
   const initial      = (profileName[0] || '?').toUpperCase();
@@ -101,7 +92,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
   const emptyPeek = <span className="aura-dlib__peek-empty">nothing yet</span>;
 
   return (
-    <div className="aura-dlib" onClick={() => setMenu(null)}>
+    <div className="aura-dlib">
       <div ref={scrollRef} className="aura-dlib__scroll">
         {loading && <AuraLoader label="Loading library"/>}
         {!loading && !hasAnyData && summary && (
@@ -147,7 +138,7 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
               <div className="aura-dlib__empty-row">No liked songs yet. Tap the heart on any track.</div>
             )}
             {liked?.length > 0 && liked.slice(0, 4).map((t, i) => (
-              <div key={t.id} className="aura-dlib__row-wrap" {...ctxPress(t)}>
+              <div key={t.id} className="aura-dlib__row-wrap">
                 <button onClick={(e) => onPlaySequence?.(liked, i, 'your liked', e.currentTarget)}
                   className="aura-dlib__row">
                   <AlbumArt track={t} size={50} radius={4}/>
@@ -159,7 +150,11 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
                   </div>
                 </button>
                 <button type="button"
-                  onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                  }}
                   aria-label="more"
                   className="aura-dlib__more">
                   <svg width="4" height="16" viewBox="0 0 4 16">
@@ -168,14 +163,6 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onPlayNext, onAddTo
                     <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
                   </svg>
                 </button>
-                {menu?.id === t.id && (
-                  <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                    <button onClick={() => playNow(t)}    className="aura-pl-menu-item">play song</button>
-                    <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
-                    <button onClick={() => addQueue(t)}   className="aura-pl-menu-item">add to queue</button>
-                    <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to playlist</button>
-                  </AnchoredMenu>
-                )}
               </div>
             ))}
             {onOpenLiked && liked?.length > 0 && (

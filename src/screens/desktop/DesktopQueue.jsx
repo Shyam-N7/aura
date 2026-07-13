@@ -1,13 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { MonoLabel, AuraMark } from '../../components/primitives';
 import { ShuffleIcon, RepeatIcon } from '../../components/player/PlayerControlIcons';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { tap } from '../../lib/haptics';
-import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import './DesktopQueue.css';
 
@@ -18,17 +17,13 @@ const LONG_PRESS_MS = 450;
 export function DesktopQueue({
   tracks, currentIdx, source,
   onPick, onClose, onRemove, onReorder,
-  onPlayNext, onAddToQueue, onOpenArtist,
   onClear, onShuffle, shuffleActive = false, onSave,
   repeatMode = 'off', onCycleRepeat,
   autoNextBatch, onPlayAutoNext,
 }) {
-  const [menuId, setMenuId] = useState(null);
-  // Per-row ⋯ popover lives in the scrolling queue list. We pin it with
-  // position: fixed and viewport coords so it escapes the scroller's clip
-  // (otherwise rows in the lower half show a popover that spills off the
-  // visible area). flipUp + side anchoring mirrors MoreLikeThisCarousel.
-  const [menuStyle, setMenuStyle] = useState({ top: 0, bottom: 'auto', right: 0, left: 'auto' });
+  // The per-row ⋯ opens the SAME global track menu as every other surface
+  // (play / play next / add to queue / add to playlist / unlike / open artist)
+  // so the queue has full parity — a plain tap, so it never fights drag-reorder.
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [drag, setDrag] = useState(null);
   const [hidePast, setHidePast] = useState(() => {
@@ -191,10 +186,6 @@ export function DesktopQueue({
     setDrag(null);
   };
 
-  const playNext = (t) => { setMenuId(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue = (t) => { setMenuId(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToPlaylistFn = (t) => { setMenuId(null); openAddToPlaylist(t); };
-  const goToArtist = (t) => { setMenuId(null); onOpenArtist?.({ name: t.artist, trackId: t.id }); };
 
   // `i` is the absolute track index (not a per-slice offset). The renderer
   // is called from both the past-tracks slice and the current+future slice
@@ -263,49 +254,23 @@ export function DesktopQueue({
             {fmtTime(t.durationSec)}
           </MonoLabel>
         </button>
-        <div className="relative">
-          <button type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const id = t.id + i;
-              if (menuId === id) { setMenuId(null); return; }
-              const r = e.currentTarget.getBoundingClientRect();
-              const GAP = 6;
-              // Menu is ~150 px tall (3 items + outer padding). Flip up when
-              // there isn't comfortable room below the trigger so past-track
-              // rows (lower half of the visible scroller) don't clip the menu.
-              const flipUp = window.innerHeight - r.bottom < 220;
-              const useLeftAnchor = r.left < window.innerWidth / 2;
-              const horizontal = useLeftAnchor
-                ? { left: r.left, right: 'auto' }
-                : { left: 'auto', right: window.innerWidth - r.right };
-              setMenuStyle(flipUp
-                ? { top: 'auto', bottom: window.innerHeight - r.top + GAP, ...horizontal }
-                : { top: r.bottom + GAP, bottom: 'auto', ...horizontal });
-              setMenuId(id);
-            }}
-            aria-label="more"
-            className="aura-dq__more">
-            <svg width="4" height="16" viewBox="0 0 4 16">
-              <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-              <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-              <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-            </svg>
-          </button>
-          {menuId === t.id + i && createPortal(
-            <div className="aura-pl-menu"
-              style={{ position: 'fixed', ...menuStyle, marginTop: 0 }}
-              onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => playNext(t)}        className="aura-pl-menu-item">Play next</button>
-              <button onClick={() => addToQueue(t)}      className="aura-pl-menu-item">Add to queue</button>
-              <button onClick={() => addToPlaylistFn(t)} className="aura-pl-menu-item">Add to playlist</button>
-              {onOpenArtist && t.artist && (
-                <button onClick={() => goToArtist(t)}    className="aura-pl-menu-item">Go to artist</button>
-              )}
-            </div>,
-            document.body,
-          )}
-        </div>
+        <button type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            // On the queue, play / add-to-queue / play-next are redundant (the
+            // song's already queued; drag reorders, the ✕ removes) — so the menu
+            // is just the actions that make sense here.
+            openTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['play', 'playNext', 'addToQueue'] } });
+          }}
+          aria-label="more"
+          className="aura-dq__more">
+          <svg width="4" height="16" viewBox="0 0 4 16">
+            <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+            <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+            <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+          </svg>
+        </button>
         {!isCurrent && onRemove && (
           <button onClick={() => onRemove(i)} className="aura-dq__x" aria-label="remove">
             <svg width="12" height="12" viewBox="0 0 12 12">
@@ -318,7 +283,7 @@ export function DesktopQueue({
   };
 
   return (
-    <div ref={scrollerRef} className="aura-dq" onClick={() => { setMenuId(null); setOverflowOpen(false); }}>
+    <div ref={scrollerRef} className="aura-dq" onClick={() => setOverflowOpen(false)}>
       <div className="aura-dq__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>

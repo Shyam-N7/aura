@@ -5,26 +5,22 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getCatalogPlaylist } from '../../api/discover';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
 import { hideTrack } from '../../api/hidden';
 import { invalidateHomeCache } from '../../lib/homeCache';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
 import { setMeta } from '../../lib/meta';
-import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
 // Read-only playlist detail at desktop. Same shape as DesktopPlaylistDetail but
 // no remove (it's not a user-owned list). Used for catalog/editorial playlists
 // (fetched by id) AND for auto "from your listening" sets, which already carry
 // their full tracks in memory — pass them via `initialData` to skip the fetch.
-export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, ownerName = null, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
+export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, ownerName = null, onClose, onPlaySequence }) {
   const [hit, setHit]       = useState({ data: initialData, error: null });
-  const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`catalog:${playlistId}`, { ready: status === 'ok' });
 
@@ -57,17 +53,11 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? 'this playlist').toLowerCase());
   };
 
-  const playOne    = (t) => { setMenu(null); onPlayOne?.(t); };
-  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('queued next.'); };
-  const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('added to queue.'); };
-  const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   // "Don't show this again" — only on the made-for-you mixes (a catalog list
   // isn't a pick of ours to apologise for). Removes the row immediately; the
   // undo lives in Settings → hidden songs.
   const isAutoMix = initialData?.kind === 'auto';
   const hideOne = async (t) => {
-    setMenu(null);
     try {
       await hideTrack(t.id);
       setHit(h => h.data
@@ -81,7 +71,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
   };
 
   return (
-    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd">
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -135,7 +125,7 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
+              <div key={t.id} className="aura-dpd__row">
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(tracks, i, (hit.data?.name ?? '').toLowerCase(), e.currentTarget)}
                   className="aura-dpd__main">
@@ -153,29 +143,23 @@ export function DesktopCatalogPlaylistDetail({ playlistId, initialData = null, o
                   </div>
                   <MonoLabel className="text-ink-faint shrink-0 ml-4" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
                 </button>
-                <div className="relative">
-                  <button type="button"
-                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
-                    aria-label="more"
-                    className="aura-dpd__more">
-                    <svg width="4" height="16" viewBox="0 0 4 16">
-                      <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                      <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                      <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                    </svg>
-                  </button>
-                  {menu?.id === t.id && (
-                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={isAutoMix ? 204 : 166}>
-                      <button onClick={() => playOne(t)}    className="aura-pl-menu-item">play song</button>
-                      <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
-                      <button onClick={() => addToQueue(t)} className="aura-pl-menu-item">add to queue</button>
-                      <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to my playlist</button>
-                      {isAutoMix && (
-                        <button onClick={() => hideOne(t)} className="aura-pl-menu-item">don’t show this again</button>
-                      )}
-                    </AnchoredMenu>
-                  )}
-                </div>
+                <button type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openTrackMenu({
+                      track: t, x: r.right, y: r.bottom,
+                      menu: { extras: isAutoMix ? [{ label: "don't show this again", onClick: () => hideOne(t) }] : [] },
+                    });
+                  }}
+                  aria-label="more"
+                  className="aura-dpd__more">
+                  <svg width="4" height="16" viewBox="0 0 4 16">
+                    <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+                    <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+                    <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+                  </svg>
+                </button>
               </div>
             ))}
           </div>

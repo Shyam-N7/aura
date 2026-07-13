@@ -6,14 +6,10 @@ import { getHistory, getMusicClockPlays } from '../../api/stats';
 import { summarizeClock } from '../../lib/musicClock';
 import { formatTime12 } from '../../hooks/useNow';
 import { cleanTitle } from '../../utils/title';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { toast } from '../../lib/toast';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
-import '../PlaylistsScreen.css';        // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';   // reuse the .aura-dpd detail layout + rows
 import './DesktopHistory.css';
 
@@ -76,13 +72,12 @@ function MusicClock({ clock }) {
 
 // Full listening history: a time-of-day "music clock" on top, then every play
 // grouped by local day. Reachable from the library.
-export function DesktopHistory({ onClose, onPickLive, onPlayNext, onAddToQueue }) {
+export function DesktopHistory({ onClose, onPickLive }) {
   const [plays, setPlays]   = useState([]);
   const [nextBefore, setNextBefore] = useState(null);
   const [clock, setClock]   = useState(null);
   const [status, setStatus] = useState('loading');
   const [loadingMore, setLoadingMore] = useState(false);
-  const [menu, setMenu] = useState(null);
   const scrollRef = useScrollMemory('history', { ready: status === 'ok' });
 
   useEffect(() => {
@@ -130,13 +125,8 @@ export function DesktopHistory({ onClose, onPickLive, onPlayNext, onAddToQueue }
     return out;
   }, [plays]);
 
-  const playOne   = (t) => { setMenu(null); onPickLive?.(t); };
-  const playNext  = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addQueue  = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   return (
-    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd">
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -165,7 +155,7 @@ export function DesktopHistory({ onClose, onPickLive, onPlayNext, onAddToQueue }
                 {day.rows.map((t) => {
                   const rowKey = `${t.id}-${t.playedAt}`;
                   return (
-                    <div key={rowKey} className="aura-dpd__row" {...ctxPress(t)}>
+                    <div key={rowKey} className="aura-dpd__row">
                       <button onClick={() => onPickLive?.(t)} className="aura-dpd__main">
                         <AlbumArt track={t} size={50} radius={4}/>
                         <div className="flex-1 min-w-0">
@@ -178,24 +168,18 @@ export function DesktopHistory({ onClose, onPickLive, onPlayNext, onAddToQueue }
                           {formatTime12(new Date(t.playedAt))}
                         </MonoLabel>
                       </button>
-                      <div className="relative">
-                        <button type="button" aria-label="more" className="aura-dpd__more"
-                          onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.k === rowKey ? null : { k: rowKey, el, t }); }}>
-                          <svg width="4" height="16" viewBox="0 0 4 16">
-                            <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                            <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                            <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                          </svg>
-                        </button>
-                        {menu?.k === rowKey && (
-                          <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                            <button onClick={() => playOne(t)}    className="aura-pl-menu-item">play song</button>
-                            <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
-                            <button onClick={() => addQueue(t)}   className="aura-pl-menu-item">add to queue</button>
-                            <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to my playlist</button>
-                          </AnchoredMenu>
-                        )}
-                      </div>
+                      <button type="button" aria-label="more" className="aura-dpd__more"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                        }}>
+                        <svg width="4" height="16" viewBox="0 0 4 16">
+                          <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+                          <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+                          <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+                        </svg>
+                      </button>
                     </div>
                   );
                 })}

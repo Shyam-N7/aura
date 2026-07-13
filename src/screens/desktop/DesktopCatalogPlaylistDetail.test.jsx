@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { render, fireEvent, screen, act } from '@testing-library/react';
 import { DesktopCatalogPlaylistDetail } from './DesktopCatalogPlaylistDetail';
 
 vi.mock('../../api/discover', () => ({ getCatalogPlaylist: vi.fn() }));
@@ -7,12 +7,21 @@ vi.mock('../../api/hidden', () => ({ hideTrack: vi.fn().mockResolvedValue(undefi
 vi.mock('../../lib/addToPlaylistSheet', () => ({ openAddToPlaylist: vi.fn() }));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/meta', () => ({ setMeta: vi.fn() }));
-vi.mock('../../lib/trackContextMenu', () => ({ ctxPress: () => ({}) }));
+vi.mock('../../lib/trackContextMenu', () => ({ openTrackMenu: vi.fn() }));
 vi.mock('../../lib/homeCache', () => ({ invalidateHomeCache: vi.fn() }));
 
 import { getCatalogPlaylist } from '../../api/discover';
 import { hideTrack } from '../../api/hidden';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { invalidateHomeCache } from '../../lib/homeCache';
+
+// The ⋯ opens the shared global menu (openTrackMenu) — this component only
+// supplies the row's track + a per-surface `menu` config, so we assert on the
+// config it passes (and invoke the "hide" extra's onClick to drive that flow).
+const menuArgFor = (rowIdx = 0) => {
+  fireEvent.click(screen.getAllByLabelText('more')[rowIdx]);
+  return openTrackMenu.mock.calls.at(-1)[0];
+};
 
 const track = (id, reason) => ({
   id, title: `Song ${id}`, artist: `Artist ${id}`, language: 'tamil',
@@ -46,11 +55,11 @@ describe('DesktopCatalogPlaylistDetail — made-for-you extensions', () => {
     expect(screen.getByText('7 plays this month')).toBeInTheDocument();
   });
 
-  it("offers “don't show this again” on mix rows and removes the row on hide", async () => {
+  it('offers a hide extra on mix rows and removes the row when it runs', async () => {
     renderDetail();
-    fireEvent.click(screen.getAllByLabelText('more')[0]);
-    const hide = screen.getByText('don’t show this again');
-    fireEvent.click(hide);
+    const hide = menuArgFor(0).menu.extras.find(e => /show this again/.test(e.label));
+    expect(hide).toBeTruthy();
+    await act(async () => { await hide.onClick(); });
     expect(hideTrack).toHaveBeenCalledWith('a');
     await vi.waitFor(() => expect(screen.queryByText('Song a')).not.toBeInTheDocument());
     expect(screen.getByText('Song b')).toBeInTheDocument();
@@ -58,7 +67,7 @@ describe('DesktopCatalogPlaylistDetail — made-for-you extensions', () => {
     expect(invalidateHomeCache).toHaveBeenCalledWith('autoPlaylists', 'quickPicks');
   });
 
-  it('stays inert for catalog playlists — no edition/receipt lines, no hide item', async () => {
+  it('stays inert for catalog playlists — no edition/receipt lines, no hide extra', async () => {
     getCatalogPlaylist.mockResolvedValue({ name: 'editorial hits', tracks: [track('c')] });
     render(
       <DesktopCatalogPlaylistDetail playlistId="pl-1"
@@ -67,8 +76,6 @@ describe('DesktopCatalogPlaylistDetail — made-for-you extensions', () => {
     );
     expect(await screen.findByText('Song c')).toBeInTheDocument();
     expect(screen.queryByText(/edition ·/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByLabelText('more')[0]);
-    expect(screen.queryByText('don’t show this again')).not.toBeInTheDocument();
-    expect(screen.getByText('play song')).toBeInTheDocument();
+    expect(menuArgFor(0).menu.extras).toEqual([]);   // no hide for a catalog list
   });
 });

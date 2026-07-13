@@ -4,6 +4,12 @@
 
 const subscribers = new Set();
 
+// payload: { track, x, y, menu? }. `menu` tailors the items to the surface:
+//   omit:   array of base-action ids to hide ('play'|'playNext'|'addToQueue'|
+//           'addToPlaylist'|'like'|'artist') — e.g. omit 'addToQueue' in the
+//           queue, or 'artist' on the artist page.
+//   extras: surface-specific items [{ label, onClick, danger? }] shown below a
+//           divider — e.g. "remove from this playlist", "don't show this again".
 export function openTrackMenu(payload) {
   if (!payload?.track?.id) return;
   for (const cb of subscribers) cb(payload);

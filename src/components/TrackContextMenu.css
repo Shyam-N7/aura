@@ -44,8 +44,13 @@
 }
 .aura-ctx-menu__item-icon {
   display: inline-flex;
+  justify-content: center;
+  width: 13px;         /* fixed so labels align even for icon-less (extra) items */
   opacity: 0.7;
 }
+
+.aura-ctx-menu__item--danger { color: color-mix(in srgb, var(--color-ink-soft), #e5675f 55%); }
+.aura-ctx-menu__item--danger:hover { color: #e5675f; }
 
 .aura-ctx-menu__sep {
   height: 1px;

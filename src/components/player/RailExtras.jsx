@@ -1,31 +1,23 @@
-import { useState } from 'react';
 import { MonoLabel } from '../primitives';
 import { AlbumArt } from '../album/AlbumArt';
-import { AnchoredMenu } from '../AnchoredMenu';
 import { useRelated } from './useRelated';
 import { cleanTitle } from '../../utils/title';
-import { toast } from '../../lib/toast';
-import { ctxPress } from '../../lib/trackContextMenu';
-import '../../screens/PlaylistsScreen.css';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import './RailExtras.css';
 
 // "more like this" — small shelf of related tracks under NowPlaying in the
 // right rail. Each row has a hover-revealed play disc + ⋯ overflow menu.
-export function RailExtras({ track, onPickLive, onPlayNext, onAddToQueue, onOpenRailSheet }) {
+export function RailExtras({ track, onPickLive }) {
   const trackId = track?.id;
   const trackLang = track?.language;
   const { status, tracks, error } = useRelated(trackId, trackLang);
-  const [menu, setMenu] = useState(null);
 
   if (!track) return null;
 
-  const playNow    = (t) => { setMenu(null); onPickLive?.(t); };
-  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('queued next.'); };
-  const addQueue   = (t) => { setMenu(null); onAddToQueue?.(t); toast('added to queue.'); };
-  const addToList  = (t) => { setMenu(null); onOpenRailSheet?.(t); };
+  const playNow = (t) => onPickLive?.(t);
 
   return (
-    <div className="aura-rail-extras" onClick={() => setMenu(null)}>
+    <div className="aura-rail-extras">
       <div className="aura-rail-extras__divider"/>
       <div className="aura-rail-extras__section">
         <MonoLabel className="text-ink-faint mb-2 block" size={9}>more like this</MonoLabel>
@@ -49,7 +41,7 @@ export function RailExtras({ track, onPickLive, onPlayNext, onAddToQueue, onOpen
         {status === 'ok' && tracks.length > 0 && (
           <div className="aura-rail-extras__list">
             {tracks.slice(0, 6).map(t => (
-              <div key={t.id} className="aura-rail-extras__row-wrap" {...ctxPress(t)}>
+              <div key={t.id} className="aura-rail-extras__row-wrap">
                 <button onClick={() => playNow(t)} className="aura-rail-extras__row">
                   <AlbumArt track={t} size={36} radius={4}/>
                   <div className="flex-1 min-w-0">
@@ -65,7 +57,11 @@ export function RailExtras({ track, onPickLive, onPlayNext, onAddToQueue, onOpen
                   <svg width="9" height="11" viewBox="0 0 12 14"><path d="M0 0 L12 7 L0 14 Z" fill="currentColor"/></svg>
                 </button>
                 <button type="button" aria-label="more"
-                  onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                  }}
                   className="aura-rail-extras__row-more">
                   <svg width="3" height="14" viewBox="0 0 4 16">
                     <circle cx="2" cy="3"  r="1.4" fill="currentColor"/>
@@ -73,14 +69,6 @@ export function RailExtras({ track, onPickLive, onPlayNext, onAddToQueue, onOpen
                     <circle cx="2" cy="13" r="1.4" fill="currentColor"/>
                   </svg>
                 </button>
-                {menu?.id === t.id && (
-                  <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                    <button onClick={() => playNow(t)}    className="aura-pl-menu-item">play song</button>
-                    <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
-                    <button onClick={() => addQueue(t)}   className="aura-pl-menu-item">add to queue</button>
-                    <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to playlist</button>
-                  </AnchoredMenu>
-                )}
               </div>
             ))}
           </div>

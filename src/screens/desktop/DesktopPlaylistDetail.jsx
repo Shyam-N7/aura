@@ -7,8 +7,7 @@ import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxPress } from '../../lib/trackContextMenu';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -16,9 +15,8 @@ import { BackToTop } from '../../components/BackToTop';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
-export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
+export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const [hit, setHit]     = useState({ data: null, error: null });
-  const [menu, setMenu] = useState(null);
   const [shareEl, setShareEl] = useState(null);   // Share button → options menu anchor
   const [shareBusy, setShareBusy] = useState(false); // public-link toggle in flight
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
@@ -117,7 +115,6 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
   };
 
   const remove = async (track) => {
-    setMenu(null);
     const ok = await confirm({
       title: `Remove “${track.title}”?`,
       body:  'This only removes it from this playlist. Your likes are untouched.',
@@ -139,17 +136,12 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
     }
   };
 
-  const playOne = (track) => { setMenu(null); onPlayOne?.(track); };
-  const playNext = (track) => { setMenu(null); onPlayNext?.(track); toast('Queued next.'); };
-  const addToQueue = (track) => { setMenu(null); onAddToQueue?.(track); toast('Added to queue.'); };
-  const addElsewhere = (track) => { setMenu(null); openAddToPlaylist(track); };
-
   const playAll = () => {
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? 'this playlist').toLowerCase());
   };
 
   return (
-    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd">
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -231,7 +223,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
+              <div key={t.id} className="aura-dpd__row">
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(tracks, i, (hit.data?.name ?? '').toLowerCase(), e.currentTarget)}
                   className="aura-dpd__main">
@@ -244,31 +236,23 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence, onP
                   </div>
                   <MonoLabel className="text-ink-faint shrink-0 ml-4" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
                 </button>
-                <div className="relative">
-                  <button type="button"
-                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
-                    aria-label="more"
-                    className="aura-dpd__more">
-                    <svg width="4" height="16" viewBox="0 0 4 16">
-                      <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                      <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                      <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                    </svg>
-                  </button>
-                  {menu?.id === t.id && (
-                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={206}>
-                      <button onClick={() => playOne(t)}      className="aura-pl-menu-item">play song</button>
-                      <button onClick={() => playNext(t)}     className="aura-pl-menu-item">play next</button>
-                      <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">add to queue</button>
-                      <button onClick={() => addElsewhere(t)} className="aura-pl-menu-item">add to another playlist</button>
-                      {canEdit && (
-                        <button onClick={() => remove(t)} className="aura-pl-menu-item aura-pl-menu-item--danger">
-                          remove from this playlist
-                        </button>
-                      )}
-                    </AnchoredMenu>
-                  )}
-                </div>
+                <button type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openTrackMenu({
+                      track: t, x: r.right, y: r.bottom,
+                      menu: { extras: canEdit ? [{ label: 'remove from this playlist', danger: true, onClick: () => remove(t) }] : [] },
+                    });
+                  }}
+                  aria-label="more"
+                  className="aura-dpd__more">
+                  <svg width="4" height="16" viewBox="0 0 4 16">
+                    <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+                    <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+                    <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+                  </svg>
+                </button>
               </div>
             ))}
           </div>

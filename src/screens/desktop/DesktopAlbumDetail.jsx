@@ -5,22 +5,17 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getAlbum } from '../../api/catalog';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
-import { toast } from '../../lib/toast';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
 import { setMeta } from '../../lib/meta';
-import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css'; // reuse the .aura-dpd detail layout
 
 // Album / movie detail. Indian-cinema soundtracks are albums with isMovie; the
 // eyebrow names it a movie or album. Same layout as the catalog playlist detail.
-export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne, onPlayNext, onAddToQueue }) {
+export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence }) {
   const [hit, setHit] = useState({ data: null, error: null });
-  const [menu, setMenu] = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
 
   useEffect(() => {
@@ -52,16 +47,11 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
     if (tracks.length) onPlaySequence(tracks, 0, (hit.data?.name ?? `this ${kind}`).toLowerCase());
   };
 
-  const playOne    = (t) => { setMenu(null); onPlayOne?.(t); };
-  const playNext   = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList  = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   // Multiple artists arrive as a comma-joined string — show only the main one.
   const mainArtist = (hit.data?.artist ?? '').split(',')[0].trim();
 
   return (
-    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd">
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -96,7 +86,7 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
               <span>{fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {tracks.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
+              <div key={t.id} className="aura-dpd__row">
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(tracks, i, (hit.data?.name ?? '').toLowerCase(), e.currentTarget)}
                   className="aura-dpd__main">
@@ -109,25 +99,19 @@ export function DesktopAlbumDetail({ albumId, onClose, onPlaySequence, onPlayOne
                   </div>
                   <MonoLabel className="text-ink-faint shrink-0 ml-4" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
                 </button>
-                <div className="relative">
-                  <button type="button"
-                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
-                    aria-label="more" className="aura-dpd__more">
-                    <svg width="4" height="16" viewBox="0 0 4 16">
-                      <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                      <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                      <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                    </svg>
-                  </button>
-                  {menu?.id === t.id && (
-                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                      <button onClick={() => playOne(t)}    className="aura-pl-menu-item">play song</button>
-                      <button onClick={() => playNext(t)}   className="aura-pl-menu-item">play next</button>
-                      <button onClick={() => addToQueue(t)} className="aura-pl-menu-item">add to queue</button>
-                      <button onClick={() => addToList(t)}  className="aura-pl-menu-item">add to my playlist</button>
-                    </AnchoredMenu>
-                  )}
-                </div>
+                <button type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openTrackMenu({ track: t, x: r.right, y: r.bottom });
+                  }}
+                  aria-label="more" className="aura-dpd__more">
+                  <svg width="4" height="16" viewBox="0 0 4 16">
+                    <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+                    <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+                    <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+                  </svg>
+                </button>
               </div>
             ))}
           </div>

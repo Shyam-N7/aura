@@ -6,10 +6,7 @@ import { listLiked } from '../../api/likes';
 import { useLikes } from '../../hooks/useLikes';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
-import { toast } from '../../lib/toast';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
@@ -20,10 +17,9 @@ import './DesktopPlaylistDetail.css';
 // DesktopPlaylistDetail (Batch 25): hero stays parked, only the row list
 // scrolls. Liked is effectively a single-purpose playlist so we reuse the
 // `aura-dpd__*` classnames for zero duplication.
-export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, onAddToQueue }) {
+export function DesktopLiked({ onClose, onPlaySequence }) {
   const [hit, setHit] = useState({ data: null, error: null });
-  const [menu, setMenu] = useState(null);
-  const { isLiked } = useLikes();
+  const { isLiked, ready } = useLikes();
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory('liked', { ready: status === 'ok' });
 
@@ -38,20 +34,18 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
     return () => ctl.abort();
   }, []);
 
-  // Keep the local list in sync as the user unlikes from this screen.
-  const liked = (hit.data ?? []).filter(t => isLiked(t.id));
+  // Show the server's liked list, dropping a row the moment it's unliked here.
+  // Guard on `ready`: until the client like-set has booted, isLiked() is empty
+  // and would hide everything (the "liked looks empty" race) — so show the
+  // server rows as-is until then.
+  const liked = (hit.data ?? []).filter(t => !ready || isLiked(t.id));
 
   const playAll = () => {
     if (liked.length) onPlaySequence(liked, 0, 'your liked');
   };
 
-  const playOne     = (t) => { setMenu(null); onPickLive?.(t); };
-  const playNext    = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue  = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList   = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   return (
-    <div ref={scrollRef} className="aura-dpd" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd">
       <div className="aura-dpd__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -103,7 +97,7 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
               <span>{fmtRuntime(liked.reduce((s, t) => s + (t.durationSec || 0), 0))}</span>
             </div>
             {liked.map((t, i) => (
-              <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
+              <div key={t.id} className="aura-dpd__row">
                 <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                 <button onClick={(e) => onPlaySequence(liked, i, 'your liked', e.currentTarget)}
                   className="aura-dpd__main">
@@ -119,7 +113,11 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
                 <div className="relative flex items-center gap-2">
                   <HeartButton trackId={t.id} size={18}/>
                   <button type="button"
-                    onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      openTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['like'] } });
+                    }}
                     aria-label="more"
                     className="aura-dpd__more">
                     <svg width="4" height="16" viewBox="0 0 4 16">
@@ -128,14 +126,6 @@ export function DesktopLiked({ onClose, onPlaySequence, onPickLive, onPlayNext, 
                       <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
                     </svg>
                   </button>
-                  {menu?.id === t.id && (
-                    <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                      <button onClick={() => playOne(t)}     className="aura-pl-menu-item">play song</button>
-                      <button onClick={() => playNext(t)}    className="aura-pl-menu-item">play next</button>
-                      <button onClick={() => addToQueue(t)}  className="aura-pl-menu-item">add to queue</button>
-                      <button onClick={() => addToList(t)}   className="aura-pl-menu-item">add to playlist</button>
-                    </AnchoredMenu>
-                  )}
                 </div>
               </div>
             ))}

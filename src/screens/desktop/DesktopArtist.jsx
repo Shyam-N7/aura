@@ -5,10 +5,7 @@ import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getArtist } from '../../api/artists';
 import { cleanTitle } from '../../utils/title';
 import { fmtTime } from '../../utils/fmtTime';
-import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxPress } from '../../lib/trackContextMenu';
-import { AnchoredMenu } from '../../components/AnchoredMenu';
-import { toast } from '../../lib/toast';
+import { openTrackMenu } from '../../lib/trackContextMenu';
 import { CrumbBack } from './CrumbBack';
 import { SectionHeader } from './SectionHeader';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -19,10 +16,9 @@ import './DesktopPlaylistDetail.css';
 import './DesktopArtist.css';
 
 export function DesktopArtist({
-  artistKey, onClose, onPickLive, onPlaySequence, onPlayNext, onAddToQueue, onOpenArtist, onOpenAlbum,
+  artistKey, onClose, onPlaySequence, onOpenArtist, onOpenAlbum,
 }) {
   const [hit, setHit]       = useState({ data: null, error: null });
-  const [menu, setMenu]     = useState(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`artist:${artistKey?.id ?? artistKey?.name ?? ''}`, { ready: status === 'ok' });
 
@@ -57,16 +53,11 @@ export function DesktopArtist({
     if (tracks.length) onPlaySequence?.(tracks, 0, `${artist.name.toLowerCase()} · top tracks`);
   };
 
-  const playOne     = (t) => { setMenu(null); onPickLive?.(t); };
-  const playNextItem = (t) => { setMenu(null); onPlayNext?.(t); toast('Queued next.'); };
-  const addToQueue  = (t) => { setMenu(null); onAddToQueue?.(t); toast('Added to queue.'); };
-  const addToList   = (t) => { setMenu(null); openAddToPlaylist(t); };
-
   // Use `aura-dpd` classnames for the body so it inherits the existing
   // playlist-detail styling (hero pill, track rows, ⋯ menus). DesktopArtist.css
   // only adds the artist-specific bits (avatar, album grid, similar row).
   return (
-    <div ref={scrollRef} className="aura-dpd aura-dar" onClick={() => setMenu(null)}>
+    <div ref={scrollRef} className="aura-dpd aura-dar">
       <div className="aura-dpd__header aura-dar__header">
         <div className="flex items-center gap-3.5">
           <CrumbBack onClick={onClose}/>
@@ -115,7 +106,7 @@ export function DesktopArtist({
             <SectionHeader title="Top tracks" sub="Most-played from this artist" large/>
             <div className="aura-dpd__list">
               {tracks.slice(0, 10).map((t, i) => (
-                <div key={t.id} className="aura-dpd__row" {...ctxPress(t)}>
+                <div key={t.id} className="aura-dpd__row">
                   <div className="aura-dpd__idx">{String(i + 1).padStart(2, '0')}</div>
                   <button onClick={(e) => onPlaySequence?.(tracks, i, `${artist.name.toLowerCase()} · top tracks`, e.currentTarget)}
                     className="aura-dpd__main">
@@ -128,26 +119,20 @@ export function DesktopArtist({
                     </div>
                     <MonoLabel className="text-ink-faint shrink-0 ml-4" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
                   </button>
-                  <div className="relative">
-                    <button type="button"
-                      onClick={(e) => { e.stopPropagation(); const el = e.currentTarget; setMenu(m => m?.id === t.id ? null : { id: t.id, el }); }}
-                      aria-label="more"
-                      className="aura-dpd__more">
-                      <svg width="4" height="16" viewBox="0 0 4 16">
-                        <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
-                        <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
-                        <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
-                      </svg>
-                    </button>
-                    {menu?.id === t.id && (
-                      <AnchoredMenu anchorEl={menu.el} onClose={() => setMenu(null)} estHeight={166}>
-                        <button onClick={() => playOne(t)}      className="aura-pl-menu-item">play song</button>
-                        <button onClick={() => playNextItem(t)} className="aura-pl-menu-item">play next</button>
-                        <button onClick={() => addToQueue(t)}   className="aura-pl-menu-item">add to queue</button>
-                        <button onClick={() => addToList(t)}    className="aura-pl-menu-item">add to playlist</button>
-                      </AnchoredMenu>
-                    )}
-                  </div>
+                  <button type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      openTrackMenu({ track: t, x: r.right, y: r.bottom, menu: { omit: ['artist'] } });
+                    }}
+                    aria-label="more"
+                    className="aura-dpd__more">
+                    <svg width="4" height="16" viewBox="0 0 4 16">
+                      <circle cx="2" cy="3"  r="1.6" fill="currentColor"/>
+                      <circle cx="2" cy="8"  r="1.6" fill="currentColor"/>
+                      <circle cx="2" cy="13" r="1.6" fill="currentColor"/>
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>

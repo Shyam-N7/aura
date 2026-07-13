@@ -7,6 +7,7 @@ import { listLikedIds, likeTrack as apiLike, unlikeTrack as apiUnlike } from '..
 const likedIds = new Set();
 const subscribers = new Set();
 let booted = false;
+let ready = false;   // the id set has loaded at least once (see useLikes consumers)
 
 function notify() {
   for (const cb of subscribers) cb();
@@ -19,6 +20,7 @@ async function boot() {
     const ids = await listLikedIds();
     likedIds.clear();
     for (const id of ids) likedIds.add(id);
+    ready = true;
     notify();
   } catch (err) {
     console.warn('[likes] boot failed', err.message);
@@ -56,5 +58,8 @@ export function useLikes() {
     subscribers.add(cb);
     return () => { subscribers.delete(cb); };
   }, []);
-  return { isLiked, like, unlike };
+  // `ready` flips true after the first successful load — consumers that filter a
+  // server list through isLiked() must wait for it, or they'd render empty while
+  // the set is still booting (the liked screen looked empty for exactly this).
+  return { isLiked, like, unlike, ready };
 }
