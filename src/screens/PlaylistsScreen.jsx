@@ -347,15 +347,15 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
                 onClick={() => p.accessible && onOpenPlaylist?.(p.id)}
                 disabled={!p.accessible}
                 className={`aura-lib-pl-card flex items-center gap-3.5 w-full${p.accessible ? '' : ' opacity-55'}`}>
-                {p.coverImageUrl
+                {p.accessible && p.coverImageUrl
                   ? <img src={p.coverImageUrl} alt="" className="aura-lib-pl-cover" loading="lazy"/>
-                  : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">{p.name?.[0]?.toUpperCase() ?? '·'}</span>}
+                  : <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">{p.accessible ? (p.name?.[0]?.toUpperCase() ?? '·') : '·'}</span>}
                 <div className="flex-1 min-w-0 text-left">
-                  <div className="aura-pl-row-name truncate">{p.name}</div>
+                  <div className="aura-pl-row-name truncate">{p.accessible ? p.name : 'no longer shared'}</div>
                   <div className="aura-pl-row-count truncate">
                     {p.accessible
                       ? `${p.trackCount} ${p.trackCount === 1 ? 'track' : 'tracks'}${p.ownerName ? ` · by ${p.ownerName}` : ''}`
-                      : 'no longer shared'}
+                      : 'the owner stopped sharing this'}
                   </div>
                 </div>
               </button>

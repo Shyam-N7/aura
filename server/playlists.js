@@ -181,9 +181,12 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
       // is a view-only teaser, not free unauthenticated streaming.
       streamUrl:   role ? r.stream_url : null,
       imageUrl:    r.raw?.imageUrl ?? null,
-      // Who added this track — members only; never exposed on the public link.
-      // Legacy rows (pre-attribution) have no added_by → null, no chip shown.
-      addedBy:     (role && r.added_by) ? { userId: r.added_by, name: r.added_by_name } : null,
+      // Who added this track — MEMBERS ONLY (gate on includeCollaborators, the
+      // membership signal, NOT on role: a public-link viewer has role 'viewer'
+      // but is not a member, and must never learn collaborator identities). Also
+      // covers the anonymous /p/ path (includeCollaborators false there). Legacy
+      // rows (pre-attribution) have no added_by → null, no chip shown.
+      addedBy:     (includeCollaborators && r.added_by) ? { userId: r.added_by, name: r.added_by_name } : null,
     }));
   const row = meta[0];
   let collaborators = [];
@@ -439,15 +442,20 @@ export async function listSavedPlaylists(userId) {
      ORDER BY sp.saved_at DESC`,
     [userId],
   );
-  return rows.map(r => ({
-    id:            r.id,
-    name:          r.name,
-    trackCount:    r.track_count,
-    coverImageUrl: r.cover_raw?.imageUrl ?? null,
-    updatedAt:     Number(r.updated_at),
-    ownerName:     r.owner_name ?? null,
-    accessible:    r.accessible,
-  }));
+  // An inaccessible (since-unshared) playlist leaks nothing current — the row
+  // renders "no longer shared" from the flag alone, so don't ship its live
+  // name/count/cover/owner (which may have changed after it was revoked).
+  return rows.map(r => r.accessible
+    ? {
+        id:            r.id,
+        name:          r.name,
+        trackCount:    r.track_count,
+        coverImageUrl: r.cover_raw?.imageUrl ?? null,
+        updatedAt:     Number(r.updated_at),
+        ownerName:     r.owner_name ?? null,
+        accessible:    true,
+      }
+    : { id: r.id, name: null, trackCount: 0, coverImageUrl: null, updatedAt: null, ownerName: null, accessible: false });
 }
 
 // "Only you" — the hard-private state. Owner-only: revoke every collaborator,

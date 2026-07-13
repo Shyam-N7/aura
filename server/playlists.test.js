@@ -148,25 +148,29 @@ describe('save to library', () => {
     await expect(savePlaylist('u2', 'pl1')).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it('lists saved playlists carrying an accessibility flag', async () => {
+  it('lists saved playlists carrying an accessibility flag, leaking no metadata of a revoked one', async () => {
     query.mockResolvedValueOnce({ rows: [
       { id: 'pl1', name: 'A', updated_at: '1', owner_id: 'o', is_public: true, owner_name: 'x', track_count: 3, cover_raw: null, accessible: true },
-      { id: 'pl2', name: 'B', updated_at: '1', owner_id: 'o', is_public: false, owner_name: 'x', track_count: 0, cover_raw: null, accessible: false },
+      { id: 'pl2', name: 'Renamed-Secret', updated_at: '9', owner_id: 'o', is_public: false, owner_name: 'x', track_count: 7, cover_raw: { imageUrl: 'c' }, accessible: false },
     ] });
     const out = await listSavedPlaylists('u2');
-    expect(out.map(p => p.accessible)).toEqual([true, false]);
+    expect(out[0]).toMatchObject({ name: 'A', trackCount: 3, accessible: true });
+    // The since-unshared one ships only id + the flag — no current name/count/cover/owner.
+    expect(out[1]).toEqual({ id: 'pl2', name: null, trackCount: 0, coverImageUrl: null, updatedAt: null, ownerName: null, accessible: false });
   });
 });
 
 describe('public playlists are viewable by any signed-in user', () => {
-  it('grants a streaming viewer read, but not the member list', async () => {
+  it('grants a streaming viewer read, but leaks no member identities', async () => {
     query.mockResolvedValueOnce({ rows: [{ owner_id: 'owner', is_public: true, collab_role: null }] });   // getAccess → viewer, member:false
     query.mockResolvedValueOnce({ rows: [{ id: 'pl1', name: 'x', is_public: true, public_id: 'pub', owner_id: 'owner', owner_name: 'o', save_count: 2 }] });
-    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', stream_url: 's', duration_sec: 200, raw: null, added_by: null, added_by_name: null }] });
+    // NOTE added_by is populated — a non-member must STILL not see it (the leak the review caught).
+    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', stream_url: 's', duration_sec: 200, raw: null, added_by: 'collab', added_by_name: 'ravi' }] });
     const view = await getPlaylist('u2', 'pl1');
     expect(view.role).toBe('viewer');
     expect(view.tracks[0].streamUrl).toBe('s');   // authed viewer gets streams (unlike /p/)
-    expect(view.collaborators).toEqual([]);        // never exposed to a non-member
+    expect(view.tracks[0].addedBy).toBeNull();     // per-track attribution hidden from a non-member
+    expect(view.collaborators).toEqual([]);        // member list hidden too
     expect(view.saveCount).toBe(2);
   });
 });
