@@ -310,7 +310,9 @@ export function DesktopHome({
                 <div>
                   <div className="aura-dh__playlist-name">{a.name}</div>
                   <MonoLabel className="text-ink-soft mt-1 block truncate" size={8}>
-                    {(a.editionLabel ?? a.description) + (a.refreshing ? ' · refreshing…' : '')}
+                    {(a.editionLabel ?? a.description)
+                      + (a.cadence ? ` · ${a.cadence}` : '')
+                      + (a.refreshing ? ' · refreshing…' : '')}
                   </MonoLabel>
                 </div>
               </button>

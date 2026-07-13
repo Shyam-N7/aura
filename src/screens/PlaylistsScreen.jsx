@@ -225,6 +225,7 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
                   <div className="aura-pl-row-name truncate">{a.name}</div>
                   <div className="aura-pl-row-count truncate">
                     {(a.editionLabel ?? a.description)
+                      + (a.cadence ? ` · ${a.cadence}` : '')
                       + (a.refreshing ? ' · refreshing…' : '')
                       + (DAYPART_NOTE[a.mixKey] ? ` · ${DAYPART_NOTE[a.mixKey]}` : '')}
                   </div>

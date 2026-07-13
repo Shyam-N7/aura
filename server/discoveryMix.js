@@ -85,7 +85,8 @@ function shuffleWithSpacing(list) {
 // Build one edition. Returns { tracks: [{trackId, reason}], meta } — the caller
 // (autoPlaylists) owns storage, gating and MIN_SET policy. Returns null when the
 // candidate pool is too thin to be honest about.
-export async function buildDiscoveryMix(userId, { tzOffset = 0, size = DISCOVERY_SIZE } = {}) {
+export async function buildDiscoveryMix(userId, { tzOffset = 0, size = DISCOVERY_SIZE, excludeIds = [] } = {}) {
+  if (size <= 0) return null;   // carryover already filled the edition
   // 1. Language shares → quotas proportional to real listening.
   const affinity = await getLangAffinity(userId);
   let kept = affinity.filter(a => a.pct >= MIN_LANG_PCT && a.language).slice(0, MAX_LANGS);
@@ -134,6 +135,7 @@ export async function buildDiscoveryMix(userId, { tzOffset = 0, size = DISCOVERY
     ...playedRes.rows.map(r => r.track_id),
     ...likedRes.rows.map(r => r.track_id),
     ...plRes.rows.map(r => r.track_id),
+    ...excludeIds,   // carried-over picks — already in this edition, don't re-pick
   ]);
   const knownTitles = new Set(titlesRes.rows.map(r => normalizeTitle(r.title)).filter(Boolean));
   const explicitOff = effectiveExplicitOff(

@@ -13,15 +13,25 @@
 import { pool } from './db.js';
 import { mapTrackRow } from './stats.js';
 import { capPerArtist } from './related.js';
+import { pickDaily } from './featured.js';
 import {
   getScoredTracks, getSuppressedTrackIds, clampTzOffset,
   localDateKey, lastFridayKey, lastMondayKey,
-  HALF_LIFE_CURRENT_DAYS, HALF_LIFE_ALLTIME_DAYS,
+  HALF_LIFE_CURRENT_DAYS, HALF_LIFE_ALLTIME_DAYS, PROFILE_MODES_EXCLUDED,
 } from './tasteScore.js';
-import { buildDiscoveryMix, getDiscoveryGate, GATE } from './discoveryMix.js';
+import { buildDiscoveryMix, getDiscoveryGate, GATE, DISCOVERY_SIZE } from './discoveryMix.js';
 
 const MIN_SET = 5;        // hide sets thinner than this
 export const RULE_LINE = "made from your listening — skips count. family & kids plays don't.";
+
+// on-repeat reacts within the day (the user opted into event-driven refresh): a
+// cache hit older than this with at least this many new profile-shaping plays
+// since it was built gets regenerated in place.
+const REKEY_MIN_AGE_MS = 2 * 60 * 60 * 1000;
+const REKEY_MIN_PLAYS = 15;
+// new-to-you carries a still-unplayed pick forward only while its edition is
+// this fresh — past three weeks a "new to you" track has waited long enough.
+const CARRYOVER_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -109,35 +119,44 @@ async function genDaypart(userId, tz, suppressed, daypart) {
 
 // ---- the suite -----------------------------------------------------------------
 
+// `cadence` is the plain line shown next to the edition date so the refresh
+// contract is visible. `rekey` mixes rebuild mid-day on enough new listening;
+// `dailyReorder` mixes keep a frozen weekly SET but re-order it each local day
+// (so a weekly mix still feels alive between boundaries).
 const MIXES = {
   'on-repeat': {
     name: 'on repeat', keyFn: localDateKey, gen: genOnRepeat,
     description: 'what you keep coming back to — updated daily',
+    cadence: 'updates daily', rekey: true,
   },
   'new-to-you': {
     name: 'new to you', keyFn: lastFridayKey, gen: null,   // discoveryMix.js
     description: "fresh every friday — nothing you've played before",
+    cadence: 'new every friday', dailyReorder: true,
   },
   'bring-it-back': {
     name: 'bring it back', keyFn: lastMondayKey, gen: genBringItBack,
     description: 'you used to love these — time for a revisit',
+    cadence: 'new every monday', dailyReorder: true,
   },
   morning: {
-    name: 'your morning songs', keyFn: lastMondayKey,
+    name: 'your morning songs', keyFn: localDateKey,
     gen: (u, tz, sup) => genDaypart(u, tz, sup, 'morning'),
     description: 'what you reach for in the morning',
+    cadence: 'updates daily',
   },
   night: {
-    name: 'your night songs', keyFn: lastMondayKey,
+    name: 'your night songs', keyFn: localDateKey,
     gen: (u, tz, sup) => genDaypart(u, tz, sup, 'night'),
     description: 'what you reach for after dark',
+    cadence: 'updates daily',
   },
 };
 const MIX_ORDER = Object.keys(MIXES);
 
 async function loadEdition(userId, mixKey, editionKey) {
   const { rows } = await pool.query(
-    `SELECT payload, edition_key FROM mix_editions
+    `SELECT payload, edition_key, generated_at FROM mix_editions
      WHERE user_id = $1 AND mix_key = $2 AND edition_key = $3`,
     [userId, mixKey, editionKey],
   );
@@ -146,12 +165,56 @@ async function loadEdition(userId, mixKey, editionKey) {
 
 async function loadLatestEdition(userId, mixKey) {
   const { rows } = await pool.query(
-    `SELECT payload, edition_key FROM mix_editions
+    `SELECT payload, edition_key, generated_at FROM mix_editions
      WHERE user_id = $1 AND mix_key = $2
      ORDER BY generated_at DESC LIMIT 1`,
     [userId, mixKey],
   );
   return rows[0] ?? null;
+}
+
+// Profile-shaping plays since a timestamp (family/kids excluded, same rule the
+// scores use) — the trigger for on-repeat's mid-day rebuild.
+async function eligiblePlaysSince(userId, sinceMs) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM listening_events
+     WHERE user_id = $1 AND kind = 'play' AND ts > $2
+       AND NOT (COALESCE(mode, 'everyday') = ANY($3))`,
+    [userId, sinceMs, PROFILE_MODES_EXCLUDED],
+  );
+  return rows[0]?.n ?? 0;
+}
+
+// Prior-edition picks the user STILL hasn't heard (any event counts as heard,
+// matching discovery's novelty rule) and hasn't suppressed, from an edition no
+// older than the carryover window — genuinely still "new to you", so they ride
+// into the next edition instead of vanishing unheard.
+async function computeCarryover(userId, prev, suppressed) {
+  if (!prev) return [];
+  if (Date.now() - Number(prev.generated_at) > CARRYOVER_MAX_AGE_MS) return [];
+  const prevTracks = prev.payload?.tracks ?? [];
+  const prevIds = prevTracks.map(t => t.trackId);
+  if (!prevIds.length) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT track_id FROM listening_events WHERE user_id = $1 AND track_id = ANY($2)`,
+    [userId, prevIds],
+  );
+  const played = new Set(rows.map(r => r.track_id));
+  return prevTracks.filter(t => !played.has(t.trackId) && !suppressed.has(t.trackId));
+}
+
+// Build the new-to-you edition: unplayed carryover pinned first, fresh discovery
+// candidates (which never re-pick the carryover) topping up to full size.
+async function buildNewToYouEdition(userId, tz, suppressed, prev) {
+  const carryover = await computeCarryover(userId, prev, suppressed);
+  const fresh = await buildDiscoveryMix(userId, {
+    tzOffset: tz,
+    size: DISCOVERY_SIZE - carryover.length,
+    excludeIds: carryover.map(c => c.trackId),
+  });
+  const tracks = [...carryover, ...(fresh?.tracks ?? [])];
+  if (tracks.length < MIN_SET) return null;
+  return { tracks, meta: { ...(fresh?.meta ?? {}), tz, carriedOver: carryover.length } };
 }
 
 async function storeEdition(userId, mixKey, editionKey, payload) {
@@ -164,14 +227,28 @@ async function storeEdition(userId, mixKey, editionKey, payload) {
   );
 }
 
-// Resolve one mix to a served edition: cache hit → that edition; miss → generate
-// inline for the cheap SQL mixes; for discovery, serve the previous edition and
-// let the nightly cron catch the fresh one up (first-ever generates inline).
+// Resolve one mix to a served edition: cache hit → that edition (on-repeat may
+// rebuild mid-day on enough new listening); miss → generate inline for the cheap
+// SQL mixes and for discovery (carrying unplayed picks forward), falling back to
+// the previous discovery edition only if the fresh build fails.
 async function resolveMix(userId, mixKey, tz, suppressed) {
   const def = MIXES[mixKey];
   const editionKey = def.keyFn(tz);
   const hit = await loadEdition(userId, mixKey, editionKey);
-  if (hit) return { payload: hit.payload, editionKey, refreshing: false };
+  if (hit) {
+    if (def.rekey) {
+      const age = Date.now() - Number(hit.generated_at);
+      if (age > REKEY_MIN_AGE_MS
+          && await eligiblePlaysSince(userId, Number(hit.generated_at)) >= REKEY_MIN_PLAYS) {
+        const fresh = await def.gen(userId, tz, suppressed);
+        if (fresh) {
+          await storeEdition(userId, mixKey, editionKey, fresh);
+          return { payload: fresh, editionKey, refreshing: false };
+        }
+      }
+    }
+    return { payload: hit.payload, editionKey, refreshing: false };
+  }
 
   if (mixKey !== 'new-to-you') {
     const payload = await def.gen(userId, tz, suppressed);
@@ -183,21 +260,28 @@ async function resolveMix(userId, mixKey, tz, suppressed) {
   const gate = await getDiscoveryGate(userId);
   if (!gate.ok) return { gate };
   const prev = await loadLatestEdition(userId, mixKey);
-  if (prev) {
-    // Serve last Friday's edition honestly (its date is displayed); the cron
-    // pre-warms the new one. Fire-and-forget here would race the lambda freeze.
-    return { payload: prev.payload, editionKey: prev.edition_key, refreshing: true };
+  try {
+    const payload = await buildNewToYouEdition(userId, tz, suppressed, prev);
+    if (payload) {
+      await storeEdition(userId, mixKey, editionKey, payload);
+      return { payload, editionKey, refreshing: false };
+    }
+  } catch (err) {
+    console.warn('[mixes] new-to-you inline build failed:', err?.message ?? err);
   }
-  const payload = await buildDiscoveryMix(userId, { tzOffset: tz });
-  if (!payload || payload.tracks.length < MIN_SET) return null;
-  await storeEdition(userId, mixKey, editionKey, payload);
-  return { payload, editionKey, refreshing: false };
+  // Build was thin or errored — serve last edition honestly (its date shows),
+  // and let the nightly cron try again.
+  if (prev) return { payload: prev.payload, editionKey: prev.edition_key, refreshing: true };
+  return null;
 }
 
 // Hydrate stored {trackId, reason} rows through the tracks table so metadata and
-// stream URLs stay as fresh as every other shelf. Order and reasons are the
-// edition's; suppressed/hidden tracks drop out immediately, vanished tracks skip.
-async function hydrate(payloadTracks, suppressed) {
+// stream URLs stay as fresh as every other shelf. Reasons are the edition's;
+// suppressed/hidden tracks drop out immediately, vanished tracks skip. Order is
+// the edition's UNLESS a reorderSeed is given (weekly mixes): then the frozen
+// SET is re-ordered deterministically per local day, so it feels different
+// between boundaries without its membership changing.
+async function hydrate(payloadTracks, suppressed, reorderSeed = null) {
   const ids = payloadTracks.map(t => t.trackId).filter(id => !suppressed.has(id));
   if (!ids.length) return [];
   const { rows } = await pool.query(
@@ -210,7 +294,27 @@ async function hydrate(payloadTracks, suppressed) {
     const row = byId.get(t.trackId);
     if (row) out.push({ ...row, reason: t.reason });
   }
-  return out;
+  return reorderSeed ? reorderByDay(out, reorderSeed) : out;
+}
+
+// Deterministic reorder: same seed → same order (membership preserved). pickDaily
+// gives the seeded shuffle; a deterministic spacing pass keeps same-artist tracks
+// from clustering. Used for the weekly mixes' per-day reshuffle.
+function reorderByDay(tracks, seed) {
+  const shuffled = pickDaily(tracks, tracks.length, seed);
+  const key = t => (t.artist || '').toLowerCase().trim();
+  for (let i = 0; i < shuffled.length; i++) {
+    if (!key(shuffled[i])) continue;
+    const recent = shuffled.slice(Math.max(0, i - 2), i).map(key);
+    if (!recent.includes(key(shuffled[i]))) continue;
+    for (let j = i + 1; j < shuffled.length; j++) {
+      if (!recent.includes(key(shuffled[j]))) {
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        break;
+      }
+    }
+  }
+  return shuffled;
 }
 
 function descriptor(mixKey, name, description, tracks, extra = {}) {
@@ -255,11 +359,17 @@ export async function getAutoPlaylists(userId, { tzOffset } = {}) {
       }));
       continue;
     }
-    const tracks = await hydrate(r.payload.tracks, suppressed);
+    // Weekly mixes re-order per local day (set frozen, order alive); daily mixes
+    // already change membership each day, so they keep the edition's order.
+    const reorderSeed = def.dailyReorder
+      ? `${userId}|${mixKey}|${r.editionKey}|${localDateKey(tz)}`
+      : null;
+    const tracks = await hydrate(r.payload.tracks, suppressed, reorderSeed);
     if (tracks.length < MIN_SET) continue;
     sets.push(descriptor(mixKey, def.name, r.payload.description ?? def.description, tracks, {
       editionKey: r.editionKey,
       editionLabel: editionLabel(r.editionKey),
+      cadence: def.cadence,
       refreshing: r.refreshing,
     }));
   }
@@ -295,7 +405,10 @@ export async function refreshDueMixes({ budgetMs = 40000 } = {}) {
         let payload = null;
         if (mixKey === 'new-to-you') {
           const gate = await getDiscoveryGate(userId);
-          if (gate.ok) payload = await buildDiscoveryMix(userId, { tzOffset: tz });
+          if (gate.ok) {
+            const prev = await loadLatestEdition(userId, mixKey);
+            payload = await buildNewToYouEdition(userId, tz, suppressed, prev);
+          }
         } else {
           payload = await def.gen(userId, tz, suppressed);
         }
