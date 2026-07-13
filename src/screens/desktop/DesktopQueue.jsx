@@ -6,7 +6,6 @@ import { AlbumArt } from '../../components/album/AlbumArt';
 import { fmtTime } from '../../utils/fmtTime';
 import { cleanTitle } from '../../utils/title';
 import { openAddToPlaylist } from '../../lib/addToPlaylistSheet';
-import { ctxPress } from '../../lib/trackContextMenu';
 import { tap } from '../../lib/haptics';
 import { toast } from '../../lib/toast';
 import { CrumbBack } from './CrumbBack';
@@ -19,7 +18,7 @@ const LONG_PRESS_MS = 450;
 export function DesktopQueue({
   tracks, currentIdx, source,
   onPick, onClose, onRemove, onReorder,
-  onPlayNext, onAddToQueue,
+  onPlayNext, onAddToQueue, onOpenArtist,
   onClear, onShuffle, shuffleActive = false, onSave,
   repeatMode = 'off', onCycleRepeat,
   autoNextBatch, onPlayAutoNext,
@@ -195,6 +194,7 @@ export function DesktopQueue({
   const playNext = (t) => { setMenuId(null); onPlayNext?.(t); toast('Queued next.'); };
   const addToQueue = (t) => { setMenuId(null); onAddToQueue?.(t); toast('Added to queue.'); };
   const addToPlaylistFn = (t) => { setMenuId(null); openAddToPlaylist(t); };
+  const goToArtist = (t) => { setMenuId(null); onOpenArtist?.({ name: t.artist, trackId: t.id }); };
 
   // `i` is the absolute track index (not a per-slice offset). The renderer
   // is called from both the past-tracks slice and the current+future slice
@@ -218,7 +218,7 @@ export function DesktopQueue({
         ? { transform: `translateY(${shift}px)`, transition: 'transform 240ms cubic-bezier(.25,.85,.3,1)' }
         : { transition: 'transform 240ms cubic-bezier(.25,.85,.3,1)' };
     return (
-      <div key={t.id + i} data-row data-idx={i} style={style} {...ctxPress(t)}
+      <div key={t.id + i} data-row data-idx={i} style={style}
         className={`aura-dq__row ${isPast ? 'aura-dq__row--past' : ''} ${isDragging ? 'aura-dq__row--dragging' : ''}`}>
         {onReorder && (
           <button type="button"
@@ -299,6 +299,9 @@ export function DesktopQueue({
               <button onClick={() => playNext(t)}        className="aura-pl-menu-item">Play next</button>
               <button onClick={() => addToQueue(t)}      className="aura-pl-menu-item">Add to queue</button>
               <button onClick={() => addToPlaylistFn(t)} className="aura-pl-menu-item">Add to playlist</button>
+              {onOpenArtist && t.artist && (
+                <button onClick={() => goToArtist(t)}    className="aura-pl-menu-item">Go to artist</button>
+              )}
             </div>,
             document.body,
           )}

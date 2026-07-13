@@ -1768,7 +1768,7 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
           <ScreenTransition key="queue">
             <DesktopQueue tracks={viewTracks} currentIdx={viewIdx} source={viewSource} djName={t.djName}
               onPick={pickFromQueue} onClose={() => setScreen(queueReturn)} onRemove={removeFromQueue}
-              onReorder={reorderQueue} onPlayNext={enqueueNext} onAddToQueue={enqueueLast}
+              onReorder={reorderQueue} onPlayNext={enqueueNext} onAddToQueue={enqueueLast} onOpenArtist={onOpenArtist}
               onClear={clearQueue} onShuffle={shuffleQueue} shuffleActive={shuffleActive} onSave={saveQueueAsPlaylist}
               repeatMode={repeatMode} onCycleRepeat={cycleRepeat}
               autoNextBatch={autoNextDisplay?.candidates ?? null}
