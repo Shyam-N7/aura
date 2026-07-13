@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { relTime } from './relTime';
+import { relTime } from './time';
 
 const now = Date.UTC(2026, 6, 11, 12, 0, 0);
 const ago = (ms) => now - ms;

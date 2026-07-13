@@ -24,6 +24,15 @@
   margin-bottom: 14px;
   background: color-mix(in srgb, var(--color-surface), transparent 30%);
 }
+/* Profile row — avatar + name + upload/remove actions. */
+.aura-set__profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+}
+.aura-set__profile-name { flex: 1; min-width: 0; }
+.aura-set__profile-actions { display: inline-flex; gap: 8px; flex-shrink: 0; }
 .aura-set__row {
   width: 100%;
   display: flex;

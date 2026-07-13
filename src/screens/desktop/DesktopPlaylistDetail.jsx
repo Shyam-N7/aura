@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
+import { Avatar } from '../../components/Avatar';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
 import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility, removePlaylistCollaborator, setPlaylistOnlyMe, setPlaylistCover } from '../../api/playlists';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
-import { relTime } from '../../utils/relTime';
+import { relTime } from '../../lib/time';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
@@ -273,7 +274,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
                       disabled={!isOwner}
                       onClick={isOwner ? () => dropCollaborator(c) : undefined}
                       title={isOwner ? `remove ${c.name}` : `${c.name} · can ${c.role === 'viewer' ? 'view' : 'edit'}`}>
-                      {(c.name?.[0] ?? '·').toLowerCase()}
+                      <Avatar user={c} size={26}/>
                       {isOwner && <span className="aura-dpd__collab-av-x" aria-hidden="true">×</span>}
                     </button>
                   ))}

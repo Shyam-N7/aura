@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { MonoLabel, BreathingDot } from '../components/primitives';
 import { AlbumArt } from '../components/album/AlbumArt';
+import { Avatar } from '../components/Avatar';
 import { AuraLoader } from '../components/feedback/AuraLoader';
 import { BackToTop } from '../components/BackToTop';
 import { getPublicPlaylist, savePlaylist, unsavePlaylist } from '../api/playlists';
 import { fmtTime, fmtRuntime } from '../utils/fmtTime';
-import { relTime } from '../utils/relTime';
+import { relTime } from '../lib/time';
 import { cleanTitle } from '../utils/title';
 import { setMeta } from '../lib/meta';
 import { toast } from '../lib/toast';
@@ -79,7 +80,6 @@ export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
   // --p0/--p1/--p2 palette on .aura-pub colours it), so a missing image never
   // renders the bare initials monogram.
   const cover = { imageUrl: hit.data?.coverImageUrl, title: hit.data?.name, cover: 'circle' };
-  const ownerInitial = (hit.data?.ownerName?.trim()?.[0] || 'A').toUpperCase();
   const runtime = fmtRuntime(tracks.reduce((s, t) => s + (t.durationSec || 0), 0));
 
   // Signed-out → sign up, but stash THIS page so they land back here (now signed
@@ -142,7 +142,7 @@ export function PublicPlaylistScreen({ publicId, isAuthed, onNavigate }) {
               </h1>
 
               <div className="aura-pub__owner aura-pub--fx" style={{ '--d': '190ms' }}>
-                <span className="aura-pub__avatar" aria-hidden="true">{ownerInitial}</span>
+                <Avatar user={{ name: hit.data.ownerName, avatarUrl: hit.data.ownerAvatarUrl }} size={26}/>
                 <span>{hit.data.ownerName ? <>shared by <strong>{hit.data.ownerName}</strong></> : 'on AURA'}</span>
               </div>
 

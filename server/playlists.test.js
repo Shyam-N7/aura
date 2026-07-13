@@ -83,13 +83,15 @@ describe('per-track attribution (added_by)', () => {
     expect(insert[1]).toEqual(['pl1', 'trk', expect.any(Number), 'u1']);
   });
 
-  it('exposes addedBy to members', async () => {
+  it('exposes addedBy (with avatar) to members', async () => {
     access({ ownerId: 'u1' });                    // requireView → owner
-    query.mockResolvedValueOnce({ rows: [{ id: 'pl1', name: 'x', is_public: false, public_id: null, owner_id: 'u1', owner_name: 'shyam' }] });
-    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', duration_sec: 200, raw: null, added_by: 'u2', added_by_name: 'ravi' }] });
-    query.mockResolvedValueOnce({ rows: [] });    // collaborators
+    query.mockResolvedValueOnce({ rows: [{ id: 'pl1', name: 'x', is_public: false, public_id: null, owner_id: 'u1', owner_name: 'shyam', owner_avatar: 'a-own' }] });
+    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', duration_sec: 200, raw: null, added_by: 'u2', added_by_name: 'ravi', added_by_avatar: 'a-ravi' }] });
+    query.mockResolvedValueOnce({ rows: [{ user_id: 'u3', role: 'editor', added_at: '5', name: 'meera', avatar_url: 'a-meera' }] });
     const view = await getPlaylist('u1', 'pl1');
-    expect(view.tracks[0].addedBy).toEqual({ userId: 'u2', name: 'ravi' });
+    expect(view.tracks[0].addedBy).toEqual({ userId: 'u2', name: 'ravi', avatarUrl: 'a-ravi' });
+    expect(view.ownerAvatarUrl).toBe('a-own');
+    expect(view.collaborators[0]).toMatchObject({ userId: 'u3', name: 'meera', role: 'editor', avatarUrl: 'a-meera', joinedAt: 5 });
   });
 
   it('never exposes addedBy (or a stream URL) on the public link', async () => {

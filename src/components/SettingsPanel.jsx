@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import { logout, useAuth, enableFamilyMode, disableFamilyMode, updatePreferences, listDevices, revokeDevice, logoutOtherDevices } from '../lib/auth';
+import { useEffect, useRef, useState } from 'react';
+import { logout, useAuth, enableFamilyMode, disableFamilyMode, updatePreferences, listDevices, revokeDevice, logoutOtherDevices, setMyAvatar, clearMyAvatar } from '../lib/auth';
+import { uploadImage } from '../api/uploads';
+import { Avatar } from './Avatar';
 import { relTime } from '../lib/time';
 import { confirm } from '../lib/confirm';
 import { clearPostAuthPath } from '../lib/routes';
@@ -266,6 +268,29 @@ export function SettingsPanel({ t, setTweak }) {
     } catch { /* ignore */ }
   };
 
+  // Profile photo — upload (resized client-side) or remove; the cached user
+  // updates via persistUser so every avatar on screen refreshes.
+  const avatarFileRef = useRef(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const onAvatarFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || avatarBusy) return;
+    setAvatarBusy(true);
+    try {
+      const { url } = await uploadImage(file, { kind: 'avatar' });
+      await setMyAvatar(url);
+      toast('photo updated.');
+    } catch (err) { toast(`couldn’t update photo — ${err.message}`); }
+    finally { setAvatarBusy(false); }
+  };
+  const removeAvatar = async () => {
+    setAvatarBusy(true);
+    try { await clearMyAvatar(); toast('photo removed.'); }
+    catch (err) { toast(err.message); }
+    finally { setAvatarBusy(false); }
+  };
+
   const consentCaption =
     consent === 'granted' ? 'privacy-friendly analytics is on.'
     : consent === 'denied' ? 'analytics is off.'
@@ -273,6 +298,25 @@ export function SettingsPanel({ t, setTweak }) {
 
   return (
     <div className="aura-set">
+      <p className="aura-set__group-label">profile</p>
+      <div className="aura-set__group aura-set__profile">
+        <Avatar user={user} size={52}/>
+        <span className="aura-set__row-text aura-set__profile-name">
+          <span className="aura-set__row-label">{user?.name ?? ''}</span>
+          <span className="aura-set__row-caption">{user?.avatarUrl ? 'your photo' : 'add a photo, or keep the initial'}</span>
+        </span>
+        <span className="aura-set__profile-actions">
+          {user?.avatarUrl && (
+            <button type="button" className="aura-set__device-remove" disabled={avatarBusy} onClick={removeAvatar}>remove</button>
+          )}
+          <button type="button" className="aura-set__device-remove" disabled={avatarBusy}
+            onClick={() => avatarFileRef.current?.click()}>
+            {avatarBusy ? 'uploading…' : user?.avatarUrl ? 'change' : 'add photo'}
+          </button>
+        </span>
+        <input ref={avatarFileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={onAvatarFile} hidden/>
+      </div>
+
       <p className="aura-set__group-label">appearance</p>
       <div className="aura-set__themes">
         {Object.keys(THEMES).map((id) => (

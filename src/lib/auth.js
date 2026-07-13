@@ -227,6 +227,25 @@ export async function updatePreferences(prefs) {
   return data.user;
 }
 
+// ── Profile photo ────────────────────────────────────────────────────
+export async function setMyAvatar(imageUrl) {
+  const res = await fetchAuthed('/api/auth/me/avatar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageUrl }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'update failed');
+  persistUser(data.user);
+  return data.user;
+}
+export async function clearMyAvatar() {
+  const res = await fetchAuthed('/api/auth/me/avatar', { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'update failed');
+  persistUser(data.user);
+  return data.user;
+}
+
 // ── Devices / sessions ───────────────────────────────────────────────
 export async function listDevices() {
   const res = await fetchAuthed('/api/auth/sessions');

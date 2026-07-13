@@ -613,6 +613,11 @@ const migrations = [
     // chosen/first track's art exactly as before.
     await client.query(`ALTER TABLE playlists ADD COLUMN cover_image_url TEXT`);
   },
+  async function v27_user_avatar(client) {
+    // A profile photo (Vercel Blob URL). Nullable — no avatar falls back to the
+    // initial-letter monogram everywhere it's shown.
+    await client.query(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

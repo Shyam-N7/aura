@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { pool, query } from './db.js';
+import { isBlobUrl } from './blobUrl.js';
 
 function newId() {
   return 'pl_' + Math.random().toString(36).slice(2, 10);
@@ -149,7 +150,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
   const { rows: meta } = await query(
     `SELECT p.id, p.name, p.description, p.cover_track_id, p.cover_image_url, p.updated_at, p.user_id AS owner_id,
             p.is_public, p.public_id,
-            t.raw AS cover_raw, ou.name AS owner_name,
+            t.raw AS cover_raw, ou.name AS owner_name, ou.avatar_url AS owner_avatar,
             (SELECT COUNT(*) FROM saved_playlists sp WHERE sp.playlist_id = p.id)::int AS save_count
      FROM playlists p
      LEFT JOIN tracks t ON t.id = p.cover_track_id
@@ -160,7 +161,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
   if (meta.length === 0) notFound();
   const { rows: trackRows } = await query(
     `SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
-            pt.position, pt.added_at, pt.added_by, au.name AS added_by_name
+            pt.position, pt.added_at, pt.added_by, au.name AS added_by_name, au.avatar_url AS added_by_avatar
      FROM playlist_tracks pt
      LEFT JOIN tracks t ON t.id = pt.track_id
      LEFT JOIN users  au ON au.id = pt.added_by
@@ -186,18 +187,21 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
       // but is not a member, and must never learn collaborator identities). Also
       // covers the anonymous /p/ path (includeCollaborators false there). Legacy
       // rows (pre-attribution) have no added_by → null, no chip shown.
-      addedBy:     (includeCollaborators && r.added_by) ? { userId: r.added_by, name: r.added_by_name } : null,
+      addedBy:     (includeCollaborators && r.added_by) ? { userId: r.added_by, name: r.added_by_name, avatarUrl: r.added_by_avatar ?? null } : null,
     }));
   const row = meta[0];
   let collaborators = [];
   if (includeCollaborators) {
     const { rows: collabRows } = await query(
-      `SELECT c.user_id, c.role, u.name
+      `SELECT c.user_id, c.role, c.added_at, u.name, u.avatar_url
        FROM playlist_collaborators c JOIN users u ON u.id = c.user_id
        WHERE c.playlist_id = $1 ORDER BY c.added_at ASC`,
       [id],
     );
-    collaborators = collabRows.map(c => ({ userId: c.user_id, name: c.name, role: c.role }));
+    collaborators = collabRows.map(c => ({
+      userId: c.user_id, name: c.name, role: c.role,
+      avatarUrl: c.avatar_url ?? null, joinedAt: Number(c.added_at),
+    }));
   }
   return {
     id:            row.id,
@@ -211,6 +215,7 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
     canEdit:       canEdit(role),
     shared:        collaborators.length > 0 || (!!role && role !== 'owner'),
     ownerName:     row.owner_name ?? null,
+    ownerAvatarUrl: row.owner_avatar ?? null,
     isPublic:      row.is_public ?? false,
     publicId:      row.public_id ?? null,
     collaborators,
@@ -317,13 +322,6 @@ export async function addTrackToPlaylist(userId, playlistId, trackId) {
     `UPDATE playlists SET updated_at = $1, cover_track_id = COALESCE(cover_track_id, $2) WHERE id = $3`,
     [ts, trackId, playlistId],
   );
-}
-
-// Only our own Blob-hosted images may be set as a cover/avatar — reject an
-// arbitrary URL an editor might POST (which would render on the public page).
-export function isBlobUrl(url) {
-  try { return new URL(url).hostname.endsWith('.public.blob.vercel-storage.com'); }
-  catch { return false; }
 }
 
 // Set the playlist cover (owner/editor). Either a custom uploaded image

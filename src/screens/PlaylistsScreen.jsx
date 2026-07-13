@@ -9,7 +9,7 @@ import { TapHint } from '../components/TapHint';
 import { killHint } from '../lib/tapHint';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import { BackToTop } from '../components/BackToTop';
-import { relTime } from '../utils/relTime';
+import { relTime } from '../lib/time';
 import './PlaylistsScreen.css';
 
 // Why home sometimes shows fewer mixes than this screen: home windows the

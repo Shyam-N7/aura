@@ -12,6 +12,7 @@ import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
 import { sendNewDeviceAlert } from './securityAlerts.js';
 import { adminBlocked } from './adminGate.js';
 import { buildModesView } from './modes.js';
+import { isBlobUrl } from './blobUrl.js';
 
 const router = Router();
 
@@ -34,6 +35,7 @@ export function sanitizeUser(row) {
     id:             row.id,
     email:          row.email,
     name:           row.name,
+    avatarUrl:      row.avatar_url ?? null,
     hasOnboarded:   row.has_onboarded,
     seedArtists:    row.seed_artists ?? [],
     seedLanguages:  row.seed_languages ?? [],
@@ -459,6 +461,21 @@ router.delete('/sessions', requireAuth, asyncHandler(async (req, res) => {
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.userId]);
   if (!rows.length) return res.status(404).json({ error: 'user not found' });
+  res.json({ user: sanitizeUser(rows[0]) });
+}));
+
+// ── Profile photo (avatar) ───────────────────────────────────────────
+// Set from an uploaded Blob URL, or clear back to the initial-letter monogram.
+router.post('/me/avatar', requireAuth, asyncHandler(async (req, res) => {
+  const imageUrl = String(req.body?.imageUrl ?? '');
+  if (!isBlobUrl(imageUrl)) return res.status(400).json({ error: 'invalid image' });
+  const { rows } = await pool.query(
+    'UPDATE users SET avatar_url = $2 WHERE id = $1 RETURNING *', [req.userId, imageUrl]);
+  res.json({ user: sanitizeUser(rows[0]) });
+}));
+router.delete('/me/avatar', requireAuth, asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    'UPDATE users SET avatar_url = NULL WHERE id = $1 RETURNING *', [req.userId]);
   res.json({ user: sanitizeUser(rows[0]) });
 }));
 

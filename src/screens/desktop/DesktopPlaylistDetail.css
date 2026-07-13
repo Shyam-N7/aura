@@ -60,20 +60,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
   margin-left: -8px;                        /* overlap the previous circle */
   border-radius: 50%;
   border: 2px solid var(--color-bg);        /* ring so overlapping circles stay distinct */
   padding: 0;
   flex-shrink: 0;
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--color-accent), transparent 30%),
-    color-mix(in srgb, var(--color-accent), transparent 66%));
-  color: var(--color-bg);
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 13px;
+  background: transparent;                   /* the <Avatar> inside provides the fill */
   transition: transform 140ms ease;
 }
 .aura-dpd__collab-av:first-child { margin-left: 0; }
@@ -81,6 +73,8 @@
 .aura-dpd__collab-av.is-removable:hover,
 .aura-dpd__collab-av.is-removable:focus-visible { transform: translateY(-2px); z-index: 2; }
 .aura-dpd__collab-av--more {
+  width: 30px;
+  height: 30px;
   background: color-mix(in srgb, var(--color-surface), transparent 15%);
   color: var(--color-ink-soft);
   font-family: var(--font-sans);

@@ -1,0 +1,17 @@
+.aura-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.aura-avatar--img { object-fit: cover; }
+.aura-avatar--initial {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent), transparent 30%),
+    color-mix(in srgb, var(--color-accent), transparent 66%));
+  color: var(--color-bg);
+  font-family: var(--font-serif);
+  font-style: italic;
+  line-height: 1;
+}

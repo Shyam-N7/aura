@@ -1,9 +1,18 @@
-// Compact "time ago" formatter for device "last active" labels. Shared so the
-// auth device-limit picker and the Settings device list stay in sync.
-export function relTime(ms) {
-  const s = Math.max(0, Math.round((Date.now() - Number(ms)) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60); if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60); if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+// Compact "time ago" formatter — device "last active" labels, playlist "updated
+// X ago", etc. Takes a unix-ms timestamp (Number or numeric string from pg);
+// returns '' for missing/invalid. `now` is injectable for tests.
+export function relTime(ms, now = Date.now()) {
+  const t = Number(ms);
+  if (!Number.isFinite(t) || t <= 0) return '';
+  const s = Math.max(0, Math.floor((now - t) / 1000));
+  if (s < 45) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.floor(d / 7);
+  if (w < 5) return `${w}w ago`;
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }).toLowerCase();
 }

@@ -11,7 +11,10 @@ vi.mock('../lib/auth', () => ({
   listDevices: vi.fn().mockResolvedValue({ sessions: [], currentId: null, limit: 3 }),
   revokeDevice: vi.fn().mockResolvedValue(),
   logoutOtherDevices: vi.fn().mockResolvedValue(),
+  setMyAvatar: vi.fn().mockResolvedValue({}),
+  clearMyAvatar: vi.fn().mockResolvedValue({}),
 }));
+vi.mock('../api/uploads', () => ({ uploadImage: vi.fn() }));
 vi.mock('../api/account', () => ({
   exportMyData: vi.fn(),
   deleteMyAccount: vi.fn(),
