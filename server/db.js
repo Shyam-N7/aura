@@ -564,6 +564,26 @@ const migrations = [
       );
     `);
   },
+  async function v23_impressions(client) {
+    // What the home surfaces SHOWED you, per user-local day — the signal AURA
+    // never captured. It lets the quick-picks ranker demote picks we've shown
+    // repeatedly but you never played (YouTube's "churn"), so the ring keeps
+    // moving instead of re-serving the same discs. SHOWN-only (no new listening
+    // data); the daily cron prunes rows past 90 days.
+    await client.query(`
+      CREATE TABLE impressions (
+        user_id  TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        track_id TEXT   NOT NULL,
+        surface  TEXT   NOT NULL,
+        day      TEXT   NOT NULL,
+        count    INT    NOT NULL DEFAULT 1,
+        first_ts BIGINT NOT NULL,
+        last_ts  BIGINT NOT NULL,
+        PRIMARY KEY (user_id, track_id, surface, day)
+      );
+      CREATE INDEX idx_impressions_user_surface ON impressions(user_id, surface, last_ts DESC);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

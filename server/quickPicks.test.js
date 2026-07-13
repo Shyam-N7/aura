@@ -33,9 +33,14 @@ vi.mock('./stats.js', async (importOriginal) => ({
   ...(await importOriginal()),
   getRecentlyPlayed: vi.fn(),
 }));
+vi.mock('./impressions.js', () => ({
+  getImpressionSignals: vi.fn().mockResolvedValue(new Map()),
+  applyPenalty: (score, days) => score * Math.pow(0.85, days || 0),
+}));
 
 import { getScoredTracks, getSuppressedTrackIds, localDateKey } from './tasteScore.js';
 import { getRecentlyPlayed } from './stats.js';
+import { getImpressionSignals } from './impressions.js';
 import { getQuickPicks, ANCHOR_COUNT } from './quickPicks.js';
 
 const scored = (id, { artist, plays = 3, completions = 0, liked = false, explicit = false } = {}) => ({
@@ -51,6 +56,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-07-08T10:00:00Z'));
   getSuppressedTrackIds.mockResolvedValue(new Set());
   getRecentlyPlayed.mockResolvedValue([]);
+  getImpressionSignals.mockResolvedValue(new Map());
 });
 afterEach(() => vi.useRealTimers());
 
@@ -147,5 +153,40 @@ describe('getQuickPicks', () => {
     getScoredTracks.mockResolvedValue([scored('t0')]);
     const r = await getQuickPicks('u1', { tzOffset: 0 });
     expect(r.tracks).toHaveLength(1);
+  });
+});
+
+describe('getQuickPicks — impression demotion', () => {
+  it('queries the signal for the non-anchor candidates only', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));
+    await getQuickPicks('u1', { tzOffset: 0 });
+    const [uid, surface, checkedIds] = getImpressionSignals.mock.calls[0];
+    expect(uid).toBe('u1');
+    expect(surface).toBe('quick-picks');
+    expect(checkedIds).not.toContain('t0');   // anchors are exempt — never checked
+    expect(checkedIds).not.toContain('t1');
+    expect(checkedIds).not.toContain('t2');
+    expect(checkedIds).toContain('t3');
+  });
+
+  it('sinks a repeatedly-shown, never-played pick out of the rotation window', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));   // all equal score
+    getImpressionSignals.mockResolvedValue(new Map([['t5', { unplayedShownDays: 6, cooledDown: false }]]));
+    const r = await getQuickPicks('u1', { tzOffset: 0 });
+    expect(ids(r)).not.toContain('t5');   // penalised below rank ~24
+  });
+
+  it('holds a cooled-down pick out of rotation entirely', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));
+    getImpressionSignals.mockResolvedValue(new Map([['t4', { unplayedShownDays: 3, cooledDown: true }]]));
+    const r = await getQuickPicks('u1', { tzOffset: 0 });
+    expect(ids(r)).not.toContain('t4');
+  });
+
+  it('never demotes an anchor, even if flagged', async () => {
+    getScoredTracks.mockResolvedValue(manyScored(30));
+    getImpressionSignals.mockResolvedValue(new Map([['t0', { unplayedShownDays: 10, cooledDown: true }]]));
+    const r = await getQuickPicks('u1', { tzOffset: 0 });
+    expect(ids(r).slice(0, ANCHOR_COUNT)).toContain('t0');
   });
 });

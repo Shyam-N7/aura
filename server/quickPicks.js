@@ -12,12 +12,14 @@
 import { mapTrackRow, getRecentlyPlayed } from './stats.js';
 import { capPerArtist } from './related.js';
 import { pickDaily } from './featured.js';
+import { getImpressionSignals, applyPenalty } from './impressions.js';
 import {
   getScoredTracks, getSuppressedTrackIds, clampTzOffset, localDateKey,
   HALF_LIFE_CURRENT_DAYS,
 } from './tasteScore.js';
 
 export const ANCHOR_COUNT = 3;    // slots that only move when taste itself moves
+export const SURFACE = 'quick-picks';   // impression key for this surface
 const TOTAL = 12;                 // headroom: the client family-filters, then shows 8
 const POOL_LIMIT = 40;            // scored candidates fetched before cap/suppression
 const ROTATION_DEPTH = 24;        // rotating slots draw from ranks 4..24 of the pool
@@ -47,12 +49,26 @@ export async function getQuickPicks(userId, { tzOffset, salt } = {}) {
   });
   const pool = capPerArtist(scored.filter(r => !suppressed.has(r.id)), 2);
 
-  const anchors = pool.slice(0, ANCHOR_COUNT).map(r => toPick(r, true));
+  const anchorRows = pool.slice(0, ANCHOR_COUNT);   // raw top-3, exempt from demotion
+  const rest = pool.slice(ANCHOR_COUNT);
 
+  // Demote picks we've shown you repeatedly but you never played: each unplayed
+  // shown-day multiplies the score down (so it sinks through the window), and a
+  // cooled-down pick is held out entirely. This is the learned signal — anchors,
+  // which you demonstrably play, are never touched.
+  const signals = await getImpressionSignals(userId, SURFACE, rest.map(r => r.id));
+  const rotationPool = rest
+    .filter(r => !signals.get(r.id)?.cooledDown)
+    .map(r => ({ r, adj: applyPenalty(r.score, signals.get(r.id)?.unplayedShownDays) }))
+    .sort((a, b) => b.adj - a.adj)
+    .map(x => x.r)
+    .slice(0, ROTATION_DEPTH - ANCHOR_COUNT);
+
+  const anchors = anchorRows.map(r => toPick(r, true));
   // Deterministic per-day rotation; the salt (user-initiated reroll) is the only
   // non-calendar input, so reloads within a day are stable by construction.
   const seed = `${userId}|${editionKey}${salt ? `|${salt}` : ''}`;
-  const rotating = pickDaily(pool.slice(ANCHOR_COUNT, ROTATION_DEPTH), TOTAL - anchors.length, seed)
+  const rotating = pickDaily(rotationPool, TOTAL - anchors.length, seed)
     .map(r => toPick(r, false));
 
   let tracks = [...anchors, ...rotating];

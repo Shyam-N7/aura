@@ -25,6 +25,7 @@ import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getQuickPicks } from './quickPicks.js';
+import { recordImpressions, pruneOldImpressions } from './impressions.js';
 import { getAutoPlaylists, refreshDueMixes } from './autoPlaylists.js';
 import { hideTrack, unhideTrack, listHidden } from './hiddenTracks.js';
 import { getDiscoverHome } from './discover.js';
@@ -411,6 +412,8 @@ app.get('/api/lyrics-jobs/process', async (req, res) => {
     // Daily housekeeping — prune expired/revoked sessions (independent of lyrics
     // generation). Best-effort: never let it fail the reaper.
     await sweepSessions().catch((e) => console.warn('[sessions] sweep failed:', e?.message ?? e));
+    // Impression retention (90-day prune) — best-effort, never fails the reaper.
+    await pruneOldImpressions().catch((e) => console.warn('[impressions] prune failed:', e?.message ?? e));
     const lyrics = await processQueue();
     // Pre-warm today's made-for-you editions (02:00 UTC ≈ 07:30 IST). Best-effort
     // and time-budgeted so it can never starve the lyrics queue's next run.
@@ -560,6 +563,25 @@ app.get('/api/home/quick-picks', requireAuth, async (req, res) => {
     res.json(await getQuickPicks(req.userId, { tzOffset: req.query.tzOffset, salt }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Impression log — what a home surface SHOWED (quickPicks demotion signal).
+// Fire-and-forget from the client, mirrors /api/events' input caps.
+app.post('/api/impressions', requireAuth, async (req, res) => {
+  const { surface, tzOffset, track_ids } = req.body ?? {};
+  if (!surface || !Array.isArray(track_ids) || !track_ids.length) {
+    return res.status(400).json({ error: 'invalid surface or track_ids' });
+  }
+  try {
+    await recordImpressions(req.userId, {
+      surface: String(surface).slice(0, 40),
+      tzOffset,
+      trackIds: track_ids.slice(0, 40).map(id => String(id)),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: clientError(err) });
   }
 });
 

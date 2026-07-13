@@ -4,6 +4,7 @@ import { MonoLabel, ICON } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed } from '../../api/stats';
 import { getQuickPicks } from '../../api/quickPicks';
+import { logImpressions } from '../../api/impressions';
 import { listPlaylists } from '../../api/playlists';
 import { listAutoPlaylists } from '../../api/autoPlaylists';
 import { dropExplicit } from '../../lib/explicit';
@@ -74,6 +75,14 @@ export function DesktopHome({
     if (!_cache.discover)       getDiscoverHome   ({ signal: ctl.signal }).then(d => { _cache.discover       = d; setDiscover(d);       }).catch(() => {});
     return () => ctl.abort();
   }, []);
+
+  // Log which quick picks were actually shown (once per surface/day/session) so
+  // the ranker can demote the ones you keep ignoring. Only the SERVER ring is the
+  // demotable surface — the local fallback isn't logged.
+  const shownQpIds = served.length >= 4 ? quickPicks.map(t => t.id).join(',') : '';
+  useEffect(() => {
+    if (shownQpIds) logImpressions('quick-picks', shownQpIds.split(','));
+  }, [shownQpIds]);
 
   const scrollRef = useScrollMemory('home');   // cache renders synchronously on remount
 

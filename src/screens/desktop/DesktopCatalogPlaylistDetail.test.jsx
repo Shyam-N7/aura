@@ -54,8 +54,8 @@ describe('DesktopCatalogPlaylistDetail — made-for-you extensions', () => {
     expect(hideTrack).toHaveBeenCalledWith('a');
     await vi.waitFor(() => expect(screen.queryByText('Song a')).not.toBeInTheDocument());
     expect(screen.getByText('Song b')).toBeInTheDocument();
-    // Home's cached mixes must be dropped so the shelf can't serve the hidden track.
-    expect(invalidateHomeCache).toHaveBeenCalledWith('autoPlaylists');
+    // Home's cached mixes + quick picks must be dropped so neither serves the hidden track.
+    expect(invalidateHomeCache).toHaveBeenCalledWith('autoPlaylists', 'quickPicks');
   });
 
   it('stays inert for catalog playlists — no edition/receipt lines, no hide item', async () => {
