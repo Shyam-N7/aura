@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 
 vi.mock('../../api/playlists', () => ({
   getPlaylist: vi.fn(),
@@ -50,30 +50,35 @@ const renderDetail = async (data = view()) => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('DesktopPlaylistDetail — collaborators', () => {
-  it('renders an avatar cluster + a names caption', async () => {
+  it('renders an avatar cluster + a names caption, and opens the members sheet', async () => {
     await renderDetail();
     expect(await screen.findByText('ravi, meera')).toBeInTheDocument();   // caption
-    expect(screen.getByTitle('remove ravi')).toBeInTheDocument();          // owner-removable circle
-    expect(screen.getByTitle('remove meera')).toBeInTheDocument();
     expect(screen.getByText(/updated 3h ago/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('who has access'));
+    const sheet = screen.getByRole('dialog', { name: 'who has access' });
+    expect(within(sheet).getByText('owner')).toBeInTheDocument();          // the owner is listed
+    expect(within(sheet).getByText('ravi')).toBeInTheDocument();
+    expect(within(sheet).getByText('can edit')).toBeInTheDocument();
+    expect(within(sheet).getByText('can view')).toBeInTheDocument();
   });
 
-  it('lets the owner remove a collaborator (confirm → API → circle gone)', async () => {
+  it('lets the owner remove a collaborator from the sheet (confirm → API → gone)', async () => {
     await renderDetail();
-    await act(async () => { fireEvent.click(screen.getByTitle('remove ravi')); });
+    fireEvent.click(await screen.findByLabelText('who has access'));
+    const raviRow = screen.getByText('ravi').closest('.aura-dpd__member');
+    await act(async () => { fireEvent.click(within(raviRow).getByText('remove')); });
     expect(confirm).toHaveBeenCalled();
     expect(removePlaylistCollaborator).toHaveBeenCalledWith('pl1', 'u2');
-    // ravi gone → the single remaining collaborator's caption shows their role.
-    await vi.waitFor(() => expect(screen.queryByTitle('remove ravi')).not.toBeInTheDocument());
-    expect(screen.getByText('meera · can view')).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.queryByText('ravi')).not.toBeInTheDocument());
+    expect(screen.getByText('meera')).toBeInTheDocument();   // the other stays
   });
 
-  it('shows non-owner circles as read-only (no remove)', async () => {
+  it('shows non-owner members read-only (no remove buttons)', async () => {
     await renderDetail(view({ role: 'viewer', canEdit: false }));
-    const av = (await screen.findByTitle('ravi · can edit')).closest('button');
-    expect(av).toBeDisabled();
-    fireEvent.click(av);
-    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByLabelText('who has access'));
+    const sheet = screen.getByRole('dialog', { name: 'who has access' });
+    expect(within(sheet).getByText('ravi')).toBeInTheDocument();
+    expect(within(sheet).queryByText('remove')).toBeNull();
   });
 });
 

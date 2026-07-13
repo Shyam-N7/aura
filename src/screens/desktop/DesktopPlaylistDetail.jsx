@@ -24,6 +24,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const [shareEl, setShareEl] = useState(null);   // Share button → options menu anchor
   const [shareBusy, setShareBusy] = useState(false); // public-link toggle in flight
   const [coverPicking, setCoverPicking] = useState(false);   // cover-picker sheet open
+  const [membersOpen, setMembersOpen] = useState(false);     // "who has access" sheet open
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`playlist:${playlistId}`, { ready: status === 'ok' });
 
@@ -266,24 +267,18 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
               {updatedAt ? ` · updated ${relTime(updatedAt)}` : ''}
             </div>
             {collaborators.length > 0 && (
-              <div className="aura-dpd__collabs">
+              <button type="button" className="aura-dpd__collabs" onClick={() => setMembersOpen(true)}
+                aria-label="who has access">
                 <div className="aura-dpd__collab-cluster">
                   {collaborators.slice(0, 5).map(c => (
-                    <button key={c.userId} type="button"
-                      className={`aura-dpd__collab-av${isOwner ? ' is-removable' : ''}`}
-                      disabled={!isOwner}
-                      onClick={isOwner ? () => dropCollaborator(c) : undefined}
-                      title={isOwner ? `remove ${c.name}` : `${c.name} · can ${c.role === 'viewer' ? 'view' : 'edit'}`}>
-                      <Avatar user={c} size={26}/>
-                      {isOwner && <span className="aura-dpd__collab-av-x" aria-hidden="true">×</span>}
-                    </button>
+                    <span key={c.userId} className="aura-dpd__collab-av"><Avatar user={c} size={26}/></span>
                   ))}
                   {collaborators.length > 5 && (
                     <span className="aura-dpd__collab-av aura-dpd__collab-av--more">+{collaborators.length - 5}</span>
                   )}
                 </div>
                 <span className="aura-dpd__collab-cap">{collabCaption}</span>
-              </div>
+              </button>
             )}
             <div className="aura-dpd__actions">
               {tracks.length > 0 && (
@@ -393,6 +388,44 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
         )}
       </div>
       <BackToTop scrollRef={scrollRef}/>
+
+      {/* Members sheet — who has access: the owner + every collaborator, their
+          role and when they joined; the owner can remove someone here. */}
+      {membersOpen && (
+        <div className="aura-dpd__members" onClick={() => setMembersOpen(false)}>
+          <div className="aura-dpd__members-panel" onClick={(e) => e.stopPropagation()}
+            role="dialog" aria-label="who has access">
+            <div className="aura-dpd__members-head">
+              <span>who has access</span>
+              <button type="button" onClick={() => setMembersOpen(false)} aria-label="close">×</button>
+            </div>
+            <div className="aura-dpd__members-list">
+              <div className="aura-dpd__member">
+                <Avatar user={{ name: hit.data.ownerName, avatarUrl: hit.data.ownerAvatarUrl }} size={38}/>
+                <span className="aura-dpd__member-text">
+                  <span className="aura-dpd__member-name">{isOwner ? 'you' : (hit.data.ownerName ?? 'someone')}</span>
+                  <span className="aura-dpd__member-sub">owner</span>
+                </span>
+              </div>
+              {collaborators.map(c => (
+                <div key={c.userId} className="aura-dpd__member">
+                  <Avatar user={c} size={38}/>
+                  <span className="aura-dpd__member-text">
+                    <span className="aura-dpd__member-name">{c.userId === myId ? 'you' : c.name}</span>
+                    <span className="aura-dpd__member-sub">
+                      can {c.role === 'viewer' ? 'view' : 'edit'}{c.joinedAt ? ` · joined ${relTime(c.joinedAt)}` : ''}
+                    </span>
+                  </span>
+                  {isOwner && c.userId !== myId && (
+                    <button type="button" className="aura-dpd__member-remove"
+                      onClick={() => dropCollaborator(c)}>remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cover picker — choose any track's art as the playlist cover. */}
       {coverPicking && (
