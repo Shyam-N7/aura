@@ -6,7 +6,7 @@ import { query, pool } from './db.js';
 import {
   listPlaylists, createInvite, removeCollaborator,
   addTrackToPlaylist, acceptInvite, setPlaylistOnlyMe, getPlaylist, getPublicPlaylist,
-  savePlaylist, listSavedPlaylists,
+  savePlaylist, listSavedPlaylists, setPlaylistCover,
 } from './playlists.js';
 
 // Access is one query joining the playlist owner + the caller's collaborator row.
@@ -157,6 +157,29 @@ describe('save to library', () => {
     expect(out[0]).toMatchObject({ name: 'A', trackCount: 3, accessible: true });
     // The since-unshared one ships only id + the flag — no current name/count/cover/owner.
     expect(out[1]).toEqual({ id: 'pl2', name: null, trackCount: 0, coverImageUrl: null, updatedAt: null, ownerName: null, accessible: false });
+  });
+});
+
+describe('setPlaylistCover', () => {
+  it('sets the cover to an in-playlist track (owner/editor)', async () => {
+    access({ ownerId: 'u1' });                                  // requireEdit → owner
+    query.mockResolvedValueOnce({ rows: [{ raw: { imageUrl: 'img-x' } }] });   // track-in-playlist
+    const out = await setPlaylistCover('u1', 'pl1', 'trk');
+    expect(out).toEqual({ coverImageUrl: 'img-x' });
+    const upd = pool.query.mock.calls.find(c => /UPDATE playlists SET cover_track_id/.test(c[0]));
+    expect(upd[1]).toEqual(['pl1', 'trk', expect.any(Number)]);
+  });
+
+  it('rejects a track that is not in the playlist', async () => {
+    access({ ownerId: 'u1' });
+    query.mockResolvedValueOnce({ rows: [] });
+    await expect(setPlaylistCover('u1', 'pl1', 'nope')).rejects.toMatchObject({ statusCode: 400 });
+    expect(pool.query.mock.calls.some(c => /UPDATE playlists SET cover_track_id/.test(c[0]))).toBe(false);
+  });
+
+  it('forbids a viewer from changing the cover', async () => {
+    access({ ownerId: 'owner', collabRole: 'viewer' });         // requireEdit → viewer → 403
+    await expect(setPlaylistCover('u2', 'pl1', 'trk')).rejects.toMatchObject({ statusCode: 403 });
   });
 });
 

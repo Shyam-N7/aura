@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
-import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility, removePlaylistCollaborator, setPlaylistOnlyMe } from '../../api/playlists';
+import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility, removePlaylistCollaborator, setPlaylistOnlyMe, setPlaylistCover } from '../../api/playlists';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { relTime } from '../../utils/relTime';
 import { cleanTitle } from '../../utils/title';
@@ -21,6 +21,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const [hit, setHit]     = useState({ data: null, error: null });
   const [shareEl, setShareEl] = useState(null);   // Share button → options menu anchor
   const [shareBusy, setShareBusy] = useState(false); // public-link toggle in flight
+  const [coverPicking, setCoverPicking] = useState(false);   // cover-picker sheet open
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`playlist:${playlistId}`, { ready: status === 'ok' });
 
@@ -49,6 +50,22 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const updatedAt = hit.data?.updatedAt;
   const isPublic = hit.data?.isPublic ?? false;
   const publicId = hit.data?.publicId ?? null;
+  const coverImageUrl = hit.data?.coverImageUrl ?? null;
+
+  // Set the cover to a chosen track's art (owner/editor). Optimistic.
+  const chooseCover = async (t) => {
+    setCoverPicking(false);
+    if (t.id === undefined) return;
+    const prev = hit.data;
+    setHit(h => ({ ...h, data: { ...h.data, coverImageUrl: t.imageUrl ?? h.data.coverImageUrl } }));
+    try {
+      await setPlaylistCover(playlistId, t.id);
+      toast('Cover updated.');
+    } catch (err) {
+      setHit({ data: prev, error: null });
+      toast(`Couldn’t set cover — ${err.message}`);
+    }
+  };
 
   // Live sync for shared playlists — poll the cheap rev cursor while the screen
   // is open + visible, and refetch the full playlist when a collaborator changed
@@ -212,6 +229,16 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
         )}
         {status === 'ok' && (
           <>
+            <div className="aura-dpd__cover">
+              {coverImageUrl
+                ? <AlbumArt track={{ imageUrl: coverImageUrl, title: hit.data.name }} radius={12} style={{ width: '100%', height: '100%' }}/>
+                : <span className="aura-dpd__cover-fallback">{hit.data.name?.[0]?.toUpperCase() ?? '♪'}</span>}
+              {canEdit && tracks.length > 0 && (
+                <button type="button" className="aura-dpd__cover-edit" onClick={() => setCoverPicking(true)}>
+                  change cover
+                </button>
+              )}
+            </div>
             <div className="aura-dpd__kind">playlist{shared ? ' · shared' : ''}</div>
             <h1 className="aura-dpd__hero">{hit.data.name}</h1>
             <div className="aura-dpd__by">
@@ -346,6 +373,27 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
         )}
       </div>
       <BackToTop scrollRef={scrollRef}/>
+
+      {/* Cover picker — choose any track's art as the playlist cover. */}
+      {coverPicking && (
+        <div className="aura-dpd__cover-picker" onClick={() => setCoverPicking(false)}>
+          <div className="aura-dpd__cover-picker-panel" onClick={(e) => e.stopPropagation()}
+            role="dialog" aria-label="choose a cover">
+            <div className="aura-dpd__cover-picker-head">
+              <span>choose a cover</span>
+              <button type="button" onClick={() => setCoverPicking(false)} aria-label="close">×</button>
+            </div>
+            <div className="aura-dpd__cover-picker-grid">
+              {tracks.map(t => (
+                <button key={t.id} type="button" className="aura-dpd__cover-opt"
+                  onClick={() => chooseCover(t)} title={cleanTitle(t.title)}>
+                  <AlbumArt track={t} radius={8} style={{ width: '100%', height: '100%' }}/>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

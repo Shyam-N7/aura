@@ -9,13 +9,14 @@ vi.mock('../../api/playlists', () => ({
   setPlaylistVisibility: vi.fn(),
   removePlaylistCollaborator: vi.fn().mockResolvedValue(undefined),
   setPlaylistOnlyMe: vi.fn().mockResolvedValue({ isPublic: false, onlyMe: true }),
+  setPlaylistCover: vi.fn().mockResolvedValue({ coverImageUrl: 'img-t1' }),
 }));
 vi.mock('../../lib/toast', () => ({ toast: vi.fn() }));
 vi.mock('../../lib/confirm', () => ({ confirm: vi.fn().mockResolvedValue(true) }));
 vi.mock('../../lib/trackContextMenu', () => ({ toggleTrackMenu: vi.fn() }));
 vi.mock('../../lib/auth', () => ({ getUser: () => ({ id: 'me' }) }));
 
-import { getPlaylist, removePlaylistCollaborator, setPlaylistOnlyMe } from '../../api/playlists';
+import { getPlaylist, removePlaylistCollaborator, setPlaylistOnlyMe, setPlaylistCover } from '../../api/playlists';
 import { confirm } from '../../lib/confirm';
 import { DesktopPlaylistDetail } from './DesktopPlaylistDetail';
 
@@ -83,6 +84,14 @@ describe('DesktopPlaylistDetail — attribution & visibility', () => {
     await renderDetail(view({ shared: false, collaborators: [] }));
     await screen.findByText('Song One');
     expect(screen.queryByText(/added by/)).not.toBeInTheDocument();
+  });
+
+  it('lets the owner change the cover from the track picker', async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByText('change cover'));
+    expect(screen.getByRole('dialog', { name: 'choose a cover' })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByTitle('Song One')); });
+    expect(setPlaylistCover).toHaveBeenCalledWith('pl1', 't1');
   });
 
   it('"only you" confirms then hard-revokes sharing', async () => {

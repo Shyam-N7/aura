@@ -108,6 +108,18 @@ export async function setPlaylistOnlyMe(id) {
   return body;   // { isPublic:false, onlyMe:true }
 }
 
+// Set the cover to one of the playlist's tracks. Returns { coverImageUrl }.
+export async function setPlaylistCover(id, trackId) {
+  const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/cover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trackId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `couldn't set cover (${res.status})`);
+  return body;   // { coverImageUrl }
+}
+
 // ── Save to library (keep someone else's playlist without editing it) ──
 export async function savePlaylist(id) {
   const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/save`, { method: 'POST' });

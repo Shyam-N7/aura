@@ -319,6 +319,27 @@ export async function addTrackToPlaylist(userId, playlistId, trackId) {
   );
 }
 
+// Set the playlist cover to a chosen track's art (owner/editor). The track must
+// be in the playlist. Custom uploaded images (P3) take precedence over this.
+export async function setPlaylistCover(userId, playlistId, trackId) {
+  await requireEdit(userId, playlistId);
+  const { rows } = await query(
+    `SELECT t.raw FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
+     WHERE pt.playlist_id = $1 AND pt.track_id = $2`,
+    [playlistId, trackId],
+  );
+  if (!rows.length) {
+    const err = new Error("that track isn't in this playlist");
+    err.statusCode = 400;
+    throw err;
+  }
+  await pool.query(
+    `UPDATE playlists SET cover_track_id = $2, updated_at = $3 WHERE id = $1`,
+    [playlistId, trackId, Date.now()],
+  );
+  return { coverImageUrl: rows[0].raw?.imageUrl ?? null };
+}
+
 export async function removeTrackFromPlaylist(userId, playlistId, trackId) {
   await requireEdit(userId, playlistId);
   await pool.query(
