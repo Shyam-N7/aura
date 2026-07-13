@@ -67,8 +67,9 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
       window.history.replaceState(null, '', u.pathname + u.search);
     } catch { /* ignore */ }
     acceptPlaylistInvite(token)
-      .then(({ playlistId, name }) => {
-        toast(name ? `Joined “${name}”.` : 'Joined the playlist.');
+      .then(({ playlistId, name, inviterName }) => {
+        const label = name ? `“${name}”` : 'the playlist';
+        toast(inviterName ? `Joined ${label} — shared by ${inviterName}.` : `Joined ${label}.`);
         listPlaylists().then(data => setHit({ data, error: null })).catch(() => {});
         onOpenPlaylist?.(playlistId);
       })

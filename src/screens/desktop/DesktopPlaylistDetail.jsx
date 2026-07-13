@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { MonoLabel } from '../../components/primitives';
 import { AlbumArt } from '../../components/album/AlbumArt';
 import { AuraLoader } from '../../components/feedback/AuraLoader';
-import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility, removePlaylistCollaborator } from '../../api/playlists';
+import { getPlaylist, removeFromPlaylist, getPlaylistRev, createPlaylistInvite, setPlaylistVisibility, removePlaylistCollaborator, setPlaylistOnlyMe } from '../../api/playlists';
 import { fmtTime, fmtRuntime } from '../../utils/fmtTime';
 import { relTime } from '../../utils/relTime';
 import { cleanTitle } from '../../utils/title';
 import { toast } from '../../lib/toast';
 import { confirm } from '../../lib/confirm';
+import { getUser } from '../../lib/auth';
 import { openTrackMenu } from '../../lib/trackContextMenu';
 import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
@@ -35,6 +36,7 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   }, [playlistId]);
 
   const tracks = hit.data?.tracks ?? [];
+  const myId = getUser()?.id;
   const canEdit = hit.data?.canEdit ?? false;
   const isOwner = hit.data?.role === 'owner';
   const shared = hit.data?.shared ?? false;
@@ -107,6 +109,31 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   };
   const copyShareLink = copyInviteLink('editor', 'Edit-invite link copied — they can edit after signing in.');
   const copyViewInvite = copyInviteLink('viewer', 'View-invite link copied — they can view after signing in.');
+
+  // "Only you" — the hard-private revert. Spell out exactly what it severs.
+  const makeOnlyMe = async () => {
+    setShareEl(null);
+    const bits = [];
+    if (collaborators.length) bits.push(`${collaborators.length} ${collaborators.length === 1 ? 'collaborator' : 'collaborators'} lose access`);
+    bits.push('any pending invite links stop working');
+    if (isPublic) bits.push('the public link turns off');
+    const ok = await confirm({
+      title: 'Make this only you?',
+      body: `${bits.join(', ')}. You can share it again anytime.`,
+      confirmLabel: 'make private',
+      danger: true,
+    });
+    if (!ok) return;
+    const prev = hit.data;
+    setHit(h => ({ ...h, data: { ...h.data, collaborators: [], isPublic: false, shared: false } }));
+    try {
+      await setPlaylistOnlyMe(playlistId);
+      toast('Only you can see this now.');
+    } catch (err) {
+      setHit({ data: prev, error: null });
+      toast(`Couldn’t update — ${err.message}`);
+    }
+  };
 
   // Owner removes a collaborator by tapping their chip (with a confirm).
   const dropCollaborator = async (c) => {
@@ -225,18 +252,24 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
                     Share
                   </button>
                   {shareEl && (
-                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={176}>
+                    <AnchoredMenu anchorEl={shareEl} onClose={() => setShareEl(null)} estHeight={240}>
+                      <div className="aura-pl-menu-label">who can see this</div>
+                      {(collaborators.length > 0 || isPublic) && (
+                        <button onClick={makeOnlyMe} className="aura-pl-menu-item">only you</button>
+                      )}
+                      <div className="aura-pl-menu-sub">people you invite</div>
+                      <button onClick={copyShareLink} className="aura-pl-menu-item">copy edit-invite link</button>
+                      <button onClick={copyViewInvite} className="aura-pl-menu-item">copy view-invite link</button>
+                      {typeof navigator !== 'undefined' && navigator.share && (
+                        <button onClick={shareVia} className="aura-pl-menu-item">invite someone…</button>
+                      )}
+                      <div className="aura-pl-menu-sub">anyone with the link</div>
                       <button onClick={togglePublic} disabled={shareBusy} className="aura-pl-menu-item">
                         {isPublic ? 'turn off public link' : 'make a public view link'}
                       </button>
                       {isPublic && publicId && (
-                        <button onClick={copyPublicLink} className="aura-pl-menu-item">copy view link</button>
+                        <button onClick={copyPublicLink} className="aura-pl-menu-item">copy public link</button>
                       )}
-                      {typeof navigator !== 'undefined' && navigator.share && (
-                        <button onClick={shareVia} className="aura-pl-menu-item">invite someone to edit…</button>
-                      )}
-                      <button onClick={copyShareLink} className="aura-pl-menu-item">copy edit-invite link</button>
-                      <button onClick={copyViewInvite} className="aura-pl-menu-item">copy view-invite link</button>
                     </AnchoredMenu>
                   )}
                 </>
@@ -273,6 +306,11 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
                     <MonoLabel className="text-ink-soft mt-1.5 block truncate" size={9.5}>
                       {(t.artist ?? '').toLowerCase()} · {t.language ?? ''}
                     </MonoLabel>
+                    {shared && t.addedBy && (
+                      <MonoLabel className="text-ink-faint mt-1 block truncate" size={8.5}>
+                        added by {t.addedBy.userId === myId ? 'you' : t.addedBy.name}
+                      </MonoLabel>
+                    )}
                   </div>
                   <MonoLabel className="text-ink-faint shrink-0 ml-4" size={10} numeric>{fmtTime(t.durationSec)}</MonoLabel>
                 </button>

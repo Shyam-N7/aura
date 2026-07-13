@@ -154,9 +154,10 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
   if (meta.length === 0) notFound();
   const { rows: trackRows } = await query(
     `SELECT t.id, t.title, t.artist, t.album, t.language, t.duration_sec, t.stream_url, t.raw,
-            pt.position, pt.added_at
+            pt.position, pt.added_at, pt.added_by, au.name AS added_by_name
      FROM playlist_tracks pt
      LEFT JOIN tracks t ON t.id = pt.track_id
+     LEFT JOIN users  au ON au.id = pt.added_by
      WHERE pt.playlist_id = $1
      ORDER BY pt.position ASC`,
     [id],
@@ -174,6 +175,9 @@ async function loadPlaylistView(id, { role = null, includeCollaborators = true }
       // is a view-only teaser, not free unauthenticated streaming.
       streamUrl:   role ? r.stream_url : null,
       imageUrl:    r.raw?.imageUrl ?? null,
+      // Who added this track — members only; never exposed on the public link.
+      // Legacy rows (pre-attribution) have no added_by → null, no chip shown.
+      addedBy:     (role && r.added_by) ? { userId: r.added_by, name: r.added_by_name } : null,
     }));
   const row = meta[0];
   let collaborators = [];
@@ -281,12 +285,12 @@ export async function addTrackToPlaylist(userId, playlistId, trackId) {
   // Append at end: position = max + 1, starting at 0 for empty playlist.
   // ON CONFLICT DO NOTHING means a duplicate add inserts 0 rows — surface a 409.
   const ins = await pool.query(
-    `INSERT INTO playlist_tracks (playlist_id, track_id, position, added_at)
-     SELECT $1, $2, COALESCE(MAX(position), -1) + 1, $3
+    `INSERT INTO playlist_tracks (playlist_id, track_id, position, added_at, added_by)
+     SELECT $1, $2, COALESCE(MAX(position), -1) + 1, $3, $4
      FROM playlist_tracks
      WHERE playlist_id = $1
      ON CONFLICT (playlist_id, track_id) DO NOTHING`,
-    [playlistId, trackId, ts],
+    [playlistId, trackId, ts, userId],
   );
   if (ins.rowCount === 0) {
     const { rows } = await query(`SELECT name FROM playlists WHERE id = $1`, [playlistId]);
@@ -342,14 +346,21 @@ export async function createInvite(userId, playlistId, { role = 'editor' } = {})
 }
 
 // Accept a token → become a collaborator. Idempotent (re-accept updates role).
+// Returns the inviter's name so the client can say "shared by <name>".
 export async function acceptInvite(userId, token) {
-  const { rows } = await query('SELECT * FROM playlist_invites WHERE token = $1', [String(token ?? '')]);
+  const { rows } = await query(
+    `SELECT i.*, iu.name AS inviter_name
+     FROM playlist_invites i LEFT JOIN users iu ON iu.id = i.created_by
+     WHERE i.token = $1`,
+    [String(token ?? '')],
+  );
   if (!rows.length) {
     const err = new Error('this invite link is invalid');
     err.statusCode = 404;
     throw err;
   }
   const inv = rows[0];
+  const inviterName = inv.inviter_name ?? null;
   if (Number(inv.expires_at) < Date.now()) {
     const err = new Error('this invite link has expired');
     err.statusCode = 410;
@@ -358,14 +369,14 @@ export async function acceptInvite(userId, token) {
   const { rows: pl } = await query('SELECT user_id, name FROM playlists WHERE id = $1', [inv.playlist_id]);
   if (!pl.length) notFound();
   // Owner accepting their own link is a no-op (they already have full access).
-  if (pl[0].user_id === userId) return { playlistId: inv.playlist_id, name: pl[0].name, role: 'owner' };
+  if (pl[0].user_id === userId) return { playlistId: inv.playlist_id, name: pl[0].name, role: 'owner', inviterName };
   await pool.query(
     `INSERT INTO playlist_collaborators (playlist_id, user_id, role, added_at)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (playlist_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
     [inv.playlist_id, userId, inv.role, Date.now()],
   );
-  return { playlistId: inv.playlist_id, name: pl[0].name, role: inv.role };
+  return { playlistId: inv.playlist_id, name: pl[0].name, role: inv.role, inviterName };
 }
 
 // Owner removes any collaborator; a collaborator may remove themselves (leave).
@@ -378,4 +389,17 @@ export async function removeCollaborator(userId, playlistId, targetUserId) {
     `DELETE FROM playlist_collaborators WHERE playlist_id = $1 AND user_id = $2`,
     [playlistId, targetUserId],
   );
+}
+
+// "Only you" — the hard-private state. Owner-only: revoke every collaborator,
+// kill all outstanding invite tokens, and turn the public link off. A complete
+// severing of every sharing path in one call.
+export async function setPlaylistOnlyMe(userId, playlistId) {
+  const access = await getAccess(userId, playlistId);
+  if (!access.exists) notFound();
+  if (access.role !== 'owner') forbidden('only the owner can change who can see this playlist');
+  await pool.query(`DELETE FROM playlist_collaborators WHERE playlist_id = $1`, [playlistId]);
+  await pool.query(`DELETE FROM playlist_invites WHERE playlist_id = $1`, [playlistId]);
+  await pool.query(`UPDATE playlists SET is_public = FALSE WHERE id = $1`, [playlistId]);
+  return { isPublic: false, onlyMe: true };
 }

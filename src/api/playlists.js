@@ -99,6 +99,15 @@ export async function setPlaylistVisibility(id, isPublic) {
   return body;   // { isPublic, publicId }
 }
 
+// Owner makes the playlist private ("only you") — revokes collaborators, kills
+// invite tokens, and turns the public link off in one call.
+export async function setPlaylistOnlyMe(id) {
+  const res = await fetchAuthed(`/api/playlists/${encodeURIComponent(id)}/only-me`, { method: 'POST' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `couldn't make it private (${res.status})`);
+  return body;   // { isPublic:false, onlyMe:true }
+}
+
 // PUBLIC read by share id — no auth, plain fetch (works signed-out). Returns the
 // read-only playlist view, or throws on 404 (unknown / not public).
 export async function getPublicPlaylist(publicId, { signal } = {}) {

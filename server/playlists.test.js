@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('./db.js', () => ({ query: vi.fn(), pool: { query: vi.fn() } }));
 
 import { query, pool } from './db.js';
-import { listPlaylists, createInvite, removeCollaborator } from './playlists.js';
+import {
+  listPlaylists, createInvite, removeCollaborator,
+  addTrackToPlaylist, acceptInvite, setPlaylistOnlyMe, getPlaylist, getPublicPlaylist,
+} from './playlists.js';
 
 // Access is one query joining the playlist owner + the caller's collaborator row.
 // Script it per test to place the caller as owner / editor / stranger.
@@ -65,5 +68,62 @@ describe('removeCollaborator (authorization)', () => {
     access({ ownerId: 'owner', collabRole: 'editor' });
     await expect(removeCollaborator('u2', 'pl1', 'other')).rejects.toMatchObject({ statusCode: 403 });
     expect(pool.query.mock.calls.some(c => /DELETE FROM playlist_collaborators/.test(c[0]))).toBe(false);
+  });
+});
+
+describe('per-track attribution (added_by)', () => {
+  it('records who added a track', async () => {
+    access({ ownerId: 'u1' });                    // requireEdit → getAccess
+    pool.query.mockResolvedValueOnce({ rowCount: 1 });   // INSERT
+    pool.query.mockResolvedValueOnce({ rows: [] });      // UPDATE touch
+    await addTrackToPlaylist('u1', 'pl1', 'trk');
+    const insert = pool.query.mock.calls.find(c => /INSERT INTO playlist_tracks/.test(c[0]));
+    expect(insert[0]).toContain('added_by');
+    expect(insert[1]).toEqual(['pl1', 'trk', expect.any(Number), 'u1']);
+  });
+
+  it('exposes addedBy to members', async () => {
+    access({ ownerId: 'u1' });                    // requireView → owner
+    query.mockResolvedValueOnce({ rows: [{ id: 'pl1', name: 'x', is_public: false, public_id: null, owner_id: 'u1', owner_name: 'shyam' }] });
+    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', duration_sec: 200, raw: null, added_by: 'u2', added_by_name: 'ravi' }] });
+    query.mockResolvedValueOnce({ rows: [] });    // collaborators
+    const view = await getPlaylist('u1', 'pl1');
+    expect(view.tracks[0].addedBy).toEqual({ userId: 'u2', name: 'ravi' });
+  });
+
+  it('never exposes addedBy (or a stream URL) on the public link', async () => {
+    query.mockResolvedValueOnce({ rows: [{ id: 'pl1' }] });   // public lookup
+    query.mockResolvedValueOnce({ rows: [{ id: 'pl1', name: 'x', is_public: true, public_id: 'pub', owner_id: 'u1', owner_name: 'shyam' }] });
+    query.mockResolvedValueOnce({ rows: [{ id: 't1', title: 'S', stream_url: 's', duration_sec: 200, raw: null, added_by: 'u2', added_by_name: 'ravi' }] });
+    const view = await getPublicPlaylist('pub');
+    expect(view.tracks[0].addedBy).toBeNull();
+    expect(view.tracks[0].streamUrl).toBeNull();
+  });
+});
+
+describe('acceptInvite attribution', () => {
+  it('returns the inviter name', async () => {
+    query.mockResolvedValueOnce({ rows: [{ token: 't', playlist_id: 'pl1', created_by: 'u1', role: 'editor', expires_at: Date.now() + 1e6, inviter_name: 'shyam' }] });
+    query.mockResolvedValueOnce({ rows: [{ user_id: 'u1', name: 'Road Trip' }] });
+    const out = await acceptInvite('u2', 't');
+    expect(out).toMatchObject({ role: 'editor', inviterName: 'shyam', name: 'Road Trip' });
+  });
+});
+
+describe('setPlaylistOnlyMe (hard revoke)', () => {
+  it('severs collaborators, invites, and the public link — owner only', async () => {
+    access({ ownerId: 'u1' });
+    const out = await setPlaylistOnlyMe('u1', 'pl1');
+    expect(out).toEqual({ isPublic: false, onlyMe: true });
+    const sqls = pool.query.mock.calls.map(c => c[0]);
+    expect(sqls.some(s => /DELETE FROM playlist_collaborators WHERE playlist_id/.test(s))).toBe(true);
+    expect(sqls.some(s => /DELETE FROM playlist_invites WHERE playlist_id/.test(s))).toBe(true);
+    expect(sqls.some(s => /is_public = FALSE/.test(s))).toBe(true);
+  });
+
+  it('refuses a non-owner (and severs nothing)', async () => {
+    access({ ownerId: 'owner', collabRole: 'editor' });
+    await expect(setPlaylistOnlyMe('u2', 'pl1')).rejects.toMatchObject({ statusCode: 403 });
+    expect(pool.query.mock.calls.length).toBe(0);
   });
 });

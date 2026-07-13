@@ -584,6 +584,15 @@ const migrations = [
       CREATE INDEX idx_impressions_user_surface ON impressions(user_id, surface, last_ts DESC);
     `);
   },
+  async function v24_playlist_track_added_by(client) {
+    // Per-track attribution for collab playlists — "who added this song".
+    // Nullable + ON DELETE SET NULL: existing rows stay NULL (no retroactive
+    // attribution — the UI simply shows no chip for them), and if the adder's
+    // account is deleted the track stays put, just unattributed.
+    await client.query(
+      `ALTER TABLE playlist_tracks ADD COLUMN added_by TEXT REFERENCES users(id) ON DELETE SET NULL`,
+    );
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

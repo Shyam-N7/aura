@@ -19,7 +19,7 @@ import { generateWhy } from './prompts/why.js';
 import { getJournalEntries } from './journal.js';
 import { getSonicDna } from './sonicDna.js';
 import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
-import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, getPublicPlaylist } from './playlists.js';
+import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, setPlaylistOnlyMe, getPublicPlaylist } from './playlists.js';
 import { getLibrarySummary } from './library.js';
 import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getGreeting } from './greeting.js';
@@ -918,6 +918,16 @@ app.delete('/api/playlists/:id/collaborators/:user_id', requireAuth, async (req,
 app.post('/api/playlists/:id/visibility', requireAuth, async (req, res) => {
   try {
     res.json(await setPlaylistVisibility(req.userId, req.params.id, !!req.body?.public));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Owner makes a playlist private ("only you") — revokes collaborators + invites
+// + the public link in one call. Returns { isPublic:false, onlyMe:true }.
+app.post('/api/playlists/:id/only-me', requireAuth, async (req, res) => {
+  try {
+    res.json(await setPlaylistOnlyMe(req.userId, req.params.id));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

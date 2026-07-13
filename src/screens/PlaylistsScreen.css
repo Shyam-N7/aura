@@ -141,6 +141,19 @@
 .aura-pl-menu-item--danger:hover {
   color: var(--color-accent);
 }
+/* Section headings inside the share/visibility sheet. The top label is the
+   sheet's title; the subs group the three "who can see this" tiers. */
+.aura-pl-menu-label,
+.aura-pl-menu-sub {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  padding: 4px 12px 2px;
+}
+.aura-pl-menu-label { color: var(--color-ink-soft); }
+.aura-pl-menu-sub { margin-top: 4px; border-top: 1px solid color-mix(in srgb, var(--color-ink), transparent 90%); padding-top: 6px; }
 
 .aura-pl-create-input {
   flex: 1;
