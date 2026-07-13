@@ -51,6 +51,17 @@ export function sanitizeUser(row) {
   };
 }
 
+// Body for a session-creating response (login / google / verify-otp). Web clients get
+// only { user } — the JWT rides the httpOnly cookie and nothing token-shaped ever
+// appears in a response body for XSS to lift. The native app cannot read that cookie,
+// so when it identifies itself (X-Aura-Client: native) it gets the SAME JWT in the
+// body too — same client, same token, no extra exposure.
+export function sessionPayload(req, res, user) {
+  const body = { user: sanitizeUser(user) };
+  if (req.get('x-aura-client') === 'native' && res.locals.sessionToken) body.token = res.locals.sessionToken;
+  return body;
+}
+
 // Maps a verifyOtp() failure result to an HTTP response.
 function otpFail(res, result) {
   switch (result.reason) {
@@ -141,6 +152,8 @@ async function startSession(req, res, user) {
     return true;
   }
   setSessionCookie(res, r.token);
+  // Stashed for sessionPayload — only reaches a response body for native clients.
+  res.locals.sessionToken = r.token;
   // Unrecognized device → heads-up email. AWAITED (a serverless lambda can freeze
   // right after res.json, dropping an un-awaited send) but wrapped so it can never
   // fail the sign-in.
@@ -209,7 +222,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     [now, user.id],
   );
   if (await startSession(req, res, user)) return;
-  res.json({ user: sanitizeUser(user) });
+  res.json(sessionPayload(req, res, user));
 }));
 
 // ── Google OAuth ─────────────────────────────────────────────────────
@@ -268,7 +281,7 @@ router.post('/google', async (req, res) => {
     }
 
     if (await startSession(req, res, user)) return;
-    res.json({ user: sanitizeUser(user) });
+    res.json(sessionPayload(req, res, user));
   } catch (err) {
     console.warn('[auth/google]', err.message);
     res.status(401).json({ error: 'google token verification failed' });
@@ -296,7 +309,7 @@ router.post('/verify-otp', async (req, res) => {
     if (!upd.rowCount) return res.status(409).json({ error: 'account no longer exists — sign up again', code: 'signup_expired' });
 
     if (await startSession(req, res, upd.rows[0])) return;
-    res.json({ user: sanitizeUser(upd.rows[0]) });
+    res.json(sessionPayload(req, res, upd.rows[0]));
   } catch (err) {
     console.error('[auth/verify-otp]', err);
     res.status(500).json({ error: 'verification failed' });
