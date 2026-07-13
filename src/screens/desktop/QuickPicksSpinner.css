@@ -3,7 +3,8 @@
    by -spin so the art + label stay upright while orbiting. */
 .aura-qps {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 8px 16px 26px;
 }
 .aura-qps__ring {
@@ -109,7 +110,9 @@
 
 /* Why the playing pick is in the ring — centered receipt under the wheel. */
 .aura-qps__why {
-  margin-top: 4px;
+  /* clears the disc name labels, which hang ~20px below the ring box */
+  margin-top: 28px;
+  max-width: min(330px, 84vw);
   text-align: center;
   font-family: var(--font-mono);
   font-size: 9px;
