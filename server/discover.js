@@ -22,6 +22,7 @@ function movieQuery(lang) {
     hindi:     `new bollywood movie songs ${monthName} ${year}`,
     malayalam: `new malayalam movie songs ${year}`,
     kannada:   `new kannada movie songs ${year}`,
+    telugu:    `new telugu movie songs ${monthName} ${year}`,
   })[lang];
 }
 
@@ -33,6 +34,7 @@ function hitsQuery(lang) {
     hindi:     `hindi top hits ${year}`,
     malayalam: `malayalam top hits ${year}`,
     kannada:   `kannada top hits ${year}`,
+    telugu:    `telugu top hits ${year}`,
   })[lang];
 }
 
@@ -42,6 +44,7 @@ const CLASSIC_QUERIES = {
   hindi:     'lata mangeshkar classics',
   malayalam: 'malayalam classics',
   kannada:   'kannada classic songs',
+  telugu:    'telugu classic songs',
 };
 
 function dateSeed() {
