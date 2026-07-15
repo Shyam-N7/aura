@@ -3,6 +3,25 @@
 // language per day, cached in-memory until the date rolls over.
 
 import { getCatalogHome, searchSongs, getSongDetails } from './catalog.js';
+import { normalizeTitle } from './related.js';
+
+// A search-backed shelf ("telugu top hits 2026" etc.) can carry the same song
+// several times: the provider returns it under different ids, title variants
+// ("... (From "Movie")") and even different artist credits (a singer vs a
+// label), so searchSongs' title|artist dedupe lets the credit-variant dupes
+// through. Collapse each shelf by NORMALIZED TITLE so a song shows once.
+function dedupeByTitle(tracks) {
+  const seen = new Set();
+  const out = [];
+  for (const t of tracks ?? []) {
+    if (!t) continue;
+    const key = normalizeTitle(t.title) || t.id;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
 
 // Dynamic query builders — year + month auto-update so we never go stale.
 // Classics stay static (timeless catalog, not time-bound).
@@ -102,11 +121,11 @@ export async function getDiscoverHome({ lang } = {}) {
 
   const trending = homeRes.status === 'fulfilled' ? await enrichImages(homeRes.value.trending) : [];
   const result = {
-    trending,
-    popularPlaylists: homeRes.status     === 'fulfilled' ? homeRes.value.featuredPlaylists : [],
-    topHits:          hitsRes.status     === 'fulfilled' ? hitsRes.value                   : [],
-    classics:         classicsRes.status === 'fulfilled' ? classicsRes.value               : [],
-    movieSongs:       movieRes.status    === 'fulfilled' ? movieRes.value                  : [],
+    trending:         dedupeByTitle(trending),
+    popularPlaylists: homeRes.status     === 'fulfilled' ? homeRes.value.featuredPlaylists       : [],
+    topHits:          dedupeByTitle(hitsRes.status     === 'fulfilled' ? hitsRes.value     : []),
+    classics:         dedupeByTitle(classicsRes.status === 'fulfilled' ? classicsRes.value : []),
+    movieSongs:       dedupeByTitle(movieRes.status    === 'fulfilled' ? movieRes.value    : []),
   };
   cache.set(key, result);
   return result;
