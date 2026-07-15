@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "live.aurafm.app",
+      "sha256_cert_fingerprints": [
+        "F7:4B:7C:D5:14:D6:DC:7C:DB:FE:92:D8:D8:C6:81:ED:72:F4:FA:77:17:5F:F9:61:68:A6:BA:43:84:83:EF:6A"
+      ]
+    }
+  }
+]
