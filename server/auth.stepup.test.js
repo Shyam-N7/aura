@@ -10,14 +10,14 @@ vi.mock('./otp.js', () => ({ verifyOtp: vi.fn(), issueOtp: vi.fn(), consumeOtp: 
 vi.mock('./adminGate.js', () => ({ adminBlocked: () => false }));
 vi.mock('./modes.js', () => ({ buildModesView: () => [] }));
 vi.mock('./securityAlerts.js', () => ({ sendNewDeviceAlert: vi.fn() }));
-vi.mock('bcryptjs', () => ({ default: { compare: vi.fn(), hash: vi.fn() } }));
+vi.mock('bcrypt', () => ({ default: { compare: vi.fn(), hash: vi.fn() } }));
 
 let auth, db, otp, bcrypt;
 beforeAll(async () => {
   vi.stubEnv('JWT_SECRET', 'unit-test-secret');
   db = await import('./db.js');
   otp = await import('./otp.js');
-  bcrypt = (await import('bcryptjs')).default;
+  bcrypt = (await import('bcrypt')).default;
   auth = await import('./auth.js');
 });
 afterAll(() => vi.unstubAllEnvs());

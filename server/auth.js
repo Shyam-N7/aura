@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import {
   requireAuth, optionalAuth, setSessionCookie, clearSessionCookie,

@@ -22,7 +22,7 @@ aurafm.live  (Vercel)
 | `vercel.json` | Build = `npm run build`, output = `dist`, SPA fallback for non-`/api` routes. |
 
 Serverless-safety changes already made: migrations split out of the request
-path; `bcrypt` → `bcryptjs` (pure JS); media-URL DES decrypt → `crypto-js`
+path; password hashing on native `bcrypt` (prebuilt for node 20 — faster verify than the interim pure-JS `bcryptjs`); media-URL DES decrypt → `crypto-js`
 (no `--openssl-legacy-provider` needed); body parsing tolerant of host
 pre-parsing. Local `npm run dev:all` behaves exactly as before.
 

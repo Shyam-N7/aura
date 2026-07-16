@@ -28,7 +28,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.6.1",
     "@vercel/speed-insights": "^2.0.0",
-    "bcryptjs": "^2.4.3",
+    "bcrypt": "^5.1.1",
     "clsx": "^2.1.1",
     "cookie-parser": "^1.4.7",
     "crypto-js": "^4.2.0",
