@@ -22,6 +22,7 @@ import { listLiked, listLikedIds, likeTrack, unlikeTrack } from './likes.js';
 import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, searchPlaylists, createInvite, acceptInvite, removeCollaborator, setPlaylistVisibility, setPlaylistOnlyMe, setPlaylistCover, savePlaylist, unsavePlaylist, listSavedPlaylists, getPublicPlaylist } from './playlists.js';
 import { getLibrarySummary } from './library.js';
 import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
+import { getLoudness, loudnessMeasureHandler } from './loudness.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getQuickPicks } from './quickPicks.js';
@@ -619,6 +620,32 @@ app.get('/api/playback/resume', requireAuth, async (req, res) => {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
 });
+
+// Volume-leveling data: measured-once integrated loudness per track (see
+// server/loudness.js). Absent ids just haven't been measured yet — clients
+// play those unleveled and POST a measure so the next listener has them.
+app.get('/api/loudness', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.ids ?? '').split(',').filter(Boolean);
+    res.json({ tracks: await getLoudness(ids) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// LOCAL DEV ONLY in effect: in production vercel.json rewrites this exact path
+// to its own serverless function (api/loudness-measure.js) before it can reach
+// this app, so the ~80MB ffmpeg binary never bloats the main bundle. The
+// module name lives in a variable so the dependency tracer can't see it and
+// pull ffmpeg-static in here.
+const FFMPEG_MODULE = 'ffmpeg-static';
+app.post('/api/loudness/measure', requireAuth, loudnessMeasureHandler(async () => {
+  try {
+    return (await import(FFMPEG_MODULE)).default;
+  } catch {
+    return null;
+  }
+}));
 
 // Full listening history (paginated, newest first) for the song-history screen.
 app.get('/api/history', requireAuth, async (req, res) => {

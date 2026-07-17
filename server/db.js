@@ -618,6 +618,26 @@ const migrations = [
     // initial-letter monogram everywhere it's shown.
     await client.query(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
   },
+  async function v28_track_loudness(client) {
+    // Per-track integrated loudness (BS.1770 via ffmpeg ebur128), measured
+    // ONCE from the 320 kbps stream and then shared by every listener — the
+    // data that powers volume leveling in the clients (JioSaavn provides
+    // none). The row is also a claim/state machine so concurrent serverless
+    // measure runs never duplicate the work: pending (claimed) → done |
+    // failed; stale pending rows and failed rows under the retry cap are
+    // re-claimable (server/loudness.js).
+    await client.query(`
+      CREATE TABLE track_loudness (
+        track_id    TEXT   PRIMARY KEY,
+        status      TEXT   NOT NULL DEFAULT 'pending',
+        lufs        REAL,
+        true_peak   REAL,
+        tries       INT    NOT NULL DEFAULT 0,
+        claimed_at  BIGINT NOT NULL,
+        measured_at BIGINT
+      );
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
