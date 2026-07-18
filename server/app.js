@@ -27,6 +27,7 @@ import { stemsRequestHandler } from './stems.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getQuickPicks } from './quickPicks.js';
+import { getPersonalHero, getNewForYou, getStations } from './homeReco.js';
 import { recordImpressions, pruneOldImpressions } from './impressions.js';
 import { uploadImage } from './uploads.js';
 import { getAutoPlaylists, refreshDueMixes } from './autoPlaylists.js';
@@ -575,6 +576,31 @@ app.get('/api/home/quick-picks', requireAuth, async (req, res) => {
   try {
     const salt = String(req.query.salt ?? '').slice(0, 32);
     res.json(await getQuickPicks(req.userId, { tzOffset: req.query.tzOffset, salt }));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Personalized home surfaces (server/homeReco.js). Each returns null below its
+// history floor — the client then keeps its honest featured fallback, so a new
+// account degrades gracefully instead of seeing fabricated personalization.
+app.get('/api/home/hero', requireAuth, async (req, res) => {
+  try {
+    res.json(await getPersonalHero(req.userId, { tzOffset: req.query.tzOffset }));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+app.get('/api/home/new-for-you', requireAuth, async (req, res) => {
+  try {
+    res.json(await getNewForYou(req.userId, {}));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+app.get('/api/home/stations', requireAuth, async (req, res) => {
+  try {
+    res.json(await getStations(req.userId));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
