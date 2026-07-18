@@ -23,6 +23,7 @@ import { listPlaylists, getPlaylist, getPlaylistRev, createPlaylist, deletePlayl
 import { getLibrarySummary } from './library.js';
 import { recordHeartbeat, getNowPlaying, getResume } from './playback.js';
 import { getLoudness, loudnessMeasureHandler } from './loudness.js';
+import { stemsRequestHandler } from './stems.js';
 import { getGreeting } from './greeting.js';
 import { getMostPlayed, getTopArtists, getRecentlyPlayed, getHistory, getMusicClockPlays } from './stats.js';
 import { getQuickPicks } from './quickPicks.js';
@@ -115,6 +116,12 @@ const costLimiter = buildLimiter(5 * 60 * 1000, 60, 'too many requests — slow 
 // Sensitive per-account actions (family PIN, mode switches) — SHARED store, keyed by
 // account (else IP), layered on top of the routes' own per-account PIN lockouts.
 const sensitiveLimiter = buildLimiter(15 * 60 * 1000, 40, 'too many requests — slow down a moment.', 'sensitive', accountOrIpKey);
+// Stems separation — the costliest cache-miss on the API: a finite MVSEP
+// free-tier job plus a persistent, billable Blob write per track. Account-keyed
+// and SHARED (global across instances) so a single account can't script the
+// endpoint to drain the shared MVSEP quota or spray junk rows. Generous enough
+// for real karaoke use (a listener separates a handful of songs a session).
+const stemsLimiter = buildLimiter(10 * 60 * 1000, 20, 'too many requests — slow down a moment.', 'stems', accountOrIpKey);
 
 app.use('/api', generalLimiter);
 app.use('/api/auth', authLimiter);
@@ -125,6 +132,8 @@ app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm'], c
 // Sensitive per-account routes get a tighter, shared, account-keyed limiter on top
 // of generalLimiter — registered before their routers mount below.
 app.use(['/api/family', '/api/modes'], sensitiveLimiter);
+// Stems is cost-bearing (MVSEP quota + Blob) — account-keyed, tighter than general.
+app.use('/api/stems', stemsLimiter);
 
 // ── Auth routes (public) ────────────────────────────────────────────
 app.use('/api/auth', authRouter);
@@ -646,6 +655,11 @@ app.post('/api/loudness/measure', requireAuth, loudnessMeasureHandler(async () =
     return null;
   }
 }));
+
+// Karaoke "music only": one idempotent endpoint claims/advances the per-track
+// stems state machine (server/stems.js). Clients poll it while showing
+// "preparing…"; the heavy separation runs on MVSEP, never in a function.
+app.post('/api/stems/request', requireAuth, stemsRequestHandler());
 
 // Full listening history (paginated, newest first) for the song-history screen.
 app.get('/api/history', requireAuth, async (req, res) => {

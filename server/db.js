@@ -638,6 +638,31 @@ const migrations = [
       );
     `);
   },
+  async function v29_track_stems(client) {
+    // Karaoke "music only": a per-track instrumental, separated ONCE from the
+    // 320 kbps stream by an external service (MVSEP free queue) and cached in
+    // Vercel Blob for every listener forever. The row is a claim/state machine
+    // the clients' own polls drive forward, with atomic transitions guarding
+    // each cost-bearing step against duplicate work:
+    //   queued     — claimed, waiting for the free tier's single job slot
+    //   submitting — one winner is calling MVSEP create (blocks double-submit)
+    //   submitted  — MVSEP working (hash stored); in-progress polls heartbeat
+    //   storing    — one winner is downloading + uploading to Blob
+    //   done        — instrumental cached (instrumental_url)
+    //   failed      — re-claimable while tries < cap
+    // See server/stems.js.
+    await client.query(`
+      CREATE TABLE track_stems (
+        track_id         TEXT   PRIMARY KEY,
+        status           TEXT   NOT NULL DEFAULT 'queued',
+        hash             TEXT,
+        instrumental_url TEXT,
+        tries            INT    NOT NULL DEFAULT 0,
+        claimed_at       BIGINT NOT NULL,
+        done_at          BIGINT
+      );
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
