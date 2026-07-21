@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pool } from './db.js';
 import {
   claimStems,
   isSafePublicUrl,
   mvsepConfig,
   pickInstrumental,
+  resolveRemote,
 } from './stems.js';
 
 vi.mock('./db.js', () => ({ pool: { query: vi.fn() }, query: vi.fn() }));
@@ -46,7 +47,7 @@ describe('pickInstrumental', () => {
     expect(pickInstrumental(files).link).toBe('i');
   });
 
-  it('otherwise takes whichever file is not the vocals', () => {
+  it('still reads legacy name/link shapes, matching the Other stem positively', () => {
     const files = [
       { name: 'track (Vocals).mp3', link: 'v' },
       { name: 'track (Other).mp3', link: 'o' },
@@ -75,6 +76,52 @@ describe('pickInstrumental', () => {
     expect(pickInstrumental([])).toBeNull();
     expect(pickInstrumental(null)).toBeNull();
     expect(pickInstrumental([{ name: 'only_vocals.mp3', link: 'v' }])).toBeNull();
+  });
+});
+
+// The stage-1 (get-remote) poll of a remote-url job. The heartbeat contract
+// is the load-bearing part: `alive` may be true ONLY for a positively-
+// acknowledged in-progress job. The account's single free-tier slot is "a
+// non-stale submitted row exists", so a row that heartbeats on garbage
+// (error envelope, rotated token) never goes stale and blocks every other
+// track's separation for as long as anyone polls it.
+describe('resolveRemote', () => {
+  const cfg = { token: 'tok', base: 'https://mvsep.test/api', sepType: 40 };
+  const answers = (body) =>
+    vi.stubGlobal('fetch', vi.fn(async () => ({ text: async () => JSON.stringify(body) })));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('hands over the stage-2 hash once the download is done', async () => {
+    answers({ success: true, status: 'done', data: { hash: 'file-320.mp4' } });
+    expect(await resolveRemote(cfg, 'h1')).toEqual({ hash: 'file-320.mp4' });
+  });
+
+  it('marks disowned jobs terminal so the row can fail and re-claim', async () => {
+    answers({ success: false, status: 'not_found', data: {} });
+    expect((await resolveRemote(cfg, 'h1')).terminal).toBe(true);
+  });
+
+  it('keeps an acknowledged in-progress job alive', async () => {
+    answers({ success: true, status: 'downloading' });
+    expect((await resolveRemote(cfg, 'h1')).alive).toBe(true);
+  });
+
+  it('does NOT keep an unrecognized error envelope alive — it must age out, not wedge the slot', async () => {
+    answers({ success: false, message: 'Wrong API token' });
+    const r = await resolveRemote(cfg, 'h1');
+    expect(r.hash).toBeUndefined();
+    expect(r.terminal).toBeFalsy();
+    expect(r.alive).toBe(false);
+  });
+
+  it('reports transient network trouble as null (leave the row alone)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
+    expect(await resolveRemote(cfg, 'h1')).toBeNull();
   });
 });
 

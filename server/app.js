@@ -120,9 +120,13 @@ const sensitiveLimiter = buildLimiter(15 * 60 * 1000, 40, 'too many requests —
 // Stems separation — the costliest cache-miss on the API: a finite MVSEP
 // free-tier job plus a persistent, billable Blob write per track. Account-keyed
 // and SHARED (global across instances) so a single account can't script the
-// endpoint to drain the shared MVSEP quota or spray junk rows. Generous enough
-// for real karaoke use (a listener separates a handful of songs a session).
-const stemsLimiter = buildLimiter(10 * 60 * 1000, 20, 'too many requests — slow down a moment.', 'stems', accountOrIpKey);
+// endpoint to drain the shared MVSEP quota or spray junk rows. Sized for the
+// POLL cadence, not taps: while "preparing…" the client re-asks every 20s
+// (≈30 calls/10min) and free-queue separation takes minutes — the old cap of
+// 20 starved a single honest wait into 429s ("couldn't reach the server").
+// 60 covers a full wait plus a second track; the costly steps stay gated by
+// the state machine's single job slot and per-track try cap regardless.
+const stemsLimiter = buildLimiter(10 * 60 * 1000, 60, 'too many requests — slow down a moment.', 'stems', accountOrIpKey);
 
 app.use('/api', generalLimiter);
 app.use('/api/auth', authLimiter);

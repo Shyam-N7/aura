@@ -50,6 +50,10 @@ function badRequest(message) {
   return err;
 }
 
+// MVSEP wraps success as a real boolean on some endpoints and the string
+// "true" on others (create). Treat both as acknowledgement.
+const mvsepOk = (res) => res?.success === true || res?.success === 'true';
+
 // null when the separation service isn't configured — the route answers 501
 // and the clients keep karaoke on the full mix.
 export function mvsepConfig(env = process.env) {
@@ -220,9 +224,15 @@ async function mvsepJson(url, init = {}) {
 // the row is on without a schema change.
 const REMOTE_PREFIX = 'remote:';
 
-// null = transient (leave the row alone). { hash } = stage 2 has begun.
-// { terminal: true } = MVSEP disowned the job.
-async function resolveRemote(cfg, remoteHash) {
+// null = transient network trouble (leave the row alone). { hash } = stage 2
+// has begun. { terminal: true } = MVSEP disowned the job. { alive } for
+// everything else: true only when MVSEP positively acknowledged the job
+// (success plus a status string) — the ONE stage-1 shape allowed to
+// heartbeat. An unrecognized body (error envelope, rotated token) must NOT,
+// so a dead row ages out to stale-reclaim instead of holding the account's
+// single free-tier slot open against every other track — the same rule the
+// stage-2 poll enforces. (Exported for the tests that pin exactly that.)
+export async function resolveRemote(cfg, remoteHash) {
   let res;
   try {
     res = await mvsepJson(
@@ -232,10 +242,13 @@ async function resolveRemote(cfg, remoteHash) {
   } catch {
     return null;
   }
-  if (res?.success && res?.status === 'done' && res?.data?.hash) {
+  if (mvsepOk(res) && res?.status === 'done' && res?.data?.hash) {
     return { hash: res.data.hash };
   }
-  return { terminal: res?.status === 'not_found' || res?.status === 'failed' };
+  if (res?.status === 'not_found' || res?.status === 'failed') {
+    return { terminal: true };
+  }
+  return { alive: mvsepOk(res) && typeof res?.status === 'string' };
 }
 
 // Hand MVSEP the stream URL (it downloads the audio itself). The caller has
@@ -269,16 +282,26 @@ async function submit(trackId, cfg) {
       method: 'POST',
       body: form,
     });
-    hash = res?.success && res?.data?.hash ? res.data.hash : null;
+    hash = mvsepOk(res) && res?.data?.hash ? res.data.hash : null;
     if (!hash) {
       // A refusal rolls the row back to 'queued', which looks identical to
       // "still waiting for the slot" from the outside — so a create that can
       // never succeed (bad token, blocked caller) would silently retry
-      // forever. Say why, once, where the platform logs can be read.
-      console.error('[stems] create refused', trackId, JSON.stringify(res)?.slice(0, 300));
+      // forever. Say why, once, where the platform logs can be read. The
+      // token went into this very request's body, so if MVSEP ever echoes it
+      // back, redact it before it can reach the logs.
+      console.error(
+        '[stems] create refused',
+        trackId,
+        JSON.stringify(res)?.replaceAll(cfg.token, '<token>').slice(0, 300),
+      );
     }
   } catch (err) {
-    console.error('[stems] create failed', trackId, err?.message);
+    console.error(
+      '[stems] create failed',
+      trackId,
+      String(err?.message ?? '').replaceAll(cfg.token, '<token>').slice(0, 300),
+    );
   }
   if (hash) {
     await transition(trackId, 'submitting', {
@@ -366,7 +389,11 @@ async function pollSubmitted(row, cfg) {
         await transition(trackId, 'submitted', { status: 'failed' });
         return { status: 'failed' };
       }
-      await heartbeat(trackId);
+      // Only a positively-acknowledged job keeps its claim fresh; anything
+      // unrecognized ages out to stale-reclaim rather than wedging the slot.
+      if (remote.alive) {
+        await heartbeat(trackId);
+      }
       return { status: 'preparing' };
     }
     hash = remote.hash;
