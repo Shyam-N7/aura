@@ -62,15 +62,21 @@ export function mvsepConfig(env = process.env) {
   };
 }
 
-// BS-Roformer's 2-stem output is a vocals file and an instrumental file.
-// Prefer the explicit name; otherwise take the one that isn't the vocals.
+// BS-Roformer's 2-stem output is a vocals file and an instrumental file. The
+// API labels them across several fields depending on the model build — `type`
+// ("Vocals" / "Other"), the download filename, and the url all carry it — so
+// match on the lot. A file must POSITIVELY look like the instrumental to be
+// picked: "no file matched" has to mean we ship nothing, never that karaoke
+// plays the isolated vocals.
 export function pickInstrumental(files) {
   if (!Array.isArray(files) || files.length === 0) return null;
-  return (
-    files.find((f) => /instrum/i.test(f?.name || '')) ||
-    files.find((f) => !/vocal/i.test(f?.name || '')) ||
-    null
-  );
+  const marks = (f) =>
+    `${f?.name || ''} ${f?.type || ''} ${f?.download || ''} ${f?.url || f?.link || ''}`;
+  const hit = files.find((f) => {
+    const s = marks(f);
+    return !/vocal/i.test(s) && /instrum|other/i.test(s);
+  });
+  return hit ? { ...hit, link: hit.url || hit.link } : null;
 }
 
 // Defense-in-depth SSRF guard on the file link MVSEP hands back: we fetch it
@@ -192,10 +198,44 @@ async function mvsepJson(url, init = {}) {
   const timer = setTimeout(() => ctrl.abort(), MVSEP_TIMEOUT_MS);
   try {
     const res = await fetch(url, { ...init, signal: ctrl.signal });
-    return await res.json();
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      // A non-JSON body (an edge/WAF interstitial, an HTML error page) used to
+      // surface as a bare parse error; carry the status and a snippet so the
+      // create path can log WHY it was refused. Never includes our token —
+      // create sends it in the body, and this text is the response.
+      throw new Error(`mvsep ${res.status} non-json: ${text.slice(0, 200)}`);
+    }
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Remote-url jobs are TWO staged. The hash `create` returns identifies MVSEP's
+// own download-and-enqueue step and is ONLY readable through `get-remote`;
+// once that reports done it hands back the real separation hash — the only one
+// `get` accepts. Stage-1 hashes are stored prefixed so a poll knows which leg
+// the row is on without a schema change.
+const REMOTE_PREFIX = 'remote:';
+
+// null = transient (leave the row alone). { hash } = stage 2 has begun.
+// { terminal: true } = MVSEP disowned the job.
+async function resolveRemote(cfg, remoteHash) {
+  let res;
+  try {
+    res = await mvsepJson(
+      `${cfg.base}/separation/get-remote?hash=${encodeURIComponent(remoteHash)}` +
+        `&api_token=${encodeURIComponent(cfg.token)}`,
+    );
+  } catch {
+    return null;
+  }
+  if (res?.success && res?.status === 'done' && res?.data?.hash) {
+    return { hash: res.data.hash };
+  }
+  return { terminal: res?.status === 'not_found' || res?.status === 'failed' };
 }
 
 // Hand MVSEP the stream URL (it downloads the audio itself). The caller has
@@ -230,11 +270,21 @@ async function submit(trackId, cfg) {
       body: form,
     });
     hash = res?.success && res?.data?.hash ? res.data.hash : null;
-  } catch {
-    // leave hash undefined — treated as a transient refusal (rollback below)
+    if (!hash) {
+      // A refusal rolls the row back to 'queued', which looks identical to
+      // "still waiting for the slot" from the outside — so a create that can
+      // never succeed (bad token, blocked caller) would silently retry
+      // forever. Say why, once, where the platform logs can be read.
+      console.error('[stems] create refused', trackId, JSON.stringify(res)?.slice(0, 300));
+    }
+  } catch (err) {
+    console.error('[stems] create failed', trackId, err?.message);
   }
   if (hash) {
-    await transition(trackId, 'submitting', { status: 'submitted', hash });
+    await transition(trackId, 'submitting', {
+      status: 'submitted',
+      hash: REMOTE_PREFIX + hash,
+    });
     return { status: 'preparing' };
   }
   // Roll back so the slot is released and a later poll can retry.
@@ -304,13 +354,31 @@ async function storeInstrumental(trackId, fileUrl) {
 // (error envelope, rotated token) is left to age out — NOT heartbeated.
 async function pollSubmitted(row, cfg) {
   const trackId = row.track_id;
+  let hash = row.hash;
+  // Still on the download leg: advance it before asking about separation.
+  if (hash?.startsWith(REMOTE_PREFIX)) {
+    const remote = await resolveRemote(cfg, hash.slice(REMOTE_PREFIX.length));
+    if (!remote) {
+      return { status: 'preparing' }; // transient — no heartbeat, may age out
+    }
+    if (!remote.hash) {
+      if (remote.terminal) {
+        await transition(trackId, 'submitted', { status: 'failed' });
+        return { status: 'failed' };
+      }
+      await heartbeat(trackId);
+      return { status: 'preparing' };
+    }
+    hash = remote.hash;
+    await transition(trackId, 'submitted', { hash });
+  }
   let res;
   try {
     res = await mvsepJson(
       // MVSEP's get endpoint authenticates by query param only (its create call
       // takes the token in the body; get has no body). Exposure is confined to
       // MVSEP-side logs — this app never logs the outbound url.
-      `${cfg.base}/separation/get?hash=${encodeURIComponent(row.hash)}` +
+      `${cfg.base}/separation/get?hash=${encodeURIComponent(hash)}` +
         `&api_token=${encodeURIComponent(cfg.token)}&mirror=0`,
     );
   } catch {

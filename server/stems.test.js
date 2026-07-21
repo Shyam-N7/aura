@@ -54,6 +54,23 @@ describe('pickInstrumental', () => {
     expect(pickInstrumental(files).link).toBe('o');
   });
 
+  // The live API labels stems with `type` + `url` + `download` and carries no
+  // `name`/`link` at all — matching only those older fields picked whichever
+  // file came first, i.e. karaoke playing the isolated VOCALS.
+  it('reads the shape the api actually returns (type/url/download)', () => {
+    const files = [
+      { type: 'Vocals', url: 'https://x/j_bs_roformer_vocals.mp3', download: 'j_vocals.mp3' },
+      { type: 'Other', url: 'https://x/j_bs_roformer_other.mp3', download: 'j_other.mp3' },
+    ];
+    expect(pickInstrumental(files).link).toBe('https://x/j_bs_roformer_other.mp3');
+  });
+
+  it('returns null rather than falling back to the vocals stem', () => {
+    expect(
+      pickInstrumental([{ type: 'Vocals', url: 'https://x/j_vocals.mp3' }]),
+    ).toBeNull();
+  });
+
   it('returns null for empty or junk file lists', () => {
     expect(pickInstrumental([])).toBeNull();
     expect(pickInstrumental(null)).toBeNull();
