@@ -138,7 +138,11 @@ describe('claimStems', () => {
     expect(sql).toContain(`IN ('queued', 'submitting')`);
     // tries bumps ONLY on a failed retry — queue-waiting reclaims never burn it.
     expect(sql).toContain('CASE WHEN');
-    expect(params).toEqual(['t1', 1000, 3, 30 * 60 * 1000]);
+    // The staleness cutoff arrives pre-computed (now − 30min). Subtracting two
+    // parameters IN SQL ("$2 - $4") is untyped and threw "operator is not
+    // unique" on Postgres — the error that 500'd every prod stems poll.
+    expect(sql).not.toMatch(/\$\d+ - \$\d+/);
+    expect(params).toEqual(['t1', 1000, 3, 1000 - 30 * 60 * 1000]);
   });
 
   it('reports a lost claim when the row is live in someone else’s hands', async () => {

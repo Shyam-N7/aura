@@ -71,9 +71,13 @@ export async function claimMeasure(trackId, now = Date.now()) {
      ON CONFLICT (track_id) DO UPDATE
        SET status = 'pending', tries = track_loudness.tries + 1, claimed_at = $2
      WHERE (track_loudness.status = 'failed' AND track_loudness.tries < $3)
-        OR (track_loudness.status = 'pending' AND track_loudness.claimed_at < $2 - $4)
+        OR (track_loudness.status = 'pending' AND track_loudness.claimed_at < $4)
      RETURNING track_id`,
-    [trackId, now, MAX_TRIES, STALE_CLAIM_MS],
+    // The staleness cutoff is computed in JS: `$2 - $4` in SQL throws
+    // "operator is not unique: unknown - unknown" (two untyped parameters),
+    // which made every stale-reclaim here 500 in prod. Same fix as
+    // stems.js claimStems.
+    [trackId, now, MAX_TRIES, now - STALE_CLAIM_MS],
   );
   return rows.length > 0;
 }

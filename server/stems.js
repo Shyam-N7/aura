@@ -143,9 +143,14 @@ export async function claimStems(trackId, now = Date.now()) {
            claimed_at = $2
        WHERE (track_stems.status = 'failed' AND track_stems.tries < $3)
           OR (track_stems.status IN ('queued', 'submitting')
-              AND track_stems.claimed_at < $2 - $4)
+              AND track_stems.claimed_at < $4)
      RETURNING track_id`,
-    [trackId, now, MAX_TRIES, STALE_CLAIM_MS],
+    // The staleness cutoff is computed in JS: `$2 - $4` in SQL throws
+    // "operator is not unique: unknown - unknown" — Postgres can't pick a
+    // minus operator for two untyped parameters. That one expression 500'd
+    // EVERY prod stems poll (locally the route 501s before reaching any of
+    // this — no MVSEP token — so it could never surface in dev).
+    [trackId, now, MAX_TRIES, now - STALE_CLAIM_MS],
   );
   return rows.length > 0;
 }
@@ -191,8 +196,10 @@ async function slotBusy(trackId, now = Date.now()) {
   const { rows } = await pool.query(
     `SELECT 1 FROM track_stems
      WHERE status IN ('submitting', 'submitted') AND track_id <> $1
-       AND claimed_at >= $2 - $3 LIMIT 1`,
-    [trackId, now, STALE_CLAIM_MS],
+       AND claimed_at >= $2 LIMIT 1`,
+    // Cutoff computed in JS — see claimStems: parameter-minus-parameter is
+    // untyped in Postgres and threw on every call.
+    [trackId, now - STALE_CLAIM_MS],
   );
   return rows.length > 0;
 }
