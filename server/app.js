@@ -47,6 +47,7 @@ import modesRouter from './modesRoutes.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middleware/auth.js';
 import { clientError, errorMiddleware, notFound } from './middleware/errors.js';
+import { isId, clampInt } from './validate.js';
 
 // The configured Express app, with NO side effects at import time: it neither
 // connects/migrates the database nor starts a listener. The local dev entry
@@ -153,14 +154,29 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
+// One net under every app-level route that takes an opaque id in the path:
+// junk is rejected before it can reach a handler, a SQL bind, or (worst) an
+// upstream relay. Handlers with stricter inline checks still run them — this
+// is the floor, not the ceiling. publicId is deliberately NOT here: /p/:publicId
+// must keep serving the generic share card for malformed links, never a JSON 400.
+// (security: input caps)
+for (const param of ['id', 'track_id', 'user_id', 'token']) {
+  app.param(param, (req, res, next, val) => {
+    if (!isId(val)) return res.status(400).json({ error: 'invalid id' });
+    next();
+  });
+}
+
 app.get('/api/catalog/search', optionalAuth, async (req, res) => {
-  const q = String(req.query.q ?? '').trim();
+  // Bounded before anything reaches the upstream catalog: query text capped,
+  // limit clamped, language list capped. (security: input caps)
+  const q = String(req.query.q ?? '').trim().slice(0, 200);
   if (!q) return res.status(400).json({ error: 'missing query' });
-  const lang = req.query.lang ? String(req.query.lang) : undefined;
-  const limit = Number(req.query.limit) || 20;
+  const lang = req.query.lang ? String(req.query.lang).slice(0, 40) : undefined;
+  const limit = clampInt(req.query.limit, 20, 1, 40);
   // The user's languages, in priority order, for "my-languages-first" ranking.
   const userLangs = req.query.langs
-    ? String(req.query.langs).split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    ? String(req.query.langs).split(',').map(s => s.trim().toLowerCase()).filter(Boolean).slice(0, 10)
     : [];
   // Songs come from the rich song search; albums/movies/playlists + the best
   // match from the suggest endpoint; user playlists from our DB. All in parallel
@@ -224,6 +240,9 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
 });
 
 app.get('/api/catalog/track/:id', async (req, res) => {
+  // A cache miss falls through to an upstream lookup — cap the id first so junk
+  // can't be relayed to the provider. (security: input caps)
+  if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid track id' });
   try {
     const track = await getTrackById(req.params.id);
     res.json(track);
@@ -234,8 +253,9 @@ app.get('/api/catalog/track/:id', async (req, res) => {
 });
 
 app.get('/api/tracks/:id/related', optionalAuth, async (req, res) => {
+  if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid track id' });
   try {
-    const lang = req.query.lang ? String(req.query.lang) : undefined;
+    const lang = req.query.lang ? String(req.query.lang).slice(0, 40) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     let tracks = await getRelatedTracks(req.params.id, { lang, limit });
     // Smart queue for every signed-in listener (was Car-Mode-only): drop hidden/
@@ -249,10 +269,15 @@ app.get('/api/tracks/:id/related', optionalAuth, async (req, res) => {
 });
 
 app.get('/api/artists/lookup', async (req, res) => {
+  // name is free text (capped); ids are opaque keys that reach the upstream
+  // catalog, so they get the strict shape check. (security: input caps)
+  const name    = req.query.name    ? String(req.query.name).slice(0, 200) : undefined;
+  const id      = req.query.id      ? String(req.query.id)      : undefined;
+  const trackId = req.query.trackId ? String(req.query.trackId) : undefined;
+  if ((id && !isId(id)) || (trackId && !isId(trackId))) {
+    return res.status(400).json({ error: 'invalid id' });
+  }
   try {
-    const name    = req.query.name    ? String(req.query.name)    : undefined;
-    const id      = req.query.id      ? String(req.query.id)      : undefined;
-    const trackId = req.query.trackId ? String(req.query.trackId) : undefined;
     const artist = await getArtistDetails({ name, id, trackId });
     res.json({ artist });
   } catch (err) {
@@ -261,6 +286,7 @@ app.get('/api/artists/lookup', async (req, res) => {
 });
 
 app.get('/api/albums/:id', async (req, res) => {
+  if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid album id' });
   try {
     const album = await getAlbumDetail(req.params.id);
     res.json({ album });
@@ -270,8 +296,8 @@ app.get('/api/albums/:id', async (req, res) => {
 });
 
 app.get('/api/catalog/featured', optionalAuth, async (req, res) => {
-  const lang = req.query.lang ? String(req.query.lang) : undefined;
-  const limit = Number(req.query.limit) || 20;
+  const lang = req.query.lang ? String(req.query.lang).slice(0, 40) : undefined;
+  const limit = clampInt(req.query.limit, 20, 1, 50);
   try {
     // Signed-in: seed the pool from the user's active mode (empty seed for
     // `everyday` → the unchanged global default). Signed-out: global default.
@@ -295,6 +321,9 @@ const LYRICS_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
 
 app.get('/api/lyrics/:track_id', optionalAuth, async (req, res) => {
   const { track_id } = req.params;
+  // A cache miss reaches the upstream lyrics providers (and getTrackById can
+  // reach the catalog) — cap the id before any of that. (security: input caps)
+  if (!isId(track_id)) return res.status(400).json({ error: 'invalid track id' });
   const t0 = Date.now();
   // Send the response AND record one timing row. The metric write is
   // fire-and-forget so its DB latency never delays the lyrics response and a
@@ -408,8 +437,10 @@ app.post('/api/lyrics-jobs/webhook',
       authed = safeCompare(req.query.token, LYRICS_WEBHOOK_SECRET);
     }
     if (!authed) return res.status(401).json({ error: 'unauthorized' });
+    // Our own dispatcher built this callback URL with a real id — anything
+    // oversized is a forgery attempt, not a track.
     const trackId = String(req.query.track_id ?? '');
-    if (!trackId) return res.status(400).json({ error: 'missing track_id' });
+    if (!isId(trackId)) return res.status(400).json({ error: 'missing track_id' });
     try {
       await completeFromPrediction(req.body, trackId);
       res.json({ ok: true });
@@ -465,7 +496,7 @@ const WHY_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
 
 app.post('/api/why', async (req, res) => {
   const { track_id, mood, recent_track_ids } = req.body ?? {};
-  if (!track_id) return res.status(400).json({ error: 'missing track_id' });
+  if (!isId(track_id)) return res.status(400).json({ error: 'missing track_id' });
   // Validate mood against the known vocabulary before it becomes a cache key, so
   // arbitrary strings can't bypass the cache and force a fresh Gemini call. (#14)
   const moodKey = normalizeMood(mood);
@@ -481,7 +512,9 @@ app.post('/api/why', async (req, res) => {
     const track = await getTrackById(track_id);
     let recent = [];
     if (Array.isArray(recent_track_ids) && recent_track_ids.length) {
-      const ids = recent_track_ids.slice(0, 5);
+      // Coerce + shape-check each id so a non-string element can't break the
+      // array bind below. (security: input caps)
+      const ids = recent_track_ids.slice(0, 5).map(id => String(id)).filter(isId);
       const { rows } = await query(
         `SELECT id, title, artist, language FROM tracks WHERE id = ANY($1::text[])`,
         [ids],
@@ -527,7 +560,9 @@ app.post('/api/greeting', async (req, res) => {
   try {
     const result = await getGreeting({
       mood,
-      trackCount: Number(track_count) || 0,
+      // Clamped: it's a sizing hint for the prompt, and an absurd number would
+      // otherwise ride into the prompt text verbatim. (security: input caps)
+      trackCount: clampInt(track_count, 0, 0, 100000),
       languages: languages ?? {},
       hour: Number.isInteger(hour) ? hour : new Date().getHours(),
     });
@@ -547,8 +582,8 @@ app.get('/api/library/summary', requireAuth, async (req, res) => {
 
 app.get('/api/stats/most-played', requireAuth, async (req, res) => {
   try {
-    const days  = Number(req.query.days)  || 30;
-    const limit = Number(req.query.limit) || 10;
+    const days  = clampInt(req.query.days, 30, 1, 365);
+    const limit = clampInt(req.query.limit, 10, 1, 50);
     res.json({ tracks: await getMostPlayed(req.userId, { days, limit }) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -557,8 +592,8 @@ app.get('/api/stats/most-played', requireAuth, async (req, res) => {
 
 app.get('/api/stats/top-artists', requireAuth, async (req, res) => {
   try {
-    const days  = Number(req.query.days)  || 30;
-    const limit = Number(req.query.limit) || 8;
+    const days  = clampInt(req.query.days, 30, 1, 365);
+    const limit = clampInt(req.query.limit, 8, 1, 50);
     res.json({ artists: await getTopArtists(req.userId, { days, limit }) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -567,7 +602,7 @@ app.get('/api/stats/top-artists', requireAuth, async (req, res) => {
 
 app.get('/api/stats/recently-played', requireAuth, async (req, res) => {
   try {
-    const limit = Number(req.query.limit) || 10;
+    const limit = clampInt(req.query.limit, 10, 1, 50);
     res.json({ tracks: await getRecentlyPlayed(req.userId, { limit }) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -621,7 +656,7 @@ app.post('/api/impressions', requireAuth, async (req, res) => {
     await recordImpressions(req.userId, {
       surface: String(surface).slice(0, 40),
       tzOffset,
-      trackIds: track_ids.slice(0, 40).map(id => String(id)),
+      trackIds: track_ids.slice(0, 40).map(id => String(id)).filter(isId),
     });
     res.json({ ok: true });
   } catch (err) {
@@ -665,7 +700,9 @@ app.get('/api/playback/resume', requireAuth, async (req, res) => {
 // play those unleveled and POST a measure so the next listener has them.
 app.get('/api/loudness', requireAuth, async (req, res) => {
   try {
-    const ids = String(req.query.ids ?? '').split(',').filter(Boolean);
+    // Shape-check + cap the id list — it binds into ANY($1) and an unbounded
+    // list is free DB load. Real clients ask for two. (security: input caps)
+    const ids = String(req.query.ids ?? '').split(',').filter(isId).slice(0, 100);
     res.json({ tracks: await getLoudness(ids) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -695,7 +732,9 @@ app.post('/api/stems/request', requireAuth, stemsRequestHandler());
 app.get('/api/history', requireAuth, async (req, res) => {
   try {
     const limit  = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200);
-    const before = req.query.before ? Number(req.query.before) : undefined;
+    // Cursor must be a real ms timestamp — a garbled value would otherwise ride
+    // into the bigint comparison as NaN/overflow. (security: input caps)
+    const before = clampInt(req.query.before, undefined, 1, Number.MAX_SAFE_INTEGER);
     res.json(await getHistory(req.userId, { limit, before }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -714,7 +753,7 @@ app.get('/api/history/clock', requireAuth, async (req, res) => {
 
 app.get('/api/discover/home', async (req, res) => {
   try {
-    const lang = req.query.lang ? String(req.query.lang) : undefined;
+    const lang = req.query.lang ? String(req.query.lang).slice(0, 40) : undefined;
     res.json(await getDiscoverHome({ lang }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -722,6 +761,8 @@ app.get('/api/discover/home', async (req, res) => {
 });
 
 app.get('/api/discover/playlist/:id', async (req, res) => {
+  // The id goes straight to the upstream catalog — shape-check it first.
+  if (!isId(req.params.id)) return res.status(400).json({ error: 'invalid playlist id' });
   try {
     res.json(await getCatalogPlaylistDetail(req.params.id));
   } catch (err) {
@@ -794,8 +835,7 @@ app.post('/api/llm/talk', requireAuth, async (req, res) => {
 
 app.get('/api/bridges/suggest', requireAuth, async (req, res) => {
   try {
-    const h = Number.parseInt(req.query.hour, 10);
-    const hour = Number.isInteger(h) ? h : new Date().getHours();
+    const hour = clampInt(req.query.hour, new Date().getHours(), 0, 23);
     res.json(await getBridgeSuggestion(req.userId, { hour }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -830,7 +870,9 @@ app.get('/api/likes', requireAuth, async (req, res) => {
 
 app.post('/api/likes', requireAuth, async (req, res) => {
   const { track_id } = req.body ?? {};
-  if (!track_id) return res.status(400).json({ error: 'missing track_id' });
+  // likeTrack falls through to an upstream lookup on a cache miss — shape-check
+  // the id here so junk never gets relayed. (security: input caps)
+  if (!isId(track_id)) return res.status(400).json({ error: 'missing track_id' });
   try {
     await likeTrack(req.userId, track_id);
     res.json({ ok: true });
@@ -936,7 +978,7 @@ app.delete('/api/playlists/:id', requireAuth, async (req, res) => {
 
 app.post('/api/playlists/:id/tracks', requireAuth, async (req, res) => {
   const { track_id } = req.body ?? {};
-  if (!track_id) return res.status(400).json({ error: 'missing track_id' });
+  if (!isId(track_id)) return res.status(400).json({ error: 'missing track_id' });
   try {
     // The track must already be in our catalog cache (search/featured/play all
     // upsert it locally). Check LOCALLY only — never getTrackById here: a miss
@@ -1034,8 +1076,14 @@ app.post('/api/uploads/image', requireAuth, express.raw({ type: () => true, limi
 // Blob URL from /api/uploads/image; it takes precedence).
 app.post('/api/playlists/:id/cover', requireAuth, async (req, res) => {
   try {
+    // trackId gets the id shape check; imageUrl is length-capped + host-pinned
+    // inside isBlobUrl (setPlaylistCover rejects everything else).
+    const trackId = req.body?.trackId ? String(req.body.trackId) : undefined;
+    if (trackId && !isId(trackId)) {
+      return res.status(400).json({ error: 'invalid track id' });
+    }
     res.json(await setPlaylistCover(req.userId, req.params.id, {
-      trackId: req.body?.trackId ? String(req.body.trackId) : undefined,
+      trackId,
       imageUrl: req.body?.imageUrl ? String(req.body.imageUrl) : undefined,
     }));
   } catch (err) {
@@ -1075,7 +1123,7 @@ const EVENT_KINDS = new Set(['play', 'pause', 'skip', 'seek', 'end']);
 
 app.post('/api/events', requireAuth, async (req, res) => {
   const { track_id, kind, position_sec, mood, language, mode, source } = req.body ?? {};
-  if (!track_id || !EVENT_KINDS.has(kind)) {
+  if (!isId(track_id) || !EVENT_KINDS.has(kind)) {
     return res.status(400).json({ error: 'invalid track_id or kind' });
   }
   // Bound the free-text signal columns (mirrors `source`) so a client can't grow
@@ -1084,6 +1132,11 @@ app.post('/api/events', requireAuth, async (req, res) => {
   const mood_ = mood     != null ? String(mood).slice(0, 50)     : null;
   const lang_ = language != null ? String(language).slice(0, 40) : null;
   const mode_ = mode     != null ? String(mode).slice(0, 40)     : null;
+  // position_sec is a number from real clients — coerce + bound it so a junk
+  // value can't fail the insert or store a nonsense position.
+  const pos = position_sec != null && Number.isFinite(Number(position_sec))
+    ? Math.min(Math.max(Number(position_sec), 0), 86400)
+    : null;
   try {
     // The track must already be in our catalog cache (it's upserted whenever a
     // track is loaded/played). Check LOCALLY only — never getTrackById here: a
@@ -1097,7 +1150,7 @@ app.post('/api/events', requireAuth, async (req, res) => {
     await query(
       `INSERT INTO listening_events (user_id, track_id, ts, kind, position_sec, mood, language, mode, source)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [req.userId, track_id, Date.now(), kind, position_sec ?? null, mood_, lang_, mode_, src],
+      [req.userId, track_id, Date.now(), kind, pos, mood_, lang_, mode_, src],
       { retries: 0 },
     );
     res.json({ ok: true });
@@ -1107,7 +1160,7 @@ app.post('/api/events', requireAuth, async (req, res) => {
 });
 
 app.get('/api/events/recent', requireAuth, async (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 50, 500);
+  const limit = clampInt(req.query.limit, 50, 1, 500);
   try {
     const { rows } = await query(
       `SELECT id, track_id, ts, kind, position_sec, mood, language

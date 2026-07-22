@@ -4,6 +4,7 @@
 
 import { Type } from '@google/genai';
 import { generateJson } from '../llm.js';
+import { flattenForPrompt } from '../promptSafe.js';
 
 const SYSTEM = `You are AURA, an AI music DJ that speaks in quiet, lowercase
 prose. Write a one-sentence greeting (12-22 words) that describes the
@@ -33,10 +34,14 @@ export function timeOfDayFromHour(h) {
 }
 
 export async function generateGreeting({ mood, trackCount, languages, hour }) {
+  // The languages map is client-supplied free text on an unauthenticated route —
+  // flatten each key and cap the entry count so it can't run long or splice
+  // newlines into the prompt slot. (security: #5)
   const langStr = Object.entries(languages ?? {})
-    .filter(([, v]) => v > 0)
+    .filter(([, v]) => Number(v) > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `${k}=${v}`).join(', ');
+    .slice(0, 8)
+    .map(([k, v]) => `${flattenForPrompt(k, 30)}=${Math.round(Number(v))}`).join(', ');
   const tod = timeOfDayFromHour(hour);
 
   // Soft sizing hint instead of an exact number (so Gemini knows whether the

@@ -27,6 +27,15 @@ function genId() {
 
 const norm = (email) => String(email).toLowerCase().trim();
 
+// Light shape guards on the credential fields. Real verification is bcrypt /
+// the emailed code — these only keep non-strings out of bcrypt (which throws →
+// 500) and oversized junk out of the users table. Generous caps so no real
+// address, name, or password is ever rejected. (security: input caps)
+const MAX_EMAIL = 254;
+const MAX_NAME = 100;
+const MAX_PASSWORD = 200;   // bcrypt only reads 72 bytes; the cap just bounds the row
+const validEmail = (e) => typeof e === 'string' && !!e.trim() && e.length <= MAX_EMAIL;
+
 // Dev/staging admin gate response (see adminGate.js). Inert when ADMIN_ONLY is off.
 const ADMIN_ONLY_RESPONSE = { error: 'this is a private dev environment — only the admin can sign in.', code: 'admin_only' };
 
@@ -80,7 +89,12 @@ router.post('/signup', async (req, res) => {
   try {
     const { email, name, password } = req.body ?? {};
     if (!email || !name || !password) return res.status(400).json({ error: 'email, name and password required' });
+    if (!validEmail(email) || typeof name !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'email, name and password required' });
+    }
+    if (!name.trim() || name.trim().length > MAX_NAME) return res.status(400).json({ error: 'enter a shorter name' });
     if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+    if (password.length > MAX_PASSWORD) return res.status(400).json({ error: 'password is too long' });
 
     const e = norm(email);
     if (adminBlocked(e)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
@@ -169,7 +183,9 @@ async function startSession(req, res, user) {
 
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body ?? {};
-  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  if (!validEmail(email) || typeof password !== 'string' || !password) {
+    return res.status(400).json({ error: 'email and password required' });
+  }
   if (adminBlocked(email)) return res.status(403).json(ADMIN_ONLY_RESPONSE);
 
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [norm(email)]);
@@ -241,7 +257,11 @@ async function verifyGoogleToken(idToken) {
 
 router.post('/google', async (req, res) => {
   const { idToken } = req.body ?? {};
-  if (!idToken) return res.status(400).json({ error: 'missing idToken' });
+  // A real Google ID token is a ~1-2KB JWT — type + size gate before the
+  // verifier library parses anything. (security: input caps)
+  if (typeof idToken !== 'string' || !idToken || idToken.length > 4096) {
+    return res.status(400).json({ error: 'missing idToken' });
+  }
   if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Google OAuth not configured' });
 
   try {
@@ -294,7 +314,7 @@ router.post('/google', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   try {
     const { email, code } = req.body ?? {};
-    if (!email || !code) return res.status(400).json({ error: 'email and code required' });
+    if (!validEmail(email) || !code) return res.status(400).json({ error: 'email and code required' });
     if (!/^\d{6}$/.test(String(code))) return res.status(400).json({ error: 'enter the 6-digit code', code: 'bad_format' });
 
     const e = norm(email);
@@ -322,7 +342,7 @@ router.post('/verify-otp', async (req, res) => {
 router.post('/resend-otp', async (req, res) => {
   try {
     const { email } = req.body ?? {};
-    if (!email) return res.status(400).json({ error: 'email required' });
+    if (!validEmail(email)) return res.status(400).json({ error: 'email required' });
     const e = norm(email);
 
     const { rows } = await pool.query('SELECT email_verified FROM users WHERE email = $1', [e]);
@@ -344,7 +364,7 @@ router.post('/resend-otp', async (req, res) => {
 router.post('/forgot', async (req, res) => {
   try {
     const { email } = req.body ?? {};
-    if (!email) return res.status(400).json({ error: 'email required' });
+    if (!validEmail(email)) return res.status(400).json({ error: 'email required' });
     const e = norm(email);
     trace('[forgot] request:', e);
     sweepExpired();
@@ -373,7 +393,7 @@ router.post('/forgot', async (req, res) => {
 router.post('/verify-reset-otp', async (req, res) => {
   try {
     const { email, code } = req.body ?? {};
-    if (!email || !code) return res.status(400).json({ error: 'email and code required' });
+    if (!validEmail(email) || !code) return res.status(400).json({ error: 'email and code required' });
     if (!/^\d{6}$/.test(String(code))) return res.status(400).json({ error: 'enter the 6-digit code', code: 'bad_format' });
 
     const e = norm(email);
@@ -396,8 +416,10 @@ router.post('/verify-reset-otp', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { email, code, password } = req.body ?? {};
-    if (!email || !code || !password) return res.status(400).json({ error: 'email, code and password required' });
+    if (!validEmail(email) || !code || !password) return res.status(400).json({ error: 'email, code and password required' });
+    if (typeof password !== 'string') return res.status(400).json({ error: 'email, code and password required' });
     if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+    if (password.length > MAX_PASSWORD) return res.status(400).json({ error: 'password is too long' });
     if (!/^\d{6}$/.test(String(code))) return res.status(400).json({ error: 'enter the 6-digit code', code: 'bad_format' });
 
     const e = norm(email);

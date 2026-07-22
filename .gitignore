@@ -12,3 +12,4 @@ dist
 # retired fonts/vocab). Kept locally as reference; never published.
 aura-export/
 docs/
+.vercel

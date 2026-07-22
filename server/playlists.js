@@ -279,12 +279,20 @@ export async function createPlaylist(userId, { name, description = null }) {
     err.statusCode = 400;
     throw err;
   }
+  // Bounded before they reach the row — an unbounded name/description would grow
+  // every playlist list response without limit. (security: input caps)
+  if (trimmed.length > 200) {
+    const err = new Error('that name is too long');
+    err.statusCode = 400;
+    throw err;
+  }
+  const desc = typeof description === 'string' ? description.slice(0, 1000) : null;
   await pool.query(
     `INSERT INTO playlists (id, user_id, name, description, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $5)`,
-    [id, userId, trimmed, description, ts],
+    [id, userId, trimmed, desc, ts],
   );
-  return { id, name: trimmed, description, trackCount: 0, coverImageUrl: null, updatedAt: ts, role: 'owner', shared: false };
+  return { id, name: trimmed, description: desc, trackCount: 0, coverImageUrl: null, updatedAt: ts, role: 'owner', shared: false };
 }
 
 export async function deletePlaylist(userId, id) {
