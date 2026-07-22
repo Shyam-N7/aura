@@ -728,6 +728,47 @@ app.post('/api/loudness/measure', requireAuth, loudnessMeasureHandler(async () =
 // "preparing…"; the heavy separation runs on MVSEP, never in a function.
 app.post('/api/stems/request', requireAuth, stemsRequestHandler());
 
+// ── FCM device registration (native app) ─────────────────────────────
+// Upsert keyed on the token: a device switching accounts re-homes its token
+// to the new user (last sign-in wins — matching what the device itself just
+// did). Sign-out DELETEs its own row (owner-scoped) so a logged-out phone is
+// never pushed to. Dead tokens are also pruned by the sender (server/push.js).
+app.post('/api/push/register', requireAuth, async (req, res) => {
+  const token = typeof req.body?.token === 'string' ? req.body.token : '';
+  if (token.length < 20 || token.length > 4096) {
+    return res.status(400).json({ error: 'invalid token' });
+  }
+  try {
+    const now = Date.now();
+    await query(
+      `INSERT INTO push_tokens (token, user_id, platform, created_at, last_seen_at)
+       VALUES ($1, $2, 'android', $3, $3)
+       ON CONFLICT (token) DO UPDATE SET
+         user_id = EXCLUDED.user_id, last_seen_at = EXCLUDED.last_seen_at`,
+      [token, req.userId, now],
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.delete('/api/push/register', requireAuth, async (req, res) => {
+  const token = typeof req.body?.token === 'string' ? req.body.token : '';
+  if (!token || token.length > 4096) {
+    return res.status(400).json({ error: 'invalid token' });
+  }
+  try {
+    await query(
+      'DELETE FROM push_tokens WHERE token = $1 AND user_id = $2',
+      [token, req.userId],
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
 // Full listening history (paginated, newest first) for the song-history screen.
 app.get('/api/history', requireAuth, async (req, res) => {
   try {

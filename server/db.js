@@ -663,6 +663,22 @@ const migrations = [
       );
     `);
   },
+  async function v30_push_tokens(client) {
+    // FCM device registrations (native app). One row per device token; a
+    // token moving between accounts re-homes on conflict (last sign-in wins,
+    // matching how the device itself behaves). Dead tokens are pruned by the
+    // sender when FCM reports them unregistered (server/push.js).
+    await client.query(`
+      CREATE TABLE push_tokens (
+        token        TEXT   PRIMARY KEY,
+        user_id      TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        platform     TEXT   NOT NULL DEFAULT 'android',
+        created_at   BIGINT NOT NULL,
+        last_seen_at BIGINT NOT NULL
+      );
+      CREATE INDEX idx_push_tokens_user ON push_tokens(user_id);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
