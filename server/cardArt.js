@@ -124,8 +124,10 @@ export function renderCardPng({ art = null, seed = 'aura' } = {}) {
 
 const FETCH_TIMEOUT_MS = 4000;
 const MAX_ART_BYTES = 4 * 1024 * 1024;
-// resvg rasters png/jpeg/gif; webp would render as a blank box.
-const OK_MIME = /^image\/(jpeg|png|gif)/;
+// resvg rasters png/jpeg/gif; webp would render as a blank box. Anchored:
+// the matched mime is interpolated into the SVG data: URI, so a trailing
+// payload in a hostile content-type must never ride along.
+const OK_MIME = /^image\/(jpeg|png|gif)$/;
 
 // Fetch the (already allowlist-checked) art. Returns { buffer, mime } or
 // throws a client-safe Error with statusCode.
@@ -135,6 +137,14 @@ export async function fetchArt(url) {
   try {
     const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
     if (!res.ok) {
+      const err = new Error('art fetch failed');
+      err.statusCode = 422;
+      throw err;
+    }
+    // Redirects are followed, so the URL we LANDED on must pass the same
+    // allowlist as the one we started from — an open redirect on an
+    // allowlisted host must not turn this into an open image proxy.
+    if (res.url && res.url !== url && !allowedArtUrl(res.url)) {
       const err = new Error('art fetch failed');
       err.statusCode = 422;
       throw err;
