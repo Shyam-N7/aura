@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 // helper directly rather than the routes, which all delegate to it).
 vi.mock('./db.js', () => ({ pool: { query: vi.fn() }, query: vi.fn(), isTransient: () => false }));
 vi.mock('./otp.js', () => ({ verifyOtp: vi.fn(), issueOtp: vi.fn(), consumeOtp: vi.fn(), sweepExpired: vi.fn() }));
-vi.mock('./adminGate.js', () => ({ adminBlocked: () => false }));
+vi.mock('./adminGate.js', () => ({ adminBlocked: () => false, isAdminEmail: () => false }));
 vi.mock('./modes.js', () => ({ buildModesView: () => [] }));
 vi.mock('./securityAlerts.js', () => ({ sendNewDeviceAlert: vi.fn() }));
 vi.mock('bcrypt', () => ({ default: { compare: vi.fn(), hash: vi.fn() } }));

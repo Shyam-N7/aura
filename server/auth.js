@@ -10,7 +10,7 @@ import {
 import { asyncHandler, clientError } from './middleware/errors.js';
 import { issueOtp, verifyOtp, consumeOtp, sweepExpired } from './otp.js';
 import { sendNewDeviceAlert } from './securityAlerts.js';
-import { adminBlocked } from './adminGate.js';
+import { adminBlocked, isAdminEmail } from './adminGate.js';
 import { buildModesView } from './modes.js';
 import { isBlobUrl } from './blobUrl.js';
 
@@ -57,6 +57,9 @@ export function sanitizeUser(row) {
     // Safe boolean (never the hash) — lets the delete-account UI pick the
     // password vs email-a-code step-up path.
     hasPassword:    !!row.password_hash,
+    // Shows the admin push console in the client. Display-only — every admin
+    // ROUTE re-checks the allowlist server-side (app.js requireAdmin).
+    admin:          isAdminEmail(row.email),
   };
 }
 

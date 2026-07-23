@@ -46,6 +46,9 @@ import familyRouter from './family.js';
 import modesRouter from './modesRoutes.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middleware/auth.js';
+import { getPrefs, sendToUser, prunePushLog } from './push.js';
+import { notifyMixesReady, notifyTrackAdded, notifyInviteAccepted, sweepNudges } from './notify.js';
+import { isAdminEmail } from './adminGate.js';
 import { clientError, errorMiddleware, notFound } from './middleware/errors.js';
 import { isId, clampInt } from './validate.js';
 
@@ -469,7 +472,24 @@ app.get('/api/lyrics-jobs/process', async (req, res) => {
     // and time-budgeted so it can never starve the lyrics queue's next run.
     const mixes = await refreshDueMixes({ budgetMs: 30000 })
       .catch((e) => { console.warn('[mixes] refresh failed:', e?.message ?? e); return null; });
-    res.json({ ...lyrics, mixes });
+    // Announce what the refresh just made — one "your mix is ready" card per
+    // user (sendCategory owns the switches/caps/quiet-hours; the 02:00 UTC
+    // slot ≈ 07:30 IST lands just past the quiet window by design).
+    if (mixes?.fresh?.length) {
+      await Promise.allSettled(
+        mixes.fresh.map(f => notifyMixesReady(f.userId, f.names, f.coverTrackId)),
+      );
+    }
+    // Re-engagement sweep + cap-log retention — best-effort like the rest.
+    const nudges = await sweepNudges()
+      .catch((e) => { console.warn('[nudges] sweep failed:', e?.message ?? e); return null; });
+    await prunePushLog().catch(() => {});
+    // Counts only in the cron log — no user-id lists in Vercel's output.
+    res.json({
+      ...lyrics,
+      mixes: mixes && { users: mixes.users, generated: mixes.generated },
+      nudges,
+    });
   } catch (err) {
     res.status(500).json({ error: clientError(err) });
   }
@@ -769,6 +789,128 @@ app.delete('/api/push/register', requireAuth, async (req, res) => {
   }
 });
 
+// ── Notification preferences (the settings switches, both clients) ────
+// Absent row = all on; the PUT upserts only the fields it's sent, so each
+// switch can flip independently.
+app.get('/api/push/prefs', requireAuth, async (req, res) => {
+  try {
+    res.json(await getPrefs(req.userId));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.put('/api/push/prefs', requireAuth, async (req, res) => {
+  const body = req.body ?? {};
+  for (const k of ['mixes', 'social', 'nudges']) {
+    if (body[k] !== undefined && typeof body[k] !== 'boolean') {
+      return res.status(400).json({ error: 'invalid prefs' });
+    }
+  }
+  try {
+    await query(
+      `INSERT INTO notification_prefs (user_id, mixes, social, nudges, updated_at)
+       VALUES ($1, COALESCE($2, TRUE), COALESCE($3, TRUE), COALESCE($4, TRUE), $5)
+       ON CONFLICT (user_id) DO UPDATE SET
+         mixes      = COALESCE($2, notification_prefs.mixes),
+         social     = COALESCE($3, notification_prefs.social),
+         nudges     = COALESCE($4, notification_prefs.nudges),
+         updated_at = $5`,
+      [req.userId, body.mixes ?? null, body.social ?? null, body.nudges ?? null, Date.now()],
+    );
+    res.json(await getPrefs(req.userId));
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// ── Admin push console ───────────────────────────────────────────────
+// Authorization = the signed-in user's email is on the ADMIN_EMAILS
+// allowlist (server env). Independent of ADMIN_ONLY (the dev sign-in gate):
+// this is the prod check, and an empty allowlist means nobody — fail closed.
+async function requireAdmin(req, res, next) {
+  try {
+    const { rows } = await query('SELECT email FROM users WHERE id = $1', [req.userId]);
+    if (!rows.length || !isAdminEmail(rows[0].email)) {
+      return res.status(403).json({ error: 'admin only' });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ error: clientError(err) });
+  }
+}
+
+// What a send would reach, and whether the sender is configured at all —
+// the console shows both before the button.
+app.get('/api/admin/push/reach', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await query(
+      'SELECT COUNT(*) AS devices, COUNT(DISTINCT user_id) AS users FROM push_tokens',
+    );
+    res.json({
+      devices: Number(rows[0].devices),
+      users: Number(rows[0].users),
+      configured: !!process.env.FIREBASE_ADMIN_JSON,
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// Compose + send. audience: 'all' (every enrolled user) | 'me' (the admin's
+// own devices — the safe dry-run) | an email (one user). Deliberately rides
+// sendToUser, NOT sendCategory: a human pressing the button IS the cap, and
+// admin cards must not be silenced by category switches or quiet hours.
+const httpsUrl = (v) => typeof v === 'string' && /^https:\/\//.test(v) && v.length <= 1000;
+app.post('/api/admin/push/send', requireAuth, requireAdmin, async (req, res) => {
+  const { title, body, image, link, audience } = req.body ?? {};
+  if (typeof title !== 'string' || !title.trim() || title.length > 120) {
+    return res.status(400).json({ error: 'title required (max 120 chars)' });
+  }
+  if (typeof body !== 'string' || !body.trim() || body.length > 300) {
+    return res.status(400).json({ error: 'body required (max 300 chars)' });
+  }
+  if (image !== undefined && image !== '' && !httpsUrl(image)) {
+    return res.status(400).json({ error: 'image must be an https url' });
+  }
+  if (link !== undefined && link !== '' && !httpsUrl(link)) {
+    return res.status(400).json({ error: 'link must be an https url' });
+  }
+  try {
+    let userIds = [];
+    if (audience === 'me' || audience === undefined || audience === '') {
+      userIds = [req.userId];
+    } else if (audience === 'all') {
+      const { rows } = await query('SELECT DISTINCT user_id FROM push_tokens');
+      userIds = rows.map(r => r.user_id);
+    } else if (typeof audience === 'string' && audience.includes('@') && audience.length <= 254) {
+      const { rows } = await query(
+        'SELECT id FROM users WHERE email = $1',
+        [audience.toLowerCase().trim()],
+      );
+      if (!rows.length) return res.status(404).json({ error: 'no user with that email' });
+      userIds = [rows[0].id];
+    } else {
+      return res.status(400).json({ error: 'audience must be "me", "all", or an email' });
+    }
+    const payload = {
+      title: title.trim(),
+      body: body.trim(),
+      ...(httpsUrl(image) ? { image } : {}),
+      link: httpsUrl(link) ? link : 'https://www.aurafm.live/',
+      collapseKey: 'admin',
+    };
+    let sent = 0;
+    for (const uid of userIds) {
+      const out = await sendToUser(uid, payload);
+      sent += out.sent;
+    }
+    res.json({ users: userIds.length, sent });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
 // Full listening history (paginated, newest first) for the song-history screen.
 app.get('/api/history', requireAuth, async (req, res) => {
   try {
@@ -1028,6 +1170,10 @@ app.post('/api/playlists/:id/tracks', requireAuth, async (req, res) => {
     const known = await query('SELECT 1 FROM tracks WHERE id = $1', [track_id]);
     if (!known.rowCount) return res.status(404).json({ error: 'unknown track' });
     await addTrackToPlaylist(req.userId, req.params.id, track_id);
+    // Tell the OTHER members (never the actor); notify.js swallows its own
+    // errors and sendCategory caps the frequency, so this can't fail or spam
+    // the request that triggered it.
+    notifyTrackAdded(req.userId, req.params.id, track_id).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
@@ -1064,7 +1210,11 @@ app.post('/api/playlists/:id/invite', requireAuth, async (req, res) => {
 // Accept a share invite → become a collaborator. (No :id — distinct path.)
 app.post('/api/playlists/invite/:token/accept', requireAuth, async (req, res) => {
   try {
-    res.json(await acceptInvite(req.userId, req.params.token));
+    const out = await acceptInvite(req.userId, req.params.token);
+    // The owner learns they have company (skipped when the owner accepted
+    // their own link — notify.js checks actor vs owner).
+    notifyInviteAccepted(req.userId, out.playlistId).catch(() => {});
+    res.json(out);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

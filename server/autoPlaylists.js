@@ -387,8 +387,13 @@ export async function refreshDueMixes({ budgetMs = 40000 } = {}) {
     [Date.now() - 7 * 86400000],
   );
   let generated = 0;
+  // Per-user record of what this run created — the cron route turns these
+  // into "your mix is ready" pushes (server/notify.js), one card per user.
+  const fresh = [];
   for (const { user_id: userId } of users) {
     if (Date.now() > deadline) break;
+    const names = [];
+    let coverTrackId = null;
     let suppressed;
     try {
       // Editions key on the user's local date; reuse the tz their client last sent.
@@ -415,11 +420,14 @@ export async function refreshDueMixes({ budgetMs = 40000 } = {}) {
         if (payload && payload.tracks.length >= MIN_SET) {
           await storeEdition(userId, mixKey, editionKey, payload);
           generated++;
+          names.push(def.name);
+          if (!coverTrackId) coverTrackId = payload.tracks[0]?.trackId ?? null;
         }
       }
     } catch (err) {
       console.warn('[mixes] cron refresh failed for user:', err?.message ?? err);
     }
+    if (names.length) fresh.push({ userId, names, coverTrackId });
   }
-  return { users: users.length, generated };
+  return { users: users.length, generated, fresh };
 }

@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 // because every test injects adminOnly/adminEmails explicitly.
 vi.mock('./config.js', () => ({ ADMIN_ONLY: false, ADMIN_EMAILS: [] }));
 
-import { adminBlocked } from './adminGate.js';
+import { adminBlocked, isAdminEmail } from './adminGate.js';
 
 describe('adminBlocked — dev/staging admin allowlist gate', () => {
   const allow = ['admin@aura.fm', 'second@aura.fm'];
@@ -36,5 +36,25 @@ describe('adminBlocked — dev/staging admin allowlist gate', () => {
 
   it('blocks everyone when the allowlist is empty but the flag is on', () => {
     expect(adminBlocked('admin@aura.fm', true, [])).toBe(true);
+  });
+});
+
+describe('isAdminEmail — prod admin authorization (admin push console)', () => {
+  const allow = ['admin@aura.fm'];
+
+  it('authorizes only allow-listed emails', () => {
+    expect(isAdminEmail('admin@aura.fm', allow)).toBe(true);
+    expect(isAdminEmail('stranger@example.com', allow)).toBe(false);
+  });
+
+  it('matches case-insensitively and trims whitespace', () => {
+    expect(isAdminEmail('  ADMIN@Aura.FM  ', allow)).toBe(true);
+  });
+
+  it('fails closed on empty allowlist and empty/missing emails', () => {
+    expect(isAdminEmail('admin@aura.fm', [])).toBe(false);
+    expect(isAdminEmail('', allow)).toBe(false);
+    expect(isAdminEmail(null, allow)).toBe(false);
+    expect(isAdminEmail(undefined, allow)).toBe(false);
   });
 });

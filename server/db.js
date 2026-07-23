@@ -679,6 +679,29 @@ const migrations = [
       CREATE INDEX idx_push_tokens_user ON push_tokens(user_id);
     `);
   },
+  async function v31_notification_policy(client) {
+    // Triggered pushes (server/notify.js) need two per-user pieces of state:
+    // which categories the user wants (absent row = everything on, the product
+    // default — so the table only holds users who touched the switches), and a
+    // log of delivered sends that enforces the frequency caps in
+    // server/push.js sendCategory. push_log rows older than 30 days are pruned
+    // by the daily cron.
+    await client.query(`
+      CREATE TABLE notification_prefs (
+        user_id    TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        mixes      BOOLEAN NOT NULL DEFAULT TRUE,
+        social     BOOLEAN NOT NULL DEFAULT TRUE,
+        nudges     BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at BIGINT  NOT NULL
+      );
+      CREATE TABLE push_log (
+        user_id  TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        category TEXT   NOT NULL,
+        sent_at  BIGINT NOT NULL
+      );
+      CREATE INDEX idx_push_log_user ON push_log(user_id, category, sent_at DESC);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/

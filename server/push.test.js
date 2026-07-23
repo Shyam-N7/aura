@@ -14,7 +14,7 @@ vi.mock('firebase-admin/messaging', () => ({
 }));
 
 import { query } from './db.js';
-import { sendToUser } from './push.js';
+import { sendToUser, sendCategory, inQuietHours } from './push.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -67,5 +67,80 @@ describe('sendToUser', () => {
     const out = await sendToUser('u2', { title: 't', body: 'b' });
     expect(out).toEqual({ sent: 0, reason: 'no_tokens' });
     expect(sendEachForMulticast).not.toHaveBeenCalled();
+  });
+});
+
+// IST is UTC+5:30 (no DST): 12:30 IST = 07:00 UTC — comfortably outside the
+// 22:30–07:00 quiet window. Every timestamp below is built from that anchor.
+const MIDDAY = Date.UTC(2026, 0, 5, 7, 0, 0);
+
+describe('inQuietHours (22:30–07:00 IST)', () => {
+  it('honors the exact boundaries', () => {
+    expect(inQuietHours(Date.UTC(2026, 0, 5, 16, 59))).toBe(false); // 22:29 IST
+    expect(inQuietHours(Date.UTC(2026, 0, 5, 17, 0))).toBe(true);   // 22:30 IST
+    expect(inQuietHours(Date.UTC(2026, 0, 5, 1, 29))).toBe(true);   // 06:59 IST
+    expect(inQuietHours(Date.UTC(2026, 0, 5, 1, 30))).toBe(false);  // 07:00 IST
+    expect(inQuietHours(MIDDAY)).toBe(false);
+  });
+});
+
+describe('sendCategory (prefs + quiet hours + caps)', () => {
+  it('rejects an unknown category outright', async () => {
+    const out = await sendCategory('u1', 'nope', { title: 't', body: 'b' }, { now: MIDDAY });
+    expect(out).toEqual({ sent: 0, reason: 'unknown_category' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('stays silent inside quiet hours — before any db read', async () => {
+    const night = Date.UTC(2026, 0, 5, 18, 0); // 23:30 IST
+    const out = await sendCategory('u1', 'mixes', { title: 't', body: 'b' }, { now: night });
+    expect(out).toEqual({ sent: 0, reason: 'quiet_hours' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('respects a switched-off category', async () => {
+    query.mockResolvedValueOnce({ rows: [{ mixes: false, social: true, nudges: true }] });
+    const out = await sendCategory('u1', 'mixes', { title: 't', body: 'b' }, { now: MIDDAY });
+    expect(out).toEqual({ sent: 0, reason: 'pref_off' });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults to all-on when the user never touched the switches', async () => {
+    delete process.env.FIREBASE_ADMIN_JSON;
+    query.mockResolvedValueOnce({ rows: [] });                       // no prefs row
+    query.mockResolvedValueOnce({ rows: [{ last: null, day: '0' }] }); // caps clear
+    const out = await sendCategory('u1', 'mixes', { title: 't', body: 'b' }, { now: MIDDAY });
+    // Policy passed; only the (unconfigured) sender stopped it — and an
+    // undelivered send must NOT burn the cap.
+    expect(out).toEqual({ sent: 0, reason: 'no_credentials' });
+    const inserts = query.mock.calls.filter(c => c[0].includes('INSERT INTO push_log'));
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('enforces the per-category minimum gap', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+    query.mockResolvedValueOnce({ rows: [{ last: MIDDAY - 3600_000, day: '1' }] }); // 1h ago < 20h gap
+    const out = await sendCategory('u1', 'mixes', { title: 't', body: 'b' }, { now: MIDDAY });
+    expect(out).toEqual({ sent: 0, reason: 'capped' });
+  });
+
+  it('enforces the all-categories daily cap', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+    query.mockResolvedValueOnce({ rows: [{ last: null, day: '4' }] });
+    const out = await sendCategory('u1', 'social', { title: 't', body: 'b' }, { now: MIDDAY });
+    expect(out).toEqual({ sent: 0, reason: 'daily_cap' });
+  });
+
+  it('sends and logs when every guard clears', async () => {
+    vi.stubEnv('FIREBASE_ADMIN_JSON', JSON.stringify({ project_id: 'aura' }));
+    query.mockResolvedValueOnce({ rows: [] });                         // prefs default
+    query.mockResolvedValueOnce({ rows: [{ last: null, day: '0' }] }); // caps clear
+    query.mockResolvedValueOnce({ rows: [{ token: 'alive'.padEnd(20, 'a') }] });
+    sendEachForMulticast.mockResolvedValueOnce({ successCount: 1, responses: [{ success: true }] });
+    query.mockResolvedValueOnce({ rows: [] });                         // the log INSERT
+    const out = await sendCategory('u1', 'nudges', { title: 't', body: 'b' }, { now: MIDDAY });
+    expect(out).toEqual({ sent: 1 });
+    const log = query.mock.calls.find(c => c[0].includes('INSERT INTO push_log'));
+    expect(log[1]).toEqual(['u1', 'nudges', MIDDAY]);
   });
 });

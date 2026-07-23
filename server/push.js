@@ -82,3 +82,66 @@ export async function sendToUser(userId, { title, body, image, link, collapseKey
   }
   return { sent: res.successCount };
 }
+
+// ── Category sends: prefs + quiet hours + frequency caps ─────────────
+// Every TRIGGERED push (server/notify.js) flows through sendCategory, which
+// owns the product guardrails so no individual trigger can spam. Admin sends
+// use sendToUser directly — the human composing them is the cap.
+
+export const CATEGORIES = {
+  mixes:  { minGapMs: 20 * 3600_000 }, // "your mix is ready" — at most ~daily
+  social: { minGapMs: 60 * 60_000 },   // playlist activity — bursts become one card an hour
+  nudges: { minGapMs: 96 * 3600_000 }, // re-engagement — one every few days, no more
+};
+const DAILY_CAP = 4; // all categories combined, per user, per rolling day
+
+// Quiet window 22:30–07:00 IST. We don't store per-user timezones yet, so IST
+// is the honest product default for an India-first user base; the 02:00 UTC
+// cron (≈07:30 IST) lands just past the window's end by design.
+export function inQuietHours(now = Date.now()) {
+  const m = (Math.floor(now / 60_000) + 330) % 1440; // minutes into the IST day
+  return m >= 22 * 60 + 30 || m < 7 * 60;
+}
+
+// Absent row = all categories on (the default; the table only stores users
+// who have touched the switches).
+export async function getPrefs(userId) {
+  const { rows } = await query(
+    'SELECT mixes, social, nudges FROM notification_prefs WHERE user_id = $1',
+    [userId],
+  );
+  return rows[0] ?? { mixes: true, social: true, nudges: true };
+}
+
+export async function sendCategory(userId, category, payload, { now = Date.now() } = {}) {
+  const rule = CATEGORIES[category];
+  if (!rule) return { sent: 0, reason: 'unknown_category' };
+  if (inQuietHours(now)) return { sent: 0, reason: 'quiet_hours' };
+  const prefs = await getPrefs(userId);
+  if (!prefs[category]) return { sent: 0, reason: 'pref_off' };
+  const { rows } = await query(
+    `SELECT
+       (SELECT MAX(sent_at) FROM push_log WHERE user_id = $1 AND category = $2) AS last,
+       (SELECT COUNT(*)     FROM push_log WHERE user_id = $1 AND sent_at > $3) AS day`,
+    [userId, category, now - 24 * 3600_000],
+  );
+  if (rows[0].last != null && now - Number(rows[0].last) < rule.minGapMs) {
+    return { sent: 0, reason: 'capped' };
+  }
+  if (Number(rows[0].day) >= DAILY_CAP) return { sent: 0, reason: 'daily_cap' };
+  const out = await sendToUser(userId, payload);
+  if (out.sent > 0) {
+    // Log only real deliveries — a no-token or no-credential miss must not
+    // burn the user's cap for when they do enroll a device.
+    await query(
+      'INSERT INTO push_log (user_id, category, sent_at) VALUES ($1, $2, $3)',
+      [userId, category, now],
+    ).catch(() => {});
+  }
+  return out;
+}
+
+// Cap bookkeeping only needs a rolling month; the daily cron calls this.
+export async function prunePushLog(now = Date.now()) {
+  await query('DELETE FROM push_log WHERE sent_at < $1', [now - 30 * 86400_000]);
+}

@@ -19,6 +19,7 @@ import { requestTour } from '../lib/tour';
 import { openShortcutsHelp } from '../lib/shortcutsHelp';
 import { useViewport, isDesktopBreakpoint } from '../hooks/useViewport';
 import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
+import { getPushPrefs, setPushPrefs, adminPushReach, adminPushSend } from '../api/push';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
 
@@ -80,6 +81,59 @@ export function SettingsPanel({ t, setTweak }) {
   const [delSecret, setDelSecret] = useState('');
   const [delBusy, setDelBusy] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+
+  // Notification switches — server-persisted (the phone app reads the same
+  // prefs before every push). null while loading; each row flips optimistically
+  // and reverts on failure.
+  const [pushPrefs, setPushPrefsState] = useState(null);
+  useEffect(() => {
+    let stop = false;
+    getPushPrefs().then(p => { if (!stop) setPushPrefsState(p); }).catch(() => {});
+    return () => { stop = true; };
+  }, []);
+  const togglePushPref = async (key) => {
+    if (!pushPrefs) return;
+    const next = !pushPrefs[key];
+    setPushPrefsState({ ...pushPrefs, [key]: next });
+    try {
+      setPushPrefsState(await setPushPrefs({ [key]: next }));
+    } catch (err) {
+      setPushPrefsState(pushPrefs);
+      toast(`couldn't update — ${err.message}`);
+    }
+  };
+
+  // Admin push console — rendered only for allow-listed emails (user.admin);
+  // the server re-checks the allowlist on every admin route regardless.
+  const isAdmin = !!user?.admin;
+  const [reach, setReach] = useState(null);
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    let stop = false;
+    adminPushReach().then(r => { if (!stop) setReach(r); }).catch(() => {});
+    return () => { stop = true; };
+  }, [isAdmin]);
+  const [pushForm, setPushForm] = useState({ title: '', body: '', link: '', email: '', toAll: false });
+  const [pushBusy, setPushBusy] = useState(false);
+  const sendAdminPush = async (e) => {
+    e.preventDefault();
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      const audience = pushForm.email.trim() || (pushForm.toAll ? 'all' : 'me');
+      const out = await adminPushSend({
+        title: pushForm.title,
+        body: pushForm.body,
+        link: pushForm.link.trim() || undefined,
+        audience,
+      });
+      toast(`sent to ${out.sent} device${out.sent === 1 ? '' : 's'} (${out.users} user${out.users === 1 ? '' : 's'}).`);
+    } catch (err) {
+      toast(`couldn't send — ${err.message}`);
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // Welcome-screen (the "sensing" intro) toggle. Default on for accounts cached
   // before this preference existed. When on, the intro still shows at most once a
@@ -445,6 +499,35 @@ export function SettingsPanel({ t, setTweak }) {
         </button>
       </div>
 
+      <p className="aura-set__group-label">notifications</p>
+      <div className="aura-set__group">
+        <p className="aura-set__caption">notifications arrive on your phone with the aura app installed.</p>
+        <button type="button" role="switch" aria-checked={pushPrefs?.mixes !== false}
+          className="aura-set__row" disabled={!pushPrefs} onClick={() => togglePushPref('mixes')}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">new music for you</span>
+            <span className="aura-set__row-caption">a heads-up when your daily mixes are ready.</span>
+          </span>
+          <span className={`aura-set__switch ${pushPrefs?.mixes !== false ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
+        <button type="button" role="switch" aria-checked={pushPrefs?.social !== false}
+          className="aura-set__row" disabled={!pushPrefs} onClick={() => togglePushPref('social')}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">friends & playlists</span>
+            <span className="aura-set__row-caption">someone joins your playlist or adds a song.</span>
+          </span>
+          <span className={`aura-set__switch ${pushPrefs?.social !== false ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
+        <button type="button" role="switch" aria-checked={pushPrefs?.nudges !== false}
+          className="aura-set__row" disabled={!pushPrefs} onClick={() => togglePushPref('nudges')}>
+          <span className="aura-set__row-text">
+            <span className="aura-set__row-label">listening reminders</span>
+            <span className="aura-set__row-caption">{"an occasional nudge when your music's been waiting a while."}</span>
+          </span>
+          <span className={`aura-set__switch ${pushPrefs?.nudges !== false ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+        </button>
+      </div>
+
       <p className="aura-set__group-label">help</p>
       <div className="aura-set__group">
         <button type="button" className="aura-set__row" onClick={() => openWhatsNew({ releases: RELEASES })}>
@@ -530,6 +613,51 @@ export function SettingsPanel({ t, setTweak }) {
           <span className="aura-set__row-label">terms</span>
         </button>
       </div>
+
+      {isAdmin && (
+        <>
+          <p className="aura-set__group-label">admin · send a notification</p>
+          <div className="aura-set__group">
+            <p className="aura-set__caption">
+              {reach
+                ? reach.configured
+                  ? `reaches ${reach.devices} device${reach.devices === 1 ? '' : 's'} across ${reach.users} user${reach.users === 1 ? '' : 's'}.`
+                  : 'sender not configured — add the firebase key to the server env first.'
+                : 'checking reach…'}
+            </p>
+            <form className="aura-set__push-form" onSubmit={sendAdminPush}>
+              <input className="aura-set__push-input" type="text" maxLength={120}
+                placeholder="title" aria-label="notification title" value={pushForm.title}
+                onChange={e => setPushForm(f => ({ ...f, title: e.target.value }))}/>
+              <textarea className="aura-set__push-input" rows={2} maxLength={300}
+                placeholder="message" aria-label="notification message" value={pushForm.body}
+                onChange={e => setPushForm(f => ({ ...f, body: e.target.value }))}/>
+              <input className="aura-set__push-input" type="url"
+                placeholder="link (optional — opens on tap)" aria-label="notification link" value={pushForm.link}
+                onChange={e => setPushForm(f => ({ ...f, link: e.target.value }))}/>
+              <input className="aura-set__push-input" type="email"
+                placeholder="send to one email (optional)" aria-label="send to one email" value={pushForm.email}
+                onChange={e => setPushForm(f => ({ ...f, email: e.target.value }))}/>
+              <button type="button" role="switch" aria-checked={pushForm.toAll}
+                className="aura-set__row" onClick={() => setPushForm(f => ({ ...f, toAll: !f.toAll }))}>
+                <span className="aura-set__row-text">
+                  <span className="aura-set__row-label">send to everyone</span>
+                  <span className="aura-set__row-caption">
+                    {pushForm.email.trim()
+                      ? 'ignored — the email above wins.'
+                      : pushForm.toAll ? 'goes to every enrolled device.' : 'off — goes only to your own devices (a safe test).'}
+                  </span>
+                </span>
+                <span className={`aura-set__switch ${pushForm.toAll ? 'is-on' : ''}`} aria-hidden="true"><span/></span>
+              </button>
+              <button type="submit" className="aura-set__pin-btn"
+                disabled={pushBusy || !pushForm.title.trim() || !pushForm.body.trim()}>
+                {pushBusy ? 'sending…' : 'send notification'}
+              </button>
+            </form>
+          </div>
+        </>
+      )}
 
       <div className="aura-set__group">
         <button type="button" className="aura-set__row aura-set__row--accent" onClick={handleSignOut}>
