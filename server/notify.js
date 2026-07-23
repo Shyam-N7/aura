@@ -6,7 +6,7 @@
 // swallow their own errors so a notification hiccup never fails the request
 // that caused it.
 import { query } from './db.js';
-import { sendCategory } from './push.js';
+import { sendCategory, cardArtUrl } from './push.js';
 
 const HOME = 'https://www.aurafm.live/';
 
@@ -34,7 +34,7 @@ export async function notifyMixesReady(userId, names, coverTrackId) {
       body: one
         ? 'a fresh edition for today. tap to listen.'
         : `${names.length} fresh mixes for today. tap to listen.`,
-      image: await trackArt(coverTrackId),
+      image: cardArtUrl(await trackArt(coverTrackId), `mixes-${userId}`),
       link: HOME,
       collapseKey: 'mixes',
     });
@@ -62,11 +62,12 @@ export async function notifyTrackAdded(actorId, playlistId, trackId) {
     );
     const recipients = new Set([meta.owner_id, ...collab.map(c => c.user_id)]);
     recipients.delete(actorId);
+    const image = cardArtUrl(await trackArt(trackId), `pl-${playlistId}`);
     for (const uid of recipients) {
       await sendCategory(uid, 'social', {
         title: `${meta.actor_name} added a song`,
         body: `"${meta.track_title}" is now in ${meta.playlist_name}.`,
-        image: await trackArt(trackId),
+        image,
         link: HOME,
         collapseKey: `pl-${playlistId}`,
       });
@@ -89,6 +90,7 @@ export async function notifyInviteAccepted(actorId, playlistId) {
     await sendCategory(rows[0].owner_id, 'social', {
       title: `${rows[0].actor_name} joined your playlist`,
       body: `${rows[0].playlist_name} has a new member. say hi with a song.`,
+      image: cardArtUrl(null, `pl-${playlistId}`),
       link: HOME,
       collapseKey: `pl-${playlistId}`,
     });
@@ -138,6 +140,7 @@ export async function sweepNudges({ maxSends = 25, now = Date.now() } = {}) {
       }
       const out = await sendCategory(userId, 'nudges', {
         ...payload,
+        image: cardArtUrl(null, `nudge-${userId}`),
         link: HOME,
         collapseKey: 'nudge',
       }, { now });

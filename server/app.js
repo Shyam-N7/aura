@@ -47,6 +47,7 @@ import modesRouter from './modesRoutes.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middleware/auth.js';
 import { getPrefs, sendToUser, prunePushLog } from './push.js';
+import { allowedArtUrl, fetchArt, renderCardPng } from './cardArt.js';
 import { notifyMixesReady, notifyTrackAdded, notifyInviteAccepted, sweepNudges } from './notify.js';
 import { isAdminEmail } from './adminGate.js';
 import { clientError, errorMiddleware, notFound } from './middleware/errors.js';
@@ -747,6 +748,33 @@ app.post('/api/loudness/measure', requireAuth, loudnessMeasureHandler(async () =
 // stems state machine (server/stems.js). Clients poll it while showing
 // "preparing…"; the heavy separation runs on MVSEP, never in a function.
 app.post('/api/stems/request', requireAuth, stemsRequestHandler());
+
+// ── Composed notification card art ───────────────────────────────────
+// PUBLIC by necessity: FCM fetches card images with no credentials. Composes
+// the branded 1000×500 card (server/cardArt.js) — art full-bleed under the
+// scrim, the seeded ribbon wave, ring mark + wordmark. `art` must be
+// aura-hosted (catalog CDN / Blob store — the endpoint would otherwise be an
+// open image proxy); absent art = the brand-only card. Immutable-cached so
+// each distinct card renders once at the edge.
+const cardArtLimiter = buildLimiter(5 * 60 * 1000, 120, 'too many requests — slow down a moment.', 'cardart');
+app.get('/api/push/card-art', cardArtLimiter, async (req, res) => {
+  try {
+    const artUrl = typeof req.query.art === 'string' && req.query.art ? req.query.art : null;
+    if (artUrl && !allowedArtUrl(artUrl)) {
+      return res.status(400).json({ error: 'art must be an aura-hosted image url' });
+    }
+    const seed = typeof req.query.seed === 'string' && req.query.seed
+      ? req.query.seed.slice(0, 120)
+      : (artUrl ?? 'aura');
+    const art = artUrl ? await fetchArt(artUrl) : null;
+    const png = renderCardPng({ art, seed });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400, s-maxage=31536000, immutable');
+    res.send(png);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
 
 // ── FCM device registration (native app) ─────────────────────────────
 // Upsert keyed on the token: a device switching accounts re-homes its token

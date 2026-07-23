@@ -145,3 +145,15 @@ export async function sendCategory(userId, category, payload, { now = Date.now()
 export async function prunePushLog(now = Date.now()) {
   await query('DELETE FROM push_log WHERE sent_at < $1', [now - 30 * 86400_000]);
 }
+
+// Every push wears the composed card (the /api/push/card-art endpoint):
+// art-backed when a track cover exists, the brand-only card otherwise — one
+// look for ALL notifications. `seed` gives artless cards their own ribbon
+// wave (deterministic, so the edge cache still holds).
+const CARD_ART_BASE = 'https://www.aurafm.live/api/push/card-art';
+export function cardArtUrl(art, seed) {
+  const q = [];
+  if (art) q.push(`art=${encodeURIComponent(art)}`);
+  else if (seed) q.push(`seed=${encodeURIComponent(seed)}`);
+  return q.length ? `${CARD_ART_BASE}?${q.join('&')}` : CARD_ART_BASE;
+}
