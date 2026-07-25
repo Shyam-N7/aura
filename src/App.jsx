@@ -616,6 +616,8 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   const [repeatMode, setRepeatMode] = useState(() => readStoredRepeat());
   const repeatModeRef = useRef(repeatMode);
   const loadedTrackIdRef = useRef(null);
+  // A /t/ share link's ?at= moment — consumed once, after that track loads.
+  const shareSeekRef = useRef(null);
   // Which track a load is CURRENTLY in flight for — lets the wake watchdog tell
   // "still loading" (leave it alone; the settle timeout bounds it) apart from
   // "load died" (re-kick). Cleared when the load settles either way.
@@ -1010,6 +1012,26 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Shared song links (/t/:id[?at=sec]): resolve the song and land on the
+  // player with it cued — paused, since browsers block autoplay without a
+  // gesture; the seek waits in shareSeekRef until the load effect below has
+  // a duration to seek within. First-run gates win over the link (same rule
+  // as path deep links): sensing/onboarding users just proceed normally.
+  useEffect(() => {
+    const m = window.location.pathname.match(/^\/t\/([^/]+)$/);
+    if (!m || !shouldSkipSensing || !isOnboarded) return;
+    const at = Number(new URLSearchParams(window.location.search).get('at'));
+    getTrack(decodeURIComponent(m[1])).then(trk => {
+      if (Number.isFinite(at) && at > 0) {
+        shareSeekRef.current = { trackId: trk.id, sec: at };
+      }
+      setQueue({ tracks: [trk], idx: 0, source: 'shared with you' });
+      setScreen('player');
+    }).catch(() => { /* dead or private link — the app just opens normally */ });
+    // Cold-land only: the path can't become /t/ again without a full load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load the active track whenever its identity OR stream URL changes. The
   // streamUrl dep covers the persisted-queue cold-start case where a track
   // is restored without a CDN URL and gets it lazily from `getTrack`.
@@ -1025,6 +1047,14 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
       const saved = loadPosition();
       if (saved && saved.trackId === track.id && saved.progress > 0.01 && saved.progress < 0.98) {
         player.seek(saved.progress);
+      }
+      // A share link's moment wins over the saved position — the link's whole
+      // point is landing at that second.
+      const moment = shareSeekRef.current;
+      if (moment && moment.trackId === track.id) {
+        shareSeekRef.current = null;
+        const d = player.getDurationSec();
+        if (d > 0) player.seek(Math.min(moment.sec, Math.max(0, d - 1)) / d);
       }
       if (playing && screen !== 'sensing') safePlay();
     }).catch(err => {

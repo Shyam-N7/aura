@@ -1446,6 +1446,43 @@ app.get('/p/:publicId', async (req, res) => {
   }
 });
 
+// ── Open Graph for shared song links (/t/:trackId[?at=sec]) ──────────────
+// Same shape as /p/ above: vercel.json rewrites /t/* here, crawlers get
+// per-song meta (title · artist, the cover as the card), browsers get the SPA
+// shell and hydrate — App.jsx spots the /t/ path, loads the song, and seeks
+// to ?at= if the link names a moment.
+app.get('/t/:trackId', async (req, res) => {
+  const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
+  try {
+    const html = await fetch(`${base}/index.html`).then(r => r.text());
+    let track = null;
+    if (isId(req.params.trackId)) {
+      try { track = await getTrackById(req.params.trackId); }
+      catch { /* unknown id → serve the generic card, not a 404 page */ }
+    }
+    const at = Number(req.query.at);
+    const stamp = Number.isFinite(at) && at > 0
+      ? ` · from ${Math.floor(at / 60)}:${String(Math.floor(at % 60)).padStart(2, '0')}`
+      : '';
+    const out = track
+      ? injectPlaylistOg(html, {
+          title:       `${track.title} · ${track.artist || 'AURA'}`,
+          description: `${track.title}${track.artist ? ` by ${track.artist}` : ''} on AURA${stamp}.`,
+          image:       track.imageUrl || `${base}/og.png`,
+          url:         `${base}/t/${req.params.trackId}`,
+        })
+      : html;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(out);
+  } catch (err) {
+    // Shell fetch failed (rare) — bounce to the SPA root (NOT back to /t/:id,
+    // which would re-enter this handler and loop) so the app still loads.
+    console.error('[og] shell fetch failed:', err?.message ?? err);
+    res.redirect(302, '/');
+  }
+});
+
 // Terminal handlers, mounted LAST. notFound answers any unmatched /api path with
 // JSON 404; errorMiddleware is the single place that turns a thrown/forwarded
 // error into a scrubbed client response (and logs the full detail server-side).

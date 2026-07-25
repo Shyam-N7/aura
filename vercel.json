@@ -40,6 +40,7 @@
     { "source": "/api/loudness/measure", "destination": "/api/loudness-measure" },
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/p/(.*)", "destination": "/api" },
+    { "source": "/t/(.*)", "destination": "/api" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
