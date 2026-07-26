@@ -1018,15 +1018,35 @@ function App({ t, setTweak, breakpoint = 'mobile', rails = {} }) {
   // a duration to seek within. First-run gates win over the link (same rule
   // as path deep links): sensing/onboarding users just proceed normally.
   useEffect(() => {
+    // The link intent survives the gates: if sensing/onboarding (or an auth
+    // flow that rewrites the URL) stands between the tap and the player, the
+    // song waits in sessionStorage and lands after — a shared link must never
+    // deliver someone to an empty home screen.
+    let target = null;
     const m = window.location.pathname.match(/^\/t\/([^/]+)$/);
-    if (!m || !shouldSkipSensing || !isOnboarded) return;
-    const at = Number(new URLSearchParams(window.location.search).get('at'));
-    getTrack(decodeURIComponent(m[1])).then(trk => {
-      if (Number.isFinite(at) && at > 0) {
-        shareSeekRef.current = { trackId: trk.id, sec: at };
+    if (m) {
+      const at = Number(new URLSearchParams(window.location.search).get('at'));
+      target = { id: decodeURIComponent(m[1]), at };
+    } else {
+      try { target = JSON.parse(sessionStorage.getItem('aura.pendingShare') || 'null'); }
+      catch { target = null; }
+    }
+    if (!target?.id) return;
+    if (!shouldSkipSensing || !isOnboarded) {
+      try { sessionStorage.setItem('aura.pendingShare', JSON.stringify(target)); } catch { /* best effort */ }
+      return;
+    }
+    try { sessionStorage.removeItem('aura.pendingShare'); } catch { /* best effort */ }
+    getTrack(target.id).then(trk => {
+      if (Number.isFinite(target.at) && target.at > 0) {
+        shareSeekRef.current = { trackId: trk.id, sec: target.at };
       }
       setQueue({ tracks: [trk], idx: 0, source: 'shared with you' });
       setScreen('player');
+      // Autoplay needs a gesture — arm the FIRST tap anywhere to be it, so
+      // the landing feels like "tap to play", not "why is it silent".
+      const arm = () => setPlaying(true);
+      window.addEventListener('pointerdown', arm, { once: true });
     }).catch(() => { /* dead or private link — the app just opens normally */ });
     // Cold-land only: the path can't become /t/ again without a full load.
     // eslint-disable-next-line react-hooks/exhaustive-deps

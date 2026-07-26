@@ -1468,7 +1468,11 @@ app.get('/t/:trackId', async (req, res) => {
       ? injectPlaylistOg(html, {
           title:       `${track.title} · ${track.artist || 'AURA'}`,
           description: `${track.title}${track.artist ? ` by ${track.artist}` : ''} on AURA${stamp}.`,
-          image:       track.imageUrl || `${base}/og.png`,
+          // The catalog serves art at whatever size it was cached at (often
+          // 150x150) — upscale so the preview card is sharp, not fuzzy.
+          image:       track.imageUrl
+            ? track.imageUrl.replace(/\d+x\d+/, '500x500')
+            : `${base}/og.png`,
           url:         `${base}/t/${req.params.trackId}`,
         })
       : html;
