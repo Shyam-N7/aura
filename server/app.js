@@ -50,7 +50,7 @@ import { getPrefs, sendToUser, prunePushLog } from './push.js';
 import { allowedArtUrl, fetchArt, renderCardPng } from './cardArt.js';
 import { notifyMixesReady, notifyTrackAdded, notifyInviteAccepted, sweepNudges } from './notify.js';
 import { isAdminEmail } from './adminGate.js';
-import { clientError, errorMiddleware, notFound } from './middleware/errors.js';
+import { asyncHandler, clientError, errorMiddleware, notFound } from './middleware/errors.js';
 import { isId, clampInt } from './validate.js';
 
 // The configured Express app, with NO side effects at import time: it neither
@@ -171,7 +171,13 @@ for (const param of ['id', 'track_id', 'user_id', 'token']) {
   });
 }
 
-app.get('/api/catalog/search', optionalAuth, async (req, res) => {
+// asyncHandler, not an inline try/catch: this is the one route in this file
+// with no error guard at all. Its awaits are all Promise.allSettled so nothing
+// escapes there, but ~50 lines of ranking and mapping follow, and a throw in
+// an unguarded async handler is NOT forwarded by Express 4 — it becomes an
+// unhandled rejection that processGuards logs while the client waits out the
+// full 60s function timeout with no response. (#26)
+app.get('/api/catalog/search', optionalAuth, asyncHandler(async (req, res) => {
   // Bounded before anything reaches the upstream catalog: query text capped,
   // limit clamped, language list capped. (security: input caps)
   const q = String(req.query.q ?? '').trim().slice(0, 200);
@@ -241,7 +247,7 @@ app.get('/api/catalog/search', optionalAuth, async (req, res) => {
 
   res.json({ top, songs, artists, albums, playlists: sug.playlists, userPlaylists });
   if (songs.length) cacheTracks(songs);
-});
+}));
 
 app.get('/api/catalog/track/:id', async (req, res) => {
   // A cache miss falls through to an upstream lookup — cap the id first so junk
