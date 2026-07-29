@@ -85,6 +85,11 @@ app.use((req, res, next) => {
 // Parse cookies so requireAuth can read the httpOnly session cookie. (security: M2)
 app.use(cookieParser());
 
+// Deadline for fetching our own built SPA shell when injecting Open Graph
+// tags for /p/ and /t/ links. Separate from catalog.js's UPSTREAM_TIMEOUT_MS:
+// that one bounds a third party, this bounds a static asset on our own CDN.
+const SHELL_FETCH_TIMEOUT_MS = 5_000;
+
 // ── Rate limiting ───────────────────────────────────────────────────
 // Behind Vercel's edge (a single proxy) — trust ONE hop so req.ip is the real
 // client for per-IP limiting. NOT `true`, which would let clients spoof
@@ -1429,7 +1434,12 @@ app.get('/p/:publicId', async (req, res) => {
   const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
   try {
     // The built SPA shell uses absolute /assets/ paths, so it boots fine at /p/:id.
-    const html = await fetch(`${base}/index.html`).then(r => r.text());
+    // Own origin, but still an unbounded network call inside a serverless
+    // invocation — a stalled edge would hold the slot to maxDuration and the
+    // crawler would get nothing. The shell is a static file; 5s is generous.
+    const html = await fetch(`${base}/index.html`, {
+      signal: AbortSignal.timeout(SHELL_FETCH_TIMEOUT_MS),
+    }).then(r => r.text());
     let pl = null;
     try { pl = await getPublicPlaylist(req.params.publicId); }
     catch { /* unknown / private → serve the generic card, not a 404 page */ }
@@ -1460,7 +1470,12 @@ app.get('/p/:publicId', async (req, res) => {
 app.get('/t/:trackId', async (req, res) => {
   const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
   try {
-    const html = await fetch(`${base}/index.html`).then(r => r.text());
+    // Own origin, but still an unbounded network call inside a serverless
+    // invocation — a stalled edge would hold the slot to maxDuration and the
+    // crawler would get nothing. The shell is a static file; 5s is generous.
+    const html = await fetch(`${base}/index.html`, {
+      signal: AbortSignal.timeout(SHELL_FETCH_TIMEOUT_MS),
+    }).then(r => r.text());
     let track = null;
     if (isId(req.params.trackId)) {
       try { track = await getTrackById(req.params.trackId); }

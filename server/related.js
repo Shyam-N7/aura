@@ -3,7 +3,7 @@
 // no same-artist boost, capped to a couple of tracks per artist for diversity, and
 // when the station is empty we fall back to an artist-seeded same-language search.
 
-import { searchSongs, decodeEntities, decryptMediaUrl, pickImageUrl } from './catalog.js';
+import { searchSongs, decodeEntities, decryptMediaUrl, pickImageUrl, UPSTREAM_TIMEOUT_MS } from './catalog.js';
 import { cacheTracks, getTrackById } from './tracks.js';
 import { getSuppressedTrackIds } from './tasteScore.js';
 import { pool } from './db.js';
@@ -94,7 +94,10 @@ async function fetchStationSongs(pid, count) {
     url.searchParams.set('api_version', CATALOG_API_VERSION);
     url.searchParams.set('ctx',         CATALOG_CTX_STATION);
     for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v);
-    return fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    return fetch(url, {
+      headers: { 'User-Agent': CATALOG_USER_AGENT },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
   };
   try {
     const cres = await call(CATALOG_M_STATION_CREATE, { entity_id: JSON.stringify([pid]), entity_type: 'queue' });

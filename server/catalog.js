@@ -12,6 +12,20 @@ import {
   CATALOG_M_LYRICS,
 } from './config.js';
 
+// Node's fetch has NO default timeout, and this whole file talks to a third
+// party we do not control. A hung upstream connection therefore held a
+// serverless invocation until vercel.json's maxDuration (60s) — and the app,
+// whose own client has no deadline either, showed a spinner for all of it.
+// 10s is far beyond any healthy catalog response and well inside the function
+// budget, so a stall fails fast as a 502 instead of burning the slot.
+//
+// AbortSignal.timeout rather than the AbortController + setTimeout pair used
+// in loudness.js/cardArt.js: same effect, but it needs no clearTimeout in a
+// finally, so it adds one line per call site instead of four.
+// Exported so artists.js and related.js — which call the same upstream with
+// the same UA — share one deadline rather than three drifting copies.
+export const UPSTREAM_TIMEOUT_MS = 10_000;
+
 const HTML_ENTITIES = { amp: '&', quot: '"', '#039': "'", apos: "'", lt: '<', gt: '>' };
 export function decodeEntities(s) {
   if (!s) return s;
@@ -101,7 +115,10 @@ export async function getSongDetails(ids) {
   url.searchParams.set('ctx',         CATALOG_CTX);
   url.searchParams.set('pids',        ids.join(','));
 
-  const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog ${res.status}: ${text.slice(0, 200)}`);
@@ -153,7 +170,10 @@ export async function getPlainLyrics(trackId) {
     url.searchParams.set('ctx',         CATALOG_CTX);
     url.searchParams.set('lyrics_id',   trackId);
 
-    const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
     if (!res.ok) return null;
     const body = await res.json().catch(() => null);
     const lines = parsePlainLyrics(body?.lyrics);
@@ -206,7 +226,10 @@ export async function getCatalogHome({ lang } = {}) {
   url.searchParams.set('ctx',         CATALOG_CTX_HOME);
   if (lang) url.searchParams.set('language', lang);
 
-  const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog home ${res.status}: ${text.slice(0, 200)}`);
@@ -237,7 +260,10 @@ export async function getCatalogPlaylistDetail(id) {
   url.searchParams.set('ctx',         CATALOG_CTX);
   url.searchParams.set('listid',      id);
 
-  const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog playlist ${res.status}: ${text.slice(0, 200)}`);
@@ -269,7 +295,10 @@ export async function searchSongs(query, { limit = 20, lang } = {}) {
   url.searchParams.set('n',           String(Math.min(limit, 40)));
   url.searchParams.set('q',           query);
 
-  const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const err = new Error(`catalog ${res.status}: ${text.slice(0, 200)}`);
@@ -361,7 +390,10 @@ export async function searchSuggest(query) {
   // come from searchSongs). Return empty buckets instead of throwing.
   let out = { top: null, artists: [], albums: [], playlists: [] };
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
     if (res.ok) {
       const body = await res.json();
       const data = (cat) => (body?.[cat]?.data ?? []);

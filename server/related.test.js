@@ -24,6 +24,11 @@ vi.mock('./catalog.js', () => ({
   decodeEntities: (s) => s,
   decryptMediaUrl: (u) => (u ? `stream:${u}` : null),
   pickImageUrl: (u) => u,
+  // Real export, and it must be present: related.js passes it to
+  // AbortSignal.timeout(), and AbortSignal.timeout(undefined) coerces to 0 —
+  // which aborts every station fetch on the spot and empties the results
+  // rather than failing loudly.
+  UPSTREAM_TIMEOUT_MS: 10_000,
 }));
 
 import { searchSongs } from './catalog.js';

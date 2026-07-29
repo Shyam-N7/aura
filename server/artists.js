@@ -4,7 +4,7 @@
 // "fans also like") can pass it directly to skip the lookup hop.
 
 import { cacheTracks } from './tracks.js';
-import { decodeEntities, pickImageUrl, mapSong } from './catalog.js';
+import { decodeEntities, pickImageUrl, mapSong, UPSTREAM_TIMEOUT_MS } from './catalog.js';
 import {
   CATALOG_API_BASE, CATALOG_USER_AGENT, CATALOG_CTX, CATALOG_API_VERSION,
   CATALOG_M_SONG, CATALOG_M_SEARCH, CATALOG_M_ARTIST, CATALOG_M_ALBUM,
@@ -87,7 +87,10 @@ async function lookupArtistIdViaTrack(trackId, name) {
   url.searchParams.set('api_version', CATALOG_API_VERSION);
   url.searchParams.set('ctx',         CATALOG_CTX);
   url.searchParams.set('pids',        trackId);
-  const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!res.ok) return null;
   const body = await res.json().catch(() => null);
   if (!body) return null;
@@ -133,7 +136,10 @@ async function lookupArtistIdViaName(name) {
   url.searchParams.set('p',           '1');
   url.searchParams.set('n',           '20');
   url.searchParams.set('q',           name);
-  const res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!res.ok) return null;
   const body = await res.json().catch(() => null);
   const results = body?.results ?? [];
@@ -208,7 +214,10 @@ export async function getArtistDetails({ name, id, trackId } = {}) {
 
   let res;
   try {
-    res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   } catch (err) {
     // Network-layer failure (DNS, refused, abort). Surface as 502 rather than
     // crashing the route with a generic 500.
@@ -293,7 +302,10 @@ export async function getAlbumDetail(albumId) {
 
   let res;
   try {
-    res = await fetch(url, { headers: { 'User-Agent': CATALOG_USER_AGENT } });
+    res = await fetch(url, {
+    headers: { 'User-Agent': CATALOG_USER_AGENT },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   } catch (err) {
     console.warn('[albums] fetch network error:', err.cause?.code || err.message);
     const e = new Error(`catalog unreachable:${err.cause?.code || err.message}`);
