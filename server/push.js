@@ -64,9 +64,20 @@ export async function sendToUser(userId, { title, body, image, link, collapseKey
     notification: { title, body },
     android: {
       ...(collapseKey ? { collapseKey } : {}),
+      // FCM defaults an Android notification message to NORMAL priority, and a
+      // normal-priority message to a dozing device is held until the next
+      // maintenance window — which for a locked, idle phone is exactly the
+      // moment we're trying to reach. Every push we send is user-facing and
+      // already rate-limited by sendCategory below, so there is no case here
+      // where deferring is the right behaviour.
+      priority: 'high',
       notification: {
         ...(image ? { imageUrl: image } : {}),
         color: '#d97757',
+        // Must match MainApplication.PUSH_CHANNEL_ID and the manifest's
+        // default_notification_channel_id. Sending it explicitly means we keep
+        // control of importance even if the manifest default is ever lost.
+        channelId: 'aura.push.v1',
       },
     },
     ...(link ? { data: { link: String(link) } } : {}),

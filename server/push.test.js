@@ -55,6 +55,15 @@ describe('sendToUser', () => {
     expect(msg.notification.title).toContain('wednesday');
     expect(msg.android.collapseKey).toBe('mix-ready');
     expect(msg.android.notification.imageUrl).toBe('https://example.com/art.jpg');
+    // Delivery-critical, and both are invisible in any response FCM returns:
+    // without high priority a dozing device defers the push to its next
+    // maintenance window, and without an explicit channel the client SDK
+    // routes it to a fallback channel at an importance we don't control.
+    // The id is mirrored in MainApplication.PUSH_CHANNEL_ID and the app
+    // manifest — asserting the literal here is what catches a drift between
+    // the three.
+    expect(msg.android.priority).toBe('high');
+    expect(msg.android.notification.channelId).toBe('aura.push.v1');
     expect(msg.data.link).toBe('https://www.aurafm.live/');
     // The dead token — and only it — is pruned.
     const del = query.mock.calls.find(c => c[0].includes('DELETE'));
