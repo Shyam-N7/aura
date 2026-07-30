@@ -30,6 +30,47 @@ async function ensureDatabase() {
 // is detected sooner (fewer dead-socket handoffs); max:2 + idleTimeout unchanged.
 export const pool = new Pool({ connectionString: TARGET_URL, max: 2, idleTimeoutMillis: 10000, keepAlive: true });
 
+// ── pool.query retries transient drops itself ────────────────────────
+// The audit (reports/02-review.md C3/A4) found 133 direct pool.query calls
+// against 66 uses of the query() wrapper below — the retry existed but two
+// thirds of the codebase silently bypassed it, because nothing at a call site
+// says which of the two you should have used. Converting 133 call sites meant
+// rewriting ~65 test assertions that mock pool.query (attempted, reverted).
+// So the choice is removed instead: the pool's own query() now carries the
+// SAME narrow retry — transient connection drops only, never SQL errors (see
+// isTransient below) — and both spellings behave identically.
+//
+// Scope guards, load-bearing:
+// - Only the promise form is wrapped; a callback-style call (pg supports one)
+//   passes through untouched rather than being retried half-observed. Nothing
+//   in this repo uses callbacks, but the guard keeps a future one honest.
+// - Transactions are unaffected by construction: they run on a dedicated
+//   client from pool.connect() (see createSessionWithCap), and client.query
+//   is not wrapped — multi-statement retry stays at the transaction boundary.
+// - query({retries: 0}) remains a REAL opt-out (listening-events and
+//   impressions use it: non-idempotent INSERTs with no unique key, where a
+//   transient-socket replay could double-insert) — it runs against the raw
+//   pool, not the retrying wrapper, so 0 means 0.
+const rawPoolQuery = pool.query.bind(pool);
+
+async function retryTransient(args, retries) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rawPoolQuery(...args);
+    } catch (err) {
+      if (!isTransient(err) || attempt >= retries) throw err;
+      await new Promise((r) => setTimeout(r, 100 * 2 ** attempt));
+    }
+  }
+}
+
+pool.query = function retryingPoolQuery(...args) {
+  if (typeof args[args.length - 1] === 'function') {
+    return rawPoolQuery(...args);
+  }
+  return retryTransient(args, 2);
+};
+
 // node-postgres REQUIRES a pool 'error' listener: an idle client whose backend
 // socket is dropped out-of-band (routine on Neon's pooled endpoint, which reaps
 // idle connections) emits 'error' on the pool. With no listener the EventEmitter
@@ -66,14 +107,10 @@ export function isTransient(err) {
 // heartbeat UPDATE is idempotent). Multi-statement transactions must retry at the
 // transaction boundary instead (see createSessionWithCap), not here.
 export async function query(text, params, { retries = 2 } = {}) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await pool.query(text, params);
-    } catch (err) {
-      if (!isTransient(err) || attempt >= retries) throw err;
-      await new Promise((r) => setTimeout(r, 100 * 2 ** attempt));
-    }
-  }
+  // Against the RAW pool: pool.query above already retries, and stacking the
+  // two loops would compound attempts (3×3) — and would turn retries:0 into
+  // a lie. One loop, one knob.
+  return retryTransient([text, params], retries);
 }
 
 const migrations = [
