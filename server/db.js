@@ -739,6 +739,25 @@ const migrations = [
       CREATE INDEX idx_push_log_user ON push_log(user_id, category, sent_at DESC);
     `);
   },
+  async function v32_notifications(client) {
+    // In-app notification feed (the bell/panel) — a durable log of the SAME
+    // cards the push triggers compose (server/notify.js), so a card is never
+    // lost to a quiet phone, a missing token, or a muted category: the panel
+    // is the always-on channel, independent of sendCategory's guardrails.
+    // payload carries the composed card ({title, body, image, link}) so the
+    // panel never has to re-derive it. seen_at NULL = unseen.
+    await client.query(`
+      CREATE TABLE notifications (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type       TEXT   NOT NULL CHECK (type IN ('mixes', 'social', 'note')),
+        payload    JSONB  NOT NULL,
+        created_at BIGINT NOT NULL,
+        seen_at    BIGINT
+      );
+      CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
