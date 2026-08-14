@@ -37,7 +37,14 @@ const DURATION_MODEL = {
   // Intros, dialogue and credits routinely add 30-90s, so a long video is
   // expected rather than suspicious — but a video SHORTER than the track is a
   // real signal that it is a clip.
-  [SOURCE.MUSIC_VIDEO]: { weight: 0.1, full: 20, zero: 120, asymmetric: true },
+  // `uninformative` applies only to a video LONGER than the track. Past `zero`
+  // and up to this bound, extra footage tells us nothing about whether the audio
+  // is the same recording — so duration is EXCLUDED rather than scored 0, which
+  // would be treating "cannot tell" as "wrong". Past the bound it is evidence
+  // again: a video that long is not one song. MEASURED on 26 Telugu rows —
+  // legitimate film cuts ran to +272s (a 474s video of a 202s song), while a
+  // jukebox upload sat at +1673s.
+  [SOURCE.MUSIC_VIDEO]: { weight: 0.1, full: 20, zero: 120, asymmetric: true, uninformative: 300 },
   [SOURCE.UNKNOWN]: { weight: 0.2, full: 5, zero: 30, asymmetric: false },
 };
 
@@ -173,6 +180,24 @@ function durationScore(ytSec, candSec, source) {
   const full = model.asymmetric && delta > 0 ? model.full * 2 : model.full;
   const zero = model.asymmetric && delta > 0 ? model.zero : model.zero / 2;
   if (abs <= full) return { score: 1, weight: model.weight };
+  // A LONG video past the tolerance is uninformative, not contradictory. Return
+  // null — the same thing an absent duration returns — so it drops out of the
+  // weighted average instead of dragging it.
+  //
+  // MEASURED: on 26 Telugu rows, the only two correct matches held out of auto
+  // were +130s and +272s, both with a perfect title AND film agreement, both
+  // landing at exactly 0.833 against a 0.85 threshold. Duration scored 0 and
+  // pulled a fully corroborated match under the line.
+  //
+  // This deliberately does NOT widen `zero`. Doing that would also loosen the
+  // corroboration test in matchVideo, which asks `duration >= 0.9` — a wider
+  // ramp would let a +60s row self-corroborate with no artist and no film.
+  // Returning null cannot do that: null fails `>= 0.9`, so auto still requires
+  // real corroboration from elsewhere. The score stops being punished; the
+  // guard is untouched.
+  if (model.uninformative && delta > 0 && abs >= zero && abs <= model.uninformative) {
+    return { score: null, weight: model.weight };
+  }
   if (abs >= zero) return { score: 0, weight: model.weight };
   return { score: 1 - (abs - full) / (zero - full), weight: model.weight };
 }
