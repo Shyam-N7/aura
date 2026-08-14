@@ -578,6 +578,53 @@ describe('defects found by the first LIVE import', () => {
   });
 });
 
+describe('defects found by two RD mixes', () => {
+  // Real mixes rather than curated playlists — 60 rows across a Kannada-seeded
+  // and a Tamil-seeded mix, both landing at 63-67% auto. Curated film-song
+  // playlists reach 88%; a mix wanders, so this is the honest number.
+
+  it('strips an unbracketed "Music Video"', () => {
+    // Only the bracketed form was covered. "Aura 10/10 - Music Video | …" split
+    // on the hyphen and left the title as the bare word "Music"; the trailing
+    // strip ate "Video" and stopped there.
+    expect(cleanTitle('Aura 10/10 - Music Video | Meesaya Murukku 2')).toBe('Aura 10/10');
+    expect(cleanTitle('Mutta Kalakki Music Video | Youth')).toBe('Mutta Kalakki');
+  });
+
+  it('does not touch "music" as a real word', () => {
+    expect(cleanTitle('Music Box')).toBe('Music Box');
+    expect(cleanTitle('The Sound of Music')).toBe('The Sound of Music');
+  });
+
+  it('strips slash-joined quality tags', () => {
+    // Each token was handled alone, never the pair: "… Title Track 8K/4K Video"
+    // kept a trailing "8K/" once its partner went.
+    expect(cleanTitle('Mudhal Nee Mudivum Nee Title Track 8K/4K Video | Darbuka Siva'))
+      .toBe('Mudhal Nee Mudivum Nee');
+    expect(cleanTitle('Song Name 4K/1080p')).toBe('Song Name');
+  });
+
+  it('leaves a real number pair alone', () => {
+    // "10/10" is part of a title, not a quality tag.
+    expect(cleanTitle('Aura 10/10')).toBe('Aura 10/10');
+  });
+
+  it('carries the WINNING reading on the verdict, which the harness prints', () => {
+    // The harness printed readings[0], so whenever the swapped reading won it
+    // displayed the LOSING interpretation and a correct match looked broken.
+    // Three rows in one 99-row table were misread that way.
+    const readings = parseVideoVariants({
+      title: 'Kurumugil Video Song - Sita Ramam (Tamil) | Vishal', channelTitle: '', durationSec: 240,
+    });
+    expect(readings[0].title).toBe('Sita Ramam (Tamil)');   // the losing one
+    const v = matchVideo(readings, [
+      { id: 'k', title: 'Kurumugil', artist: 'Vishal Chandrashekhar', album: 'Sita Ramam', durationSec: 240 },
+    ]);
+    expect(v.best.parsed.title).toBe('Kurumugil');           // what should be shown
+    expect(v.tier).toBe(TIER.AUTO);
+  });
+});
+
 describe('defects found by the 53-row Telugu/Kannada measurement', () => {
   // Two real playlists through the dry-run harness: 62.3% auto, 26.4% review,
   // 11.3% unmatched — and, contrary to what we had been claiming, ZERO

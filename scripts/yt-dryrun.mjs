@@ -150,8 +150,17 @@ for (const v of usable) {
   const verdict = matchVideo(readings, candidates);
   rows.push({
     ytTitle: v.title,
-    readTitle: readings[0]?.title ?? null,
-    readArtist: readings[0]?.artists?.[0] ?? null,
+    // The WINNING reading, not readings[0].
+    //
+    // "A - B" is song-artist in Indian titles and artist-song in Western ones,
+    // so both are scored and the catalogue decides. Printing readings[0] showed
+    // the LOSING interpretation whenever the swap won, which made correct
+    // matches look broken: "Kurumugil Video Song - Sita Ramam (Tamil)" read as
+    // "Sita Ramam (Tamil)" in this column while actually matching Kurumugil at
+    // 1.000. Three such rows in one 99-row table were misread as parse failures
+    // — a measurement tool that misreports its own input is worse than none.
+    readTitle: verdict.best?.parsed?.title ?? readings[0]?.title ?? null,
+    readArtist: verdict.best?.parsed?.artists?.[0] ?? readings[0]?.artists?.[0] ?? null,
     readings: readings.length,
     tier: verdict.tier,
     score: verdict.best?.score ?? null,
