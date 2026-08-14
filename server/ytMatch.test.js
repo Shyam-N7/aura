@@ -577,6 +577,68 @@ describe('defects found by the first LIVE import', () => {
   });
 });
 
+describe('"Title Track", the Kannada/Telugu label shape', () => {
+  // Four real titles from the user's Kannada playlists. The pipe-cut and the
+  // "… Song" strips already handled three of them; the fourth exposed that
+  // "Title Track" — a phrase GENERIC_TITLES has always known was meaningless —
+  // survived cleaning, became an ARTIST via the "A - B" split, and spawned a
+  // second reading titled "Title Track" that spent one of only two catalogue
+  // searches per video (MAX_SEARCHES_PER_ITEM) on itself.
+
+  const readings = (title) => parseVideoVariants({ title, channelTitle: '', durationSec: 240 });
+
+  it('strips "Title Track" instead of promoting it to an artist', () => {
+    expect(cleanTitle('Sapta Sagaradaache Ello - Title Track | Rakshit Shetty | Rukmini'))
+      .toBe('Sapta Sagaradaache Ello');
+    const [r] = readings('Sapta Sagaradaache Ello - Title Track | Rakshit Shetty');
+    expect(r.title).toBe('Sapta Sagaradaache Ello');
+    expect(r.artists).not.toContain('Title Track');
+  });
+
+  it('emits ONE reading, not a rival built on a phrase nobody released', () => {
+    // The saving. Two readings meant two queries, and the second was
+    // "Title Track <song>" — spending half this video's search budget on a
+    // reading isGenericTitle rejects everywhere else in the codebase.
+    expect(readings('Sapta Sagaradaache Ello - Title Track | Rakshit Shetty')).toHaveLength(1);
+    expect(readings('Mugulu Nage - Title Track | Ganesh')).toHaveLength(1);
+  });
+
+  it('handles the bracketed form too', () => {
+    expect(cleanTitle('Kesariya (Title Track)')).toBe('Kesariya');
+    expect(cleanTitle('Kesariya [Title Song]')).toBe('Kesariya');
+  });
+
+  it('leaves no separator debris when the phrase leads', () => {
+    // Caught by the existing suite the moment the strip was added:
+    // "Title Track - Mugulu Nage" cleaned to "- Mugulu Nage".
+    expect(cleanTitle('Title Track - Mugulu Nage')).toBe('Mugulu Nage');
+    expect(readings('Title Track - Mugulu Nage')[0].title).toBe('Mugulu Nage');
+  });
+
+  it('still keeps BOTH readings when the ambiguity is real', () => {
+    // The guard must not collapse the case the dual-reading design exists for.
+    // "Tulasi - Sumedh K" is genuinely either order; neither side is generic.
+    const v = readings('Tulasi - Sumedh K');
+    expect(v).toHaveLength(2);
+    expect(v.map(p => p.title)).toEqual(expect.arrayContaining(['Tulasi', 'Sumedh K']));
+  });
+
+  it('leaves the three titles that already worked exactly as they were', () => {
+    // No-regression, stated as the user's own examples.
+    expect(cleanTitle('Ee Tanuvu Ninnade')).toBe('Ee Tanuvu Ninnade');
+    expect(cleanTitle('Kaagadada Doniyalli - Video Song | Kirik Party | Rakshit Shetty'))
+      .toBe('Kaagadada Doniyalli');
+    expect(cleanTitle('Gudugudiya Sedi Nodo Raghu Dixit | Courtyard Jam Sessions'))
+      .toBe('Gudugudiya Sedi Nodo Raghu Dixit');
+  });
+
+  it('does not eat "title" or "track" used as real words', () => {
+    expect(cleanTitle('Track 9')).toBe('Track 9');
+    expect(cleanTitle('The Title')).toBe('The Title');
+    expect(cleanTitle('Soundtrack')).toBe('Soundtrack');
+  });
+});
+
 describe('artist credit', () => {
   // MEASURED: three KATSEYE rows capped at 0.811 because an EXACT, complete
   // artist match scored 0.6 — full credit needed two shared tokens, which a
