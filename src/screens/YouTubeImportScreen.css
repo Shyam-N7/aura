@@ -1,0 +1,223 @@
+/* YouTube import + review.
+   Reuses the token vocabulary and the .aura-pl-cover / .aura-pl-eyebrow /
+   .aura-pl-back classes from PlaylistsScreen.css rather than restating them,
+   so the screen reads as part of the library rather than a bolted-on tool. */
+
+.aura-yt-paste {
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--color-ink), transparent 97%);
+  transition: border-color 140ms ease;
+}
+.aura-yt-paste:focus-within {
+  border-color: color-mix(in srgb, var(--color-accent), transparent 40%);
+}
+
+.aura-yt-input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  padding: 12px 10px;
+}
+.aura-yt-input::placeholder {
+  color: var(--color-ink-soft);
+  opacity: 0.75;
+}
+
+.aura-yt-hint,
+.aura-yt-status {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+  margin: 0;
+  padding: 0 4px;
+}
+.aura-yt-status { font-style: italic; }
+
+/* Ghost rows: the shape of the result before there is a result. */
+.aura-yt-ghosts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+}
+.aura-yt-ghost {
+  height: 44px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-ink), transparent 94%);
+}
+
+/* ── Notes: the one block that carries copy ── */
+.aura-yt-note {
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--color-ink), transparent 96%);
+}
+.aura-yt-note--warn {
+  background: color-mix(in srgb, var(--color-accent), transparent 90%);
+}
+.aura-yt-note__title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.aura-yt-note__body {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--color-ink-soft);
+  padding-top: 4px;
+}
+
+/* ── Actions ── */
+.aura-yt-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+.aura-yt-btn {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  border: 0;
+  border-radius: 9999px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: opacity 140ms ease, background 140ms ease;
+}
+.aura-yt-btn:disabled { opacity: 0.5; cursor: default; }
+.aura-yt-btn--quiet {
+  background: transparent;
+  color: var(--color-ink-soft);
+}
+.aura-yt-btn--quiet:hover:not(:disabled) {
+  background: rgb(0 0 0 / 0.05);
+  color: var(--color-ink);
+}
+.theme-midnight .aura-yt-btn--quiet:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.06);
+}
+.aura-yt-btn--go {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.aura-yt-btn--go:hover:not(:disabled) { opacity: 0.88; }
+
+/* ── Progress ── */
+.aura-yt-progress { padding: 6px 4px 0; }
+.aura-yt-progress__bar {
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink), transparent 92%);
+  overflow: hidden;
+}
+.aura-yt-progress__fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  /* Eased because the counter moves in jumps — one poll can resolve several
+     songs, and an unanimated bar reads as a stutter rather than progress. */
+  transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.aura-yt-progress__label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink-soft);
+  padding-top: 10px;
+}
+
+/* ── Summary ── */
+.aura-yt-summary {
+  border-radius: 12px;
+  padding: 18px;
+  background: color-mix(in srgb, var(--color-ink), transparent 96%);
+}
+.aura-yt-summary__headline {
+  font-family: var(--font-serif, var(--font-sans));
+  font-size: 22px;
+  color: var(--color-ink);
+}
+.aura-yt-summary__line {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+  padding-top: 6px;
+}
+.aura-yt-summary__line--soft { opacity: 0.72; }
+
+/* ── Review ── */
+.aura-yt-source {
+  border-left: 2px solid color-mix(in srgb, var(--color-accent), transparent 55%);
+  padding-left: 14px;
+}
+.aura-yt-source__title {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink);
+  line-height: 1.35;
+}
+.aura-yt-source__meta {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-ink-soft);
+  padding-top: 3px;
+}
+/* The parse reading. Quieter than the title but not hidden — it is the
+   explanation, and an explanation nobody can find is not one. */
+.aura-yt-source__read {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--color-ink-soft);
+  opacity: 0.85;
+  padding-top: 8px;
+  line-height: 1.45;
+}
+
+.aura-yt-cand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: transparent;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.aura-yt-cand:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent), transparent 45%);
+  background: color-mix(in srgb, var(--color-accent), transparent 94%);
+}
+.aura-yt-cand:disabled { opacity: 0.55; cursor: default; }
+.aura-yt-cand__title,
+.aura-yt-cand__meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aura-yt-cand__title {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+.aura-yt-cand__meta {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-ink-soft);
+  padding-top: 2px;
+}
