@@ -578,6 +578,78 @@ describe('defects found by the first LIVE import', () => {
   });
 });
 
+describe('a long video is uninformative, not contradictory', () => {
+  // From the instrumented run: 25 strong-title rows, deltas -56 to +272, and
+  // only TWO held out of auto — +130 and +272. Both had a perfect title AND
+  // film agreement, and both landed at exactly 0.833 against a 0.85 threshold,
+  // because duration scored 0 and dragged a fully corroborated match under.
+  //
+  // The hypothesis this replaced was that the +120 cliff was holding back rows
+  // generally. The measurement disproved it: every row from -56 to +120 already
+  // reached auto, because movie recovery supplies the corroboration. Only the
+  // two genuine film cuts past the cliff were affected.
+
+  const withDuration = (title, videoSec, cand) =>
+    matchVideo(
+      parseVideoVariants({ title, channelTitle: '', durationSec: videoSec, description: '' }),
+      [cand],
+    );
+
+  const SRIVALLI = { id: 'a', title: 'Srivalli', artist: 'Sid Sriram', album: 'Pushpa: The Rise', durationSec: 221 };
+
+  it('excludes duration for a long video instead of scoring it zero', () => {
+    const v = withDuration('Srivalli (Video) | Pushpa | Allu Arjun', 351, SRIVALLI);
+    expect(v.best.breakdown.duration).toBeNull();
+    expect(v.tier).toBe(TIER.AUTO);
+  });
+
+  it('covers the widest legitimate film cut measured (+272s)', () => {
+    const v = withDuration('Choosi Chudangane Full Video Song || Chalo Movie', 474,
+      { id: 'b', title: 'Choosi Chudangane', artist: 'Mahati Swara Sagar', album: 'Chalo', durationSec: 202 });
+    expect(v.tier).toBe(TIER.AUTO);
+  });
+
+  it('still counts duration AGAINST a video too long to be one song', () => {
+    // A jukebox upload sat at +1673s in the same run. Past the bound, length is
+    // evidence again — otherwise a 33-minute compilation would look neutral.
+    const v = withDuration('Evaraina Eppudaina Audio Songs | Jukebox', 1986,
+      { id: 'c', title: 'Evaraina Eppudaina', artist: 'Mani Sharma', album: 'X', durationSec: 313 });
+    expect(v.best.breakdown.duration).toBe(0);
+    expect(v.tier).not.toBe(TIER.AUTO);
+  });
+
+  it('does NOT let a long video self-corroborate', () => {
+    // The reason this returns null rather than widening `zero`. Corroboration
+    // asks `duration >= 0.9`; a wider ramp would let a +60s row with no artist
+    // and no film reach auto on duration alone. null fails that test, so auto
+    // still needs real corroboration — the score stops being punished, the
+    // guard is untouched.
+    const v = withDuration('Some Song Full Video Song | Unknown Thing', 400,
+      { id: 'x', title: 'Some Song', artist: 'Whoever', album: 'Different Album', durationSec: 240 });
+    expect(v.best.breakdown.duration).toBeNull();
+    expect(v.best.breakdown.sanity).toBe(0);
+    expect(v.tier).not.toBe(TIER.AUTO);
+  });
+
+  it('leaves a SHORT video penalised — that guard is the point', () => {
+    // A video shorter than the track is a clip, and short-side tolerance is
+    // untouched: zero/2 = 60s.
+    const v = withDuration('Some Song Video | Some Film', 150,
+      { id: 'y', title: 'Some Song', artist: 'X', album: 'Some Film', durationSec: 240 });
+    expect(v.best.breakdown.duration).toBe(0);
+  });
+
+  it('leaves an Art Track exact — same masters, no allowance', () => {
+    // uninformative is MUSIC_VIDEO only. An Art Track shares the catalogue's
+    // masters, so a length difference there is a real disagreement.
+    const v = matchVideo(parseVideoVariants({
+      title: 'whatever', channelTitle: 'Sid Sriram - Topic', durationSec: 400,
+      description: 'Provided to YouTube by X\n\nSrivalli · Sid Sriram\n\nPushpa\n\n℗ 2021',
+    }), [SRIVALLI]);
+    expect(v.best.breakdown.duration).toBe(0);
+  });
+});
+
 describe('defects found by two RD mixes', () => {
   // Real mixes rather than curated playlists — 60 rows across a Kannada-seeded
   // and a Tamil-seeded mix, both landing at 63-67% auto. Curated film-song
