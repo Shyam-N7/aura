@@ -7,7 +7,12 @@
 // numbers was a scratch file that no longer exists. Nobody could reproduce the
 // measurement. That is the gap this closes.
 //
-//   node scripts/yt-dryrun.mjs "<playlist or mix url>" [--limit N] [--json]
+//   node --env-file=.env.local scripts/yt-dryrun.mjs "<url>" [--limit N] [--json]
+//
+// Use the SAME .env.local `npm run server` already uses (package.json:11) — it
+// holds the CATALOG_* set. Add YOUTUBE_API_KEY to it (the value you put in
+// Vercel) and nothing else is needed. `vercel env pull .env.local` will fetch
+// the whole set if you'd rather not copy by hand.
 //
 // Reads only. It creates no job, writes no database row, and builds no
 // playlist — it fetches the tracklist, runs the SERVER'S OWN matching path over
@@ -51,11 +56,14 @@ if (limit != null && !Number.isFinite(limit)) {
 }
 
 if (!url) {
-  console.error('usage: node scripts/yt-dryrun.mjs "<playlist url>" [--limit N] [--json]');
+  console.error('usage: node --env-file=.env.local scripts/yt-dryrun.mjs "<url>" [--limit N] [--json]');
   process.exit(2);
 }
 if (!process.env.YOUTUBE_API_KEY) {
   console.error('YOUTUBE_API_KEY is not set — this script talks to the real YouTube API.');
+  console.error('Load the env the server already uses:');
+  console.error('  node --env-file=.env.local scripts/yt-dryrun.mjs "<url>"');
+  console.error('and make sure YOUTUBE_API_KEY is in that file alongside the CATALOG_* set.');
   process.exit(2);
 }
 
