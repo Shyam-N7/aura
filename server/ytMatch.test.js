@@ -370,3 +370,67 @@ describe('ambiguous "A - B", measured both ways', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+// Every case below is verbatim from the second real dry run (20% auto), where
+// each was a CORRECT match blocked by a different defect.
+describe('defects found by the second measured run', () => {
+  it('does not let a duplicate listing count as a rival candidate', () => {
+    // Six rows scored 0.917 with exact duration and went to review because
+    // JioSaavn returned the same recording twice and the runner-up tied.
+    const p = parseVideo({ title: 'Urugi Urugi', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      song({ id: 'a', title: 'Urugi Urugi', artist: 'Vignesh Ramakrishna', durationSec: 240 }),
+      song({ id: 'b', title: 'Urugi Urugi', artist: 'Vignesh Ramakrishna', album: 'Other', durationSec: 240 }),
+    ]);
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  it('treats a film name parsed as an artist as unknown, not as disagreement', () => {
+    // "Anbil Avan - Vinnaithaandi Varuvaayaa": the tail is the MOVIE. Scoring
+    // it 0 against the real singer blocked a perfect title + duration match.
+    //
+    // Note this goes through parseVideoVariants + matchVideo, the real path.
+    // The PRIMARY reading takes the film as the title; it is the swapped
+    // reading that needs the demotion, and only matchVideo sees both.
+    const variants = parseVideoVariants({
+      title: 'Anbil Avan - Vinnaithaandi Varuvaayaa',
+      channelTitle: 'Label',
+      durationSec: 300,
+    });
+    const r = matchVideo(variants, [
+      song({
+        title: 'Anbil Avan',
+        artist: 'A.R. Rahman',
+        album: 'Vinnaithaandi Varuvaayaa',
+        durationSec: 300,
+      }),
+    ]);
+    expect(r.best.parsed.title).toBe('Anbil Avan'); // the song, not the film
+    expect(r.best.breakdown.artist).toBeNull(); // demoted from 0
+    expect(r.best.breakdown.sanity).toBe(1); // counted as movie agreement
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  it('still counts a genuinely wrong artist against the match', () => {
+    // The demotion must not become a blanket amnesty: an artist that matches
+    // neither the singer nor the album is real disagreement.
+    const p = parseVideo({ title: 'Anbil Avan - Some Random Band', channelTitle: 'x', durationSec: 300 });
+    const s2 = scoreCandidate(
+      p,
+      song({ title: 'Anbil Avan', artist: 'A.R. Rahman', album: 'Vinnaithaandi Varuvaayaa', durationSec: 300 }),
+    );
+    expect(s2.breakdown.artist).toBe(0);
+  });
+
+  it.each([
+    ['Naan Pizhai Video', 'Naan Pizhai'],
+    ['Kaagadada Doniyalli 8K', 'Kaagadada Doniyalli'],
+    ['Venmathi Venmathiye Official', 'Venmathi Venmathiye'],
+    ['Gira Gira Song', 'Gira Gira'],
+    ['Poovukkul Official Quality Video', 'Poovukkul'],
+    // …but a real title made of those words must survive.
+    ['Video Games', 'Video Games'],
+  ])('strips trailing decoration: %s', (raw, want) => {
+    expect(cleanTitle(raw)).toBe(want);
+  });
+});

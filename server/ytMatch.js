@@ -114,7 +114,7 @@ export function scoreCandidate(parsed, candidate) {
   const candTitleBare = candMovie.rest;
 
   const title = titleSimilarity(parsed.title, candTitleBare);
-  const artist = artistOverlap(parsed.artists, candidate.artist);
+  let artist = artistOverlap(parsed.artists, candidate.artist);
   const dur = durationScore(parsed.durationSec, candidate.durationSec, parsed.source);
 
   // Sanity: movie agreement, then year. Small by design — it breaks ties, it
@@ -124,6 +124,30 @@ export function scoreCandidate(parsed, candidate) {
   const movieB = (candMovie.movie ?? candidate.album ?? '').toLowerCase();
   if (movieA && movieB && (movieB.includes(movieA) || movieA.includes(movieB))) sanity = 1;
   else if (parsed.year && candidate.year && parsed.year === candidate.year) sanity = 0.5;
+
+  // The hyphen tail is very often the MOVIE, not an artist.
+  //
+  // MEASURED: "Anbil Avan - Vinnaithaandi Varuvaayaa", "Chiru Chiru Video -
+  // Awaara", "Innunu Bekagide - Mundina Nildana". We parsed the film name as an
+  // artist, then scored it 0 against the real singer — so a perfect title and
+  // perfect duration were actively BLOCKED by evidence we had misread.
+  //
+  // If that supposed artist matches the candidate's album or (From "…") movie
+  // instead, we misidentified it. Demote it to unknown (null) rather than
+  // letting it count against, and take the movie agreement as the sanity bonus
+  // it actually is.
+  if (artist === 0 && parsed.artists.length) {
+    const claimed = tokens(parsed.artists[0]).join(' ');
+    const albumish = tokens(`${candidate.album ?? ''} ${candMovie.movie ?? ''}`).join(' ');
+    if (
+      claimed &&
+      albumish &&
+      (albumish.includes(claimed) || claimed.includes(albumish))
+    ) {
+      artist = null;
+      sanity = 1;
+    }
+  }
 
   // Renormalise so tiers stay comparable when duration is unavailable.
   const parts = [
@@ -237,9 +261,24 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   //                     coin flip — exactly the same-title-different-artist
   //                     case this catalog is full of. Send it to review.
   const artistKnown = best.breakdown.artist !== null;
+  //   Two entries of the SAME recording are not competing candidates. JioSaavn
+  //   lists one song across several albums, so a near-tied runner-up is usually
+  //   a duplicate listing, not a rival. MEASURED: six rows scored 0.917 with an
+  //   exact duration and were sent to review purely because a duplicate tied
+  //   with them. Only a runner-up with a DIFFERENT artist is genuine ambiguity.
   const second = unique[1];
+  // Full credit only (=== 1, i.e. a whole name in common), never the 0.6
+  // single-token score. "Singer One" and "Singer Two" share the token "singer"
+  // and are obviously not the same artist — a shared surname would do the same
+  // across half of Indian film music, which is exactly the collision this
+  // guard exists to avoid.
+  const sameRecording =
+    second &&
+    artistOverlap([second.candidate?.artist ?? ''], best.candidate?.artist ?? '') === 1;
   const unambiguous =
-    !second || best.score - second.score > THRESHOLDS.ambiguityMargin;
+    !second ||
+    sameRecording ||
+    best.score - second.score > THRESHOLDS.ambiguityMargin;
   const corroborated = artistKnown
     ? best.breakdown.artist > 0
     : best.breakdown.duration !== null &&

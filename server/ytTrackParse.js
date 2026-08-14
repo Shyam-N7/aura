@@ -137,6 +137,20 @@ export function cleanTitle(raw) {
   else if (/\S {2,}\S/.test(s)) s = s.split(/ {2,}/)[0];
   // Any bracket left empty by the strips above is debris, not content.
   s = s.replace(/\(\s*\)/g, ' ').replace(/\[\s*\]/g, ' ');
+  // Trailing decoration, stripped repeatedly because it stacks:
+  // "Poovukkul Official Quality Video" -> "Poovukkul".
+  // MEASURED: seven rows in one mix kept a bare trailing "Video"/"Official"/
+  // "8K"/"Song", each dragging title similarity from 1.0 down to ~0.92 or
+  // 0.667 and pushing a correct match out of auto. Only stripped at the END —
+  // mid-title these words can be part of a real name.
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(
+      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|quality|hd|hq|4k|8k|full)\b\s*$/i,
+      '',
+    );
+  } while (s !== prev);
   return s.replace(/\s{2,}/g, ' ').replace(/[\s\-–—_,.]+$/g, '').trim();
 }
 
