@@ -105,3 +105,22 @@ export const LYRICS_WEBHOOK_SECRET   = optional('LYRICS_WEBHOOK_SECRET'); // sha
 export const REPLICATE_WEBHOOK_SIGNING_SECRET = optional('REPLICATE_WEBHOOK_SIGNING_SECRET');
 export const CRON_SECRET             = optional('CRON_SECRET');           // Vercel Cron bearer token authorizing /api/lyrics-jobs/process
 export const LYRICS_GEN_DAILY_CAP    = optionalInt('LYRICS_GEN_DAILY_CAP', 500); // max generation jobs dispatched per day (spend guard)
+
+// ── YouTube playlist import (opt-in) ──
+// A YouTube Data API v3 key. This single optional is the feature's on/off switch:
+// importJobs.js gates EVERYTHING on youtubeImportEnabled(), the same way the
+// lyrics worker above gates on REPLICATE_API_TOKEN. Left blank, no route does
+// work, the cron step is a no-op, and the clients hide the entry point — the app
+// behaves exactly as it did before the feature existed.
+//
+// The key is only ever read here; youtubeFetch.js takes it through opts so the
+// fetch layer stays a pure function of its arguments and is testable without env.
+export const YOUTUBE_API_KEY = optional('YOUTUBE_API_KEY');
+// Daily ceiling on IMPORTS (not API units). YouTube's default quota is 10,000
+// units/day and a 30-track import costs ~3, so quota is nowhere near binding —
+// this cap exists because each import also drives up to 30 catalog searches,
+// which IS the scarce resource. See the budget note in importJobs.js.
+export const YT_IMPORT_DAILY_CAP = optionalInt('YT_IMPORT_DAILY_CAP', 200);
+// Per-user daily import cap. Same reasoning as LYRICS_GEN_USER_DAILY: without it
+// one account can drain the shared catalog-search budget for everyone.
+export const YT_IMPORT_USER_DAILY = optionalInt('YT_IMPORT_USER_DAILY', 10);

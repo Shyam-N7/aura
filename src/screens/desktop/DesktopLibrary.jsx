@@ -189,7 +189,9 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onOpenLiked, onOpen
               </>
             ) : emptyPeek}>
             {(!playlists || playlists.length === 0) && (
-              <div className="aura-dlib__empty-row">No playlists yet. Create one from any song’s menu.</div>
+              <div className="aura-dlib__empty-row">
+                No playlists yet. Create one from any song’s menu, or start one below.
+              </div>
             )}
             {playlists?.length > 0 && playlists.slice(0, 10).map(p => (
               <button key={p.id} onClick={() => onOpenPlaylistDetail?.(p.id)} className="aura-dlib__row">
@@ -206,9 +208,19 @@ export function DesktopLibrary({ onPlaySequence, onPickLive, onOpenLiked, onOpen
                 </div>
               </button>
             ))}
-            {onOpenPlaylists && playlists?.length > 0 && (
+            {/* Ungated on purpose. This footer used to require
+                `playlists?.length > 0`, which made the playlists screen — the
+                only route to "New playlist" AND to YouTube import — unreachable
+                for an account that owns nothing. Home has the same shape
+                (DesktopHome only renders its "Your playlists" section when the
+                list is non-empty), so an empty account had NO way in at all:
+                the one state where starting a playlist matters most was the one
+                state with no door. The label carries the difference. */}
+            {onOpenPlaylists && (
               <div className="aura-dlib__shelf-foot">
-                <button onClick={onOpenPlaylists} className="aura-dlib__see-all">SEE ALL →</button>
+                <button onClick={onOpenPlaylists} className="aura-dlib__see-all">
+                  {playlists?.length > 0 ? 'SEE ALL →' : 'NEW PLAYLIST →'}
+                </button>
               </div>
             )}
           </Shelf>

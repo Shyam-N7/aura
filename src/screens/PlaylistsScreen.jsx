@@ -10,6 +10,9 @@ import { killHint } from '../lib/tapHint';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import { BackToTop } from '../components/BackToTop';
 import { relTime } from '../lib/time';
+import { getFeatures } from '../api/ytImport';
+import { YouTubeImportScreen } from './YouTubeImportScreen';
+import { COPY as YT_COPY } from '../lib/ytImportCopy';
 import './PlaylistsScreen.css';
 
 // Why home sometimes shows fewer mixes than this screen: home windows the
@@ -27,6 +30,12 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
   const [creating, setCreating] = useState(false);
   const [newName, setNewName]   = useState('');
   const [menu, setMenu]         = useState(null);
+  // YouTube import is env-gated on the server. The entry point renders only
+  // when this deployment actually has it — a button that leads to a 503 is
+  // worse than no button, and with the key unset this screen is byte-identical
+  // to what it was before the feature existed.
+  const [ytImport, setYtImport] = useState(false);
+  const [importing, setImporting] = useState(false);
   const inputRef = useRef(null);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory('playlists', { ready: status === 'ok' });
@@ -64,6 +73,14 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
   useEffect(() => {
     if (creating) inputRef.current?.focus();
   }, [creating]);
+
+  // Capability check. getFeatures never throws — a failed call means "assume
+  // off", which fails in the safe direction.
+  useEffect(() => {
+    const ctl = new AbortController();
+    getFeatures({ signal: ctl.signal }).then(f => setYtImport(!!f.youtubeImport));
+    return () => ctl.abort();
+  }, []);
 
   // Accept a share link (?join=TOKEN) — opened from a collaborator's invite.
   // Strip the param first so a refresh can't re-run it, then join + open.
@@ -298,6 +315,19 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
             </div>
           )}
 
+          {/* Import from YouTube — sits beside "New playlist" because it is the
+              same act (starting a playlist), just from a link you already have. */}
+          {ytImport && !creating && (
+            <button onClick={(e) => { e.stopPropagation(); setImporting(true); }}
+              className="aura-lib-pl-card flex items-center gap-3.5 w-full">
+              <span className="aura-lib-pl-cover aura-lib-pl-cover--fallback">↓</span>
+              <span className="flex-1 min-w-0 text-left">
+                <span className="aura-pl-row-name truncate block">{YT_COPY.entry.label}</span>
+                <span className="aura-pl-row-count truncate block">{YT_COPY.entry.hint}</span>
+              </span>
+            </button>
+          )}
+
           {status === 'loading' && (
             <div className="py-3">
               <span className="aura-pl-status">Loading playlists</span>
@@ -364,6 +394,20 @@ export function PlaylistsScreen({ onClose, onOpenPlaylist, onOpenAuto, onPlaySeq
         </div>
       )}
       <BackToTop scrollRef={scrollRef}/>
+
+      {/* Rendered here rather than routed, which is what keeps this feature to
+          ONE edited production file. On close, re-read the list so a freshly
+          imported playlist is already present rather than appearing on the
+          next visit. */}
+      {importing && (
+        <YouTubeImportScreen
+          onClose={() => {
+            setImporting(false);
+            listPlaylists().then(data => setHit({ data, error: null })).catch(() => {});
+          }}
+          onOpenPlaylist={(id) => { setImporting(false); onOpenPlaylist?.(id); }}
+        />
+      )}
     </div>
   );
 }

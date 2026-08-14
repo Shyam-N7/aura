@@ -758,6 +758,110 @@ const migrations = [
       CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
     `);
   },
+  async function v33_youtube_import(client) {
+    // YouTube playlist/mix import (server/importJobs.js). Four tables, and the
+    // split between them is load-bearing rather than tidiness:
+    //
+    //   yt_import_jobs   one row per paste. Survives the request that made it,
+    //                    because a serverless function can't hold a 30-track
+    //                    match to completion reliably.
+    //   yt_import_items  one row per video. This is the RESUME CURSOR — a drain
+    //                    tick that runs out of time leaves rows in 'pending'
+    //                    and the next tick picks up exactly there. It is also
+    //                    the review queue the user works through.
+    //   yt_match_cache   fingerprint -> catalog track. Cross-user and permanent.
+    //   yt_playlist_links  refresh bookkeeping, finite playlists only.
+    //
+    // RETENTION (why items and cache are separate tables at all): YouTube's
+    // terms cap storage of YouTube data at 30 days. yt_import_items holds video
+    // titles, channel names and descriptions, so the daily cron deletes rows for
+    // jobs older than 30 days. yt_match_cache is keyed on a fingerprint of OUR
+    // OWN derived parse — never a video id — so it is outside that rule and may
+    // persist; the reasoning is recorded at ytMatch.js fingerprint(). Putting
+    // the cache inside the items table would have made the whole matcher's
+    // memory expire monthly, which is the opposite of what it is for.
+    await client.query(`
+      CREATE TABLE yt_import_jobs (
+        id             TEXT   PRIMARY KEY,
+        user_id        TEXT   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        yt_playlist_id TEXT   NOT NULL,
+        kind           TEXT   NOT NULL,
+        strategy       TEXT   NOT NULL,
+        status         TEXT   NOT NULL,
+        title          TEXT,
+        windowed       BOOLEAN NOT NULL DEFAULT FALSE,
+        playlist_id    TEXT   REFERENCES playlists(id) ON DELETE SET NULL,
+        total_count    INTEGER NOT NULL DEFAULT 0,
+        auto_count     INTEGER NOT NULL DEFAULT 0,
+        review_count   INTEGER NOT NULL DEFAULT 0,
+        unmatched_count INTEGER NOT NULL DEFAULT 0,
+        units_spent    INTEGER NOT NULL DEFAULT 0,
+        error          TEXT,
+        -- A drain LEASE, deliberately separate from updated_at.
+        --
+        -- Two drains must not work the same job (they would pay for the same
+        -- catalog searches twice), but a drain that stops because it ran out of
+        -- TIME must be resumable immediately — the next client poll is the next
+        -- worker. Overloading updated_at for both cannot express that: a
+        -- budget-exhausted job looks freshly-updated, so a staleness check would
+        -- refuse to resume it for the whole stuck-timeout. Measured on a live
+        -- database before this column existed: tick 2 was turned away and the
+        -- import sat idle.
+        --
+        -- So: a drain takes a lease, releases it on the way out, and a lease
+        -- left behind by a killed invocation expires on its own.
+        leased_until   BIGINT NOT NULL DEFAULT 0,
+        created_at     BIGINT NOT NULL,
+        updated_at     BIGINT NOT NULL
+      );
+      -- The reaper's query is exactly (status, leased_until).
+      CREATE INDEX idx_yt_jobs_status ON yt_import_jobs(status, leased_until);
+      CREATE INDEX idx_yt_jobs_user   ON yt_import_jobs(user_id, created_at DESC);
+
+      CREATE TABLE yt_import_items (
+        id          BIGSERIAL PRIMARY KEY,
+        job_id      TEXT    NOT NULL REFERENCES yt_import_jobs(id) ON DELETE CASCADE,
+        position    INTEGER NOT NULL,
+        -- YouTube-derived, subject to the 30-day prune above.
+        video_id    TEXT,
+        yt_title    TEXT,
+        yt_channel  TEXT,
+        yt_duration INTEGER,
+        -- Ours: the parse, the verdict, and the alternatives offered at review.
+        fingerprint TEXT,
+        tier        TEXT,
+        track_id    TEXT,
+        score       REAL,
+        candidates  JSONB,
+        state       TEXT    NOT NULL DEFAULT 'pending',
+        UNIQUE (job_id, position)
+      );
+      -- The drain's inner loop is "next pending item for this job, in order".
+      CREATE INDEX idx_yt_items_pending ON yt_import_items(job_id, state, position);
+
+      CREATE TABLE yt_match_cache (
+        fingerprint    TEXT   PRIMARY KEY,
+        track_id       TEXT   NOT NULL,
+        score          REAL,
+        -- Set when a HUMAN picked this pairing on the review screen. A confirmed
+        -- entry outranks a scored one on lookup, which is how real corrections
+        -- beat the heuristic instead of being overwritten by it on the next run.
+        user_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+        hits           INTEGER NOT NULL DEFAULT 0,
+        created_at     BIGINT NOT NULL,
+        updated_at     BIGINT NOT NULL
+      );
+
+      CREATE TABLE yt_playlist_links (
+        playlist_id     TEXT   PRIMARY KEY REFERENCES playlists(id) ON DELETE CASCADE,
+        yt_playlist_id  TEXT   NOT NULL,
+        kind            TEXT   NOT NULL,
+        last_item_count INTEGER,
+        last_synced_at  BIGINT NOT NULL,
+        created_at      BIGINT NOT NULL
+      );
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
