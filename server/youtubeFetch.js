@@ -5,11 +5,15 @@
 //   playlistItems.list  1 unit per 50 — video ids, titles, channels
 //   videos.list         1 unit per 50 — DURATION and DESCRIPTION
 //
-// videos.list is mandatory because playlistItems returns neither duration nor
-// the video description. Duration carries up to 0.28 of the match score, and the
-// "Provided to YouTube by …" Art Track block — the tier-1 path that gets near
-// exact metadata without a catalog search — lives in the video description. Skip
-// this call and the matcher silently degrades to title-guessing.
+// videos.list is mandatory for DURATION, which carries up to 0.28 of the match
+// score. Skip it and the matcher silently degrades while still appearing to work.
+//
+// It is NOT needed for the description, contrary to an earlier note here.
+// MEASURED 2026-08-14: playlistItems.list part=snippet returns the full VIDEO
+// description, including the "Provided to YouTube by …" Art Track block that
+// tier-1 matching reads. We take it from there and treat videos.list as the
+// fallback, which also means an item videos.list drops still has its Art Track
+// metadata.
 //
 // Quota: a 100-track import is 1 + 2 + 2 = 5 units against 10,000/day.
 // NEVER use search.list here. It costs 100 units — one 100-track playlist would
@@ -176,7 +180,12 @@ export async function fetchPlaylistItems(playlistId, opts) {
         videoId,
         position: sn.position ?? items.length,
         title: sn.title ?? '',
-        channelTitle: sn.videoOwnerChannelTitle ?? sn.channelTitle ?? null,
+        // videoOwnerChannelTitle is the UPLOADER ("Raghu Dixit - Topic");
+        // channelTitle on an auto-generated mix is just "YouTube", which would
+        // destroy the Topic-channel artist signal if used as a fallback first.
+        channelTitle: sn.videoOwnerChannelTitle ?? null,
+        // The full video description arrives here — see the note at the top.
+        description: sn.description ?? '',
         unavailable: isUnavailableItem(sn),
       });
     }
@@ -252,8 +261,11 @@ export async function fetchPlaylistForImport(playlistId, opts) {
       videoId: i.videoId,
       position: i.position,
       title: d?.title ?? i.title,
-      channelTitle: d?.channelTitle ?? i.channelTitle,
-      description: d?.description ?? '',
+      // Prefer the playlist item's uploader over videos.list's channelTitle:
+      // both are the uploader, but the playlistItem one survives when
+      // videos.list drops the video.
+      channelTitle: i.channelTitle ?? d?.channelTitle ?? null,
+      description: i.description || d?.description || '',
       durationSec: d?.durationSec ?? null,
       unavailable: i.unavailable || !d,
       isMusic: d?.isMusic ?? false,
