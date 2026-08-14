@@ -94,10 +94,18 @@ export async function findCandidates(parsed, { search, limit = SEARCH_LIMIT } = 
     let results;
     try {
       results = await searchFn(q, { limit });
-    } catch {
+    } catch (err) {
       // One failed search must not fail the import. The item simply gets fewer
       // candidates and lands in review or unmatched — a degraded result the
       // user can fix, rather than a dead job they cannot.
+      //
+      // But it must not be SILENT. A systematic upstream change (a response
+      // shape we no longer parse, an outage) makes every search throw, and the
+      // import then completes with everything 'unmatched' and no signal
+      // anywhere that the catalog was the problem rather than the catalog's
+      // contents. That is exactly what happened while testing this, and the
+      // symptom was indistinguishable from "we don't have these songs".
+      console.warn('[yt-import] catalog search failed:', err?.message ?? err);
       continue;
     }
     searches++;

@@ -38,7 +38,7 @@ import {
   YOUTUBE_API_KEY, YT_IMPORT_DAILY_CAP, YT_IMPORT_USER_DAILY,
 } from './config.js';
 import { parseYouTubeLink, STRATEGY } from './youtubeUrl.js';
-import { fetchPlaylistForImport, YouTubeError } from './youtubeFetch.js';
+import { fetchPlaylistForImport, windowForKind, YouTubeError } from './youtubeFetch.js';
 import { parseVideoVariants } from './ytTrackParse.js';
 import { matchVideo, fingerprint, fingerprintKeys, TIER, THRESHOLDS } from './ytMatch.js';
 import { findCandidates } from './ytSearch.js';
@@ -266,6 +266,14 @@ export async function drainJob(jobId, { budgetMs = DEFAULT_BUDGET_MS, fetchOpts,
 async function fetchPhase(job, fetchOpts) {
   const result = await fetchPlaylistForImport(job.yt_playlist_id, {
     apiKey: YOUTUBE_API_KEY,
+    // The window MUST be derived here. fetchPlaylistItems takes maxItems from
+    // opts and fetchPlaylistForImport does not compute one, so omitting this
+    // does not fall back to a default — it removes the window entirely, and an
+    // RD mix (which is effectively infinite) paginates to MAX_ITEMS and dies on
+    // YT_TOO_LARGE. That is the exact failure RADIO_WINDOW exists to prevent,
+    // so the kind-to-window decision follows classification, as windowForKind's
+    // own contract asks.
+    maxItems: windowForKind(job.kind),
     ...fetchOpts,
   });
 
@@ -371,13 +379,22 @@ async function resolveItem(job, item, search) {
 
   // 1. Cache. A hit costs one indexed read and skips the catalog entirely —
   //    this is what makes re-imports and refreshes nearly free.
+  //
+  //    Only a CONFIDENT hit short-circuits. A cached entry that would land in
+  //    review is deliberately ignored, because a cache row stores the winner
+  //    and not the alternatives: honouring it would put an item on the review
+  //    screen with nothing to choose from, which is a dead end rather than a
+  //    decision. Falling through costs one search and produces a real choice.
+  //    (Found by driving the HTTP surface, where a review item came back with
+  //    an empty candidates array.)
   const cached = fp ? await lookupCache(readings) : null;
-  if (cached) {
+  const confident = cached && (cached.user_confirmed || cached.score >= THRESHOLDS.auto);
+  if (confident) {
     await writeVerdict(item.id, {
       fingerprint: fp,
       // A human-confirmed pairing is auto regardless of what it once scored —
       // that is the whole point of recording the confirmation.
-      tier: (cached.user_confirmed || cached.score >= THRESHOLDS.auto) ? TIER.AUTO : TIER.REVIEW,
+      tier: TIER.AUTO,
       trackId: cached.track_id,
       score: cached.score,
       candidates: null,

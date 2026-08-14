@@ -44,6 +44,8 @@ import { normalizeMood } from './moods.js';
 import authRouter from './auth.js';
 import familyRouter from './family.js';
 import modesRouter from './modesRoutes.js';
+import importRouter from './importRoutes.js';
+import { processImportQueue, youtubeImportEnabled } from './importJobs.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middleware/auth.js';
 import { getPrefs, sendToUser, prunePushLog } from './push.js';
@@ -143,7 +145,7 @@ app.use('/api/auth', authLimiter);
 // Cost-bearing routes (Gemini / lyrics provider / Replicate / upstream catalog).
 // Tighter than the broad generalLimiter so cache-miss spend can't be driven.
 // (security: H1 / M4 / M5)
-app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm'], costLimiter);
+app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm', '/api/import'], costLimiter);
 // Sensitive per-account routes get a tighter, shared, account-keyed limiter on top
 // of generalLimiter — registered before their routers mount below.
 app.use(['/api/family', '/api/modes'], sensitiveLimiter);
@@ -159,8 +161,25 @@ app.use('/api/family', familyRouter);
 // ── Listening modes (all routes require auth) ────────────────────────
 app.use('/api/modes', modesRouter);
 
+// ── YouTube playlist import (all routes require auth) ────────────────
+// Cost-bearing in the same sense as /api/lyrics — one import drives up to 30
+// upstream catalog searches — so it rides costLimiter, registered above.
+// Unreachable in practice until YOUTUBE_API_KEY is set: every route answers
+// 503 YT_DISABLED, and the clients hide the entry point on the same signal.
+app.use('/api/import/youtube', importRouter);
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, ts: Date.now() });
+});
+
+// Which optional, env-gated features this deployment actually has.
+//
+// The clients need this BEFORE they render: an import button that leads to a
+// 503 is worse than no button, and both clients ship the screen whether or not
+// the key is set. Public and unauthenticated like /api/health — it exposes only
+// whether a capability exists, never a key or a limit.
+app.get('/api/features', (_req, res) => {
+  res.json({ youtubeImport: youtubeImportEnabled() });
 });
 
 // One net under every app-level route that takes an opaque id in the path:
@@ -496,11 +515,19 @@ app.get('/api/lyrics-jobs/process', async (req, res) => {
     const nudges = await sweepNudges()
       .catch((e) => { console.warn('[nudges] sweep failed:', e?.message ?? e); return null; });
     await prunePushLog().catch(() => {});
+    // YouTube imports: recover jobs whose invocation died mid-drain (the user
+    // closed the app), and enforce the 30-day retention rule on YouTube-derived
+    // rows. Runs the prune even when the feature is off — turning the key off
+    // must not strand data past its window. Time-budgeted so a slow import
+    // can never starve the lyrics queue's next run.
+    const imports = await processImportQueue({ budgetMs: 20000 })
+      .catch((e) => { console.warn('[yt-import] queue failed:', e?.message ?? e); return null; });
     // Counts only in the cron log — no user-id lists in Vercel's output.
     res.json({
       ...lyrics,
       mixes: mixes && { users: mixes.users, generated: mixes.generated },
       nudges,
+      imports,
     });
   } catch (err) {
     res.status(500).json({ error: clientError(err) });
