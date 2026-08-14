@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { pool, query } from './db.js';
 import { isBlobUrl } from './blobUrl.js';
+import { isId } from './validate.js';
 
 function newId() {
   return 'pl_' + Math.random().toString(36).slice(2, 10);
@@ -330,6 +331,157 @@ export async function addTrackToPlaylist(userId, playlistId, trackId) {
     `UPDATE playlists SET updated_at = $1, cover_track_id = COALESCE(cover_track_id, $2) WHERE id = $3`,
     [ts, trackId, playlistId],
   );
+}
+
+// ── Bulk writers (YouTube import) ───────────────────────────────────
+//
+// addTrackToPlaylist above is deliberately per-track: it re-reads MAX(position),
+// touches the playlist row, and throws 409 on a duplicate so the UI can say
+// "already in <playlist>". Every one of those is wrong in bulk. A 30-track
+// import would be 60 round-trips, and a mix that lists the same song twice
+// (common — RD mixes repeat) would abort the import on a 409 that means nothing
+// to a user who never chose that song individually.
+//
+// So bulk gets its own path: ONE multi-row INSERT inside ONE transaction, with
+// duplicates absorbed rather than raised. The return value reports how many rows
+// actually landed, because "you asked for 18, 17 are in, one was already there"
+// is information the review screen needs and an exception cannot carry.
+
+// The accepted track ids, de-duped and order-preserving.
+//
+// isId (not a truthiness check) is the filter, and it is load-bearing rather
+// than defensive habit: the review endpoint takes a CLIENT-CHOSEN candidate id,
+// so a caller can put anything here. A plain `.filter(Boolean)` passes objects
+// and numbers straight into a TEXT column, where pg coerces rather than throws —
+// verified against a live database, where `{bad:1}` inserted cleanly instead of
+// failing. Junk that inserts silently is worse than junk that errors.
+//
+// De-duping here as well as in SQL: ON CONFLICT DO NOTHING handles collisions
+// with rows already in the table, but two identical rows in the SAME statement
+// can raise "cannot affect row a second time".
+function acceptTrackIds(trackIds) {
+  return [...new Set((trackIds ?? []).filter(isId))];
+}
+
+// Build the VALUES list and params for a positioned bulk insert starting at
+// `startPos`. Shared by both writers below so the two can never drift on
+// column order — the bug that shape of duplication always eventually produces.
+function bulkTrackRows(playlistId, trackIds, userId, startPos, ts) {
+  const values = [];
+  const params = [playlistId, ts, userId];
+  trackIds.forEach((trackId, i) => {
+    params.push(trackId, startPos + i);
+    // $1 playlist_id, $2 added_at, $3 added_by are fixed; each track adds two.
+    values.push(`($1, $${params.length - 1}, $${params.length}, $2, $3)`);
+  });
+  return { values: values.join(', '), params };
+}
+
+// Create a playlist and fill it in one transaction. Either the whole import
+// lands or none of it does — a half-written playlist appearing in the user's
+// library after a mid-insert failure is worse than a clean error, because it
+// looks finished.
+export async function createPlaylistFromImport(userId, { name, description = null, trackIds = [] }) {
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) {
+    const err = new Error('playlist name is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  // Same caps as createPlaylist — an imported YouTube title is untrusted input
+  // of exactly the kind those caps exist for.
+  const finalName = trimmed.slice(0, 200);
+  const desc = typeof description === 'string' ? description.slice(0, 1000) : null;
+
+  const unique = acceptTrackIds(trackIds);
+
+  const id = newId();
+  const ts = Date.now();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO playlists (id, user_id, name, description, created_at, updated_at, cover_track_id)
+       VALUES ($1, $2, $3, $4, $5, $5, $6)`,
+      [id, userId, finalName, desc, ts, unique[0] ?? null],
+    );
+    let added = 0;
+    if (unique.length) {
+      const { values, params } = bulkTrackRows(id, unique, userId, 0, ts);
+      const ins = await client.query(
+        `INSERT INTO playlist_tracks (playlist_id, track_id, position, added_at, added_by)
+         VALUES ${values}
+         ON CONFLICT (playlist_id, track_id) DO NOTHING`,
+        params,
+      );
+      added = ins.rowCount;
+    }
+    await client.query('COMMIT');
+    return { id, name: finalName, description: desc, trackCount: added, added, updatedAt: ts };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Append to an existing playlist — the review path, where the user accepts
+// tracks one or a few at a time after the playlist already exists.
+//
+// Duplicates are SILENT here, unlike addTrackToPlaylist. Accepting a review
+// suggestion that happens to duplicate an already-auto-matched track is a
+// normal outcome of a mix listing a song twice, not a user error worth a 409.
+//
+// A dropped duplicate leaves a HOLE in the position sequence (it was allocated
+// an index before ON CONFLICT discarded the row). That is fine and deliberately
+// not repaired: `position` is only ever read through ORDER BY (see getPlaylist),
+// and removeTrackFromPlaylist has always left the same gaps, so contiguity is
+// not a property this schema has or needs. Closing them would cost an extra
+// read inside every append to fix nothing.
+export async function appendTracksToPlaylist(userId, playlistId, trackIds = []) {
+  await requireEdit(userId, playlistId);
+  const unique = acceptTrackIds(trackIds);
+  if (!unique.length) return { added: 0 };
+
+  const ts = Date.now();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialize concurrent appends by locking the PLAYLIST row first, then
+    // reading the tail position. Two appends racing would otherwise compute the
+    // same start and write colliding positions.
+    //
+    // The lock is on playlists, not playlist_tracks, because `FOR UPDATE` is
+    // illegal alongside an aggregate — `SELECT MAX(position) … FOR UPDATE`
+    // raises "FOR UPDATE is not allowed with aggregate functions". Locking the
+    // parent row is both legal and the correct granularity anyway: the thing
+    // being serialized is "appending to this playlist".
+    await client.query(`SELECT 1 FROM playlists WHERE id = $1 FOR UPDATE`, [playlistId]);
+    const { rows } = await client.query(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM playlist_tracks WHERE playlist_id = $1`,
+      [playlistId],
+    );
+    const startPos = rows[0]?.next ?? 0;
+    const { values, params } = bulkTrackRows(playlistId, unique, userId, startPos, ts);
+    const ins = await client.query(
+      `INSERT INTO playlist_tracks (playlist_id, track_id, position, added_at, added_by)
+       VALUES ${values}
+       ON CONFLICT (playlist_id, track_id) DO NOTHING`,
+      params,
+    );
+    await client.query(
+      `UPDATE playlists SET updated_at = $1, cover_track_id = COALESCE(cover_track_id, $2) WHERE id = $3`,
+      [ts, unique[0], playlistId],
+    );
+    await client.query('COMMIT');
+    return { added: ins.rowCount };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Set the playlist cover (owner/editor). Either a custom uploaded image
