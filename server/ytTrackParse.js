@@ -109,7 +109,15 @@ export function stripTrailingDecoration(input) {
   do {
     prev = s;
     s = s.replace(
-      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|quality|hd|hq|4k|8k|full)\b\s*$/i,
+      // Longest first, as elsewhere in this file. `lyric` SINGULAR was missing
+      // while `lyrics`/`lyrical` were present — found on the first live import:
+      // "Master - Andha Kanna Paathaakaa Lyric | Thalapathy Vijay | …" parsed
+      // to the title "Andha Kanna Paathaakaa Lyric". That one still matched,
+      // but only because fuzzy scoring absorbed the extra token, and
+      // "<song> Lyric | <cast>" is one of the most common Tamil/Telugu label
+      // title shapes there is — so the drag was being paid across a whole class
+      // of rows, not just this one.
+      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|lyric|quality|hd|hq|4k|8k|full)\b\s*$/i,
       '',
     );
   } while (s !== prev);

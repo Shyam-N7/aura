@@ -39,10 +39,10 @@ import {
 } from './config.js';
 import { parseYouTubeLink, STRATEGY } from './youtubeUrl.js';
 import { fetchPlaylistForImport, fetchPlaylistMeta, windowForKind, YouTubeError } from './youtubeFetch.js';
-import { parseVideoVariants } from './ytTrackParse.js';
+import { parseVideoVariants, parseVideo } from './ytTrackParse.js';
 import { matchVideo, fingerprint, fingerprintKeys, TIER, THRESHOLDS } from './ytMatch.js';
 import { findCandidates } from './ytSearch.js';
-import { cacheTracks } from './tracks.js';
+import { cacheTracks, getTrackById } from './tracks.js';
 import { createPlaylistFromImport, appendTracksToPlaylist } from './playlists.js';
 
 export const STATUS = {
@@ -499,6 +499,48 @@ async function writeVerdict(itemId, { fingerprint: fp, tier, trackId, score, can
   );
 }
 
+// YouTube names a mix after the video you started it from, so its title comes
+// back as "Mix - <that video's full title>" — and a label's video title is a
+// credit block, not a name. The first live import produced:
+//
+//   Mix - Master - Andha Kanna Paathaakaa Lyric | Thalapathy Vijay |
+//   Anirudh Ravichander | Lokesh Kanagaraj
+//
+// 103 characters, most of it cast list. Nobody wants that in their library.
+//
+// The clean name is already sitting in the result: the first auto-matched track
+// carries the CATALOGUE's own title for that song, which is canonical, short,
+// and — unlike anything we could parse out of the YouTube string — already
+// verified to exist. Parsing the YouTube title is only the fallback, for a mix
+// whose first video didn't auto-match.
+//
+// A finite playlist keeps its own name untouched: a human named that one, and
+// it is not ours to improve.
+const MIX_PREFIX = /^\s*mix\s*[-–—:]\s*/i;
+const MIX_NAME_MAX = 60;
+
+export async function playlistNameFor({ title, windowed, seedTrackId }) {
+  const raw = String(title ?? '').trim();
+  if (!windowed) return raw || 'Imported from YouTube';
+
+  // The catalogue's title for the first song we matched.
+  if (seedTrackId) {
+    const seed = await getTrackById(seedTrackId).catch(() => null);
+    const name = seed?.title?.trim();
+    if (name) return `Mix - ${name}`.slice(0, MIX_NAME_MAX);
+  }
+
+  if (!raw) return 'Imported from YouTube';
+
+  // Fallback: run the same parser the matcher uses over the seed video's title,
+  // so at least the cast list and the decoration come off.
+  const seedTitle = raw.replace(MIX_PREFIX, '');
+  const parsed = parseVideo({ title: seedTitle, channelTitle: '', durationSec: null, description: '' });
+  const cleaned = parsed?.title?.trim();
+  if (cleaned) return `Mix - ${cleaned}`.slice(0, MIX_NAME_MAX);
+  return raw.slice(0, MIX_NAME_MAX);
+}
+
 /**
  * Every item resolved: create the playlist with the auto-matched tracks and
  * move to 'ready'. Review items stay 'pending' — they are the user's queue now,
@@ -528,7 +570,7 @@ async function finishJob(job) {
   let playlistId = job.playlist_id;
   if (!playlistId) {
     const created = await createPlaylistFromImport(job.user_id, {
-      name: j[0]?.title || 'Imported from YouTube',
+      name: await playlistNameFor({ title: j[0]?.title, windowed, seedTrackId: trackIds[0] }),
       description: windowed
         ? 'Imported from a YouTube mix — a snapshot of the first tracks, not a live sync.'
         : 'Imported from YouTube.',
