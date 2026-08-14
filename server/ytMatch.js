@@ -27,6 +27,10 @@ export const THRESHOLDS = {
   versionMismatchCap: 0.55,
   // Nor can a language disagreement.
   languageMismatchCap: 0.8,
+  // How far clear the top candidate must be before an artist-less match may
+  // auto-accept. Two near-tied candidates with no artist to separate them is a
+  // coin flip, not a match.
+  ambiguityMargin: 0.05,
 };
 
 // Duration is weighted by WHERE the video came from, because its reliability
@@ -61,12 +65,24 @@ export function titleSimilarity(a, b) {
   return small >= 2 && containment === 1 ? Math.max(dice, 0.92) : dice;
 }
 
-/** Any-token overlap across artist lists. Handles comma-joined candidates. */
+/**
+ * Any-token overlap across artist lists. Handles comma-joined candidates.
+ *
+ * Returns **null** when either side has no artist at all — "we don't know" is
+ * not "they disagree", and scoring them identically was a real defect. MEASURED
+ * on a 50-track mix: 45 titles yielded no artist, so with artist weighted 0.30
+ * the ceiling for a perfect title + perfect duration match was
+ * (0.45 + 0.10) / 0.90 = 0.611. Twelve rows landed on exactly that score and
+ * every one of them was a correct match sitting in the review queue. 0.85 was
+ * unreachable by construction and the 90% auto target was impossible.
+ *
+ * null drops the signal out of the weighting, exactly as an absent duration
+ * already does.
+ */
 export function artistOverlap(ytArtists, candidateArtist) {
   const cand = new Set(tokens(candidateArtist));
-  if (cand.size === 0) return 0;
   const yt = (ytArtists ?? []).flatMap(a => tokens(a));
-  if (yt.length === 0) return 0;
+  if (cand.size === 0 || yt.length === 0) return null;
   const ytSet = new Set(yt);
   let shared = 0;
   for (const t of ytSet) if (cand.has(t)) shared++;
@@ -112,9 +128,11 @@ export function scoreCandidate(parsed, candidate) {
   // Renormalise so tiers stay comparable when duration is unavailable.
   const parts = [
     { v: title, w: BASE_WEIGHTS.title },
-    { v: artist, w: BASE_WEIGHTS.artist },
     { v: sanity, w: BASE_WEIGHTS.sanity },
   ];
+  // An UNKNOWN artist drops out of the weighting; a DISAGREEING one scores 0
+  // and counts against. See artistOverlap.
+  if (artist !== null) parts.push({ v: artist, w: BASE_WEIGHTS.artist });
   if (dur.score !== null) parts.push({ v: dur.score, w: dur.weight });
   const totalW = parts.reduce((s, p) => s + p.w, 0);
   let score = parts.reduce((s, p) => s + p.v * p.w, 0) / totalW;
@@ -148,7 +166,8 @@ export function scoreCandidate(parsed, candidate) {
     score: Number(score.toFixed(4)),
     breakdown: {
       title: Number(title.toFixed(3)),
-      artist: Number(artist.toFixed(3)),
+      // null = unknown (not scored), 0 = known and disagreeing (scored against)
+      artist: artist === null ? null : Number(artist.toFixed(3)),
       duration: dur.score === null ? null : Number(dur.score.toFixed(3)),
       sanity,
     },
@@ -174,7 +193,33 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   if (!best || best.score < THRESHOLDS.review) {
     return { tier: TIER.UNMATCHED, best: best ?? null, candidates: scored.slice(0, 3) };
   }
-  if (best.score >= auto && best.breakdown.artist > 0) {
+  // Auto-accept needs corroboration beyond the title, but WHICH corroboration
+  // depends on what we actually know:
+  //
+  //   artist known    → it must agree. A title-only match with a DISAGREEING
+  //                     artist is the cross-language false positive this
+  //                     catalog is full of.
+  //   artist unknown  → duration must be near-exact. MEASURED: 45 of 50 real
+  //                     mix titles yield no artist, so requiring one made auto
+  //                     unreachable. Duration is then the only evidence that
+  //                     this is the same recording rather than a cover, a live
+  //                     take, or a different song of the same name.
+  //                     Plus UNAMBIGUITY: if a runner-up scores within
+  //                     AMBIGUITY_MARGIN, we genuinely cannot tell them apart
+  //                     without an artist, and auto-accepting the first is a
+  //                     coin flip — exactly the same-title-different-artist
+  //                     case this catalog is full of. Send it to review.
+  const artistKnown = best.breakdown.artist !== null;
+  const second = scored[1];
+  const unambiguous =
+    !second || best.score - second.score > THRESHOLDS.ambiguityMargin;
+  const corroborated = artistKnown
+    ? best.breakdown.artist > 0
+    : best.breakdown.duration !== null &&
+      best.breakdown.duration >= 0.9 &&
+      unambiguous;
+
+  if (best.score >= auto && corroborated) {
     return { tier: TIER.AUTO, best, candidates: scored.slice(0, 3) };
   }
   return { tier: TIER.REVIEW, best, candidates: scored.slice(0, 3) };

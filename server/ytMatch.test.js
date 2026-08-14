@@ -177,15 +177,40 @@ describe('scoring', () => {
     expect(r.best.score).toBeLessThanOrEqual(0.55);
   });
 
-  it('never auto-accepts on title alone with no artist agreement', () => {
+  // MEASURED on a real 50-track mix: 45 titles yield NO artist, and those were
+  // overwhelmingly correct matches stuck at 0.611 in review. So "no artist"
+  // cannot block auto-accept. What must block it is AMBIGUITY — two candidates
+  // we cannot separate without an artist.
+  it('auto-accepts an artist-less match when it is unambiguous and duration is exact', () => {
     const p = parseVideo({
-      title: 'Kesariya',
-      channelTitle: 'Random Uploads',
+      title: 'Gudugudiya Sedi Nodo',
+      channelTitle: 'Raghu Dixit Music',
       durationSec: 268,
     });
     const r = matchVideo(p, [
-      song({ title: 'Kesariya', artist: 'Some Other Singer', durationSec: 268 }),
+      song({ title: 'Gudugudiya Sedi Nodo', artist: 'Raghu Dixit', durationSec: 268 }),
     ]);
+    expect(r.best.breakdown.artist).toBeNull(); // unknown, not disagreeing
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  it('refuses to auto-accept an artist-less match when candidates are tied', () => {
+    // The coin-flip case: same title, same duration, different artists, and
+    // nothing on the YouTube side to break the tie.
+    const p = parseVideo({ title: 'Kesariya', channelTitle: 'Random Uploads', durationSec: 268 });
+    const r = matchVideo(p, [
+      song({ id: 'a', title: 'Kesariya', artist: 'Singer One', durationSec: 268 }),
+      song({ id: 'b', title: 'Kesariya', artist: 'Singer Two', durationSec: 268 }),
+    ]);
+    expect(r.tier).toBe(TIER.REVIEW);
+  });
+
+  it('still blocks a match whose artist is known and DISAGREES', () => {
+    const p = parseVideo({ title: 'Imagine Dragons - Believer', channelTitle: 'x', durationSec: 204 });
+    const r = matchVideo(p, [
+      song({ title: 'Believer', artist: 'Completely Different Person', durationSec: 204 }),
+    ]);
+    expect(r.best.breakdown.artist).toBe(0); // known, disagreeing
     expect(r.tier).not.toBe(TIER.AUTO);
   });
 
