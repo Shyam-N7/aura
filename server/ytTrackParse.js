@@ -33,6 +33,10 @@ const NOISE_PATTERNS = [
   /\((?:full\s+)?(?:video|song|movie)\s*(?:song)?\)/gi,
   /\b(?:official\s+video|official\s+audio|official\s+trailer)\b/gi,
   /\b(?:lyric[s]?\s*video|lyrical\s*video|lyrical)\b/gi,
+  // Longest first: "Full Video Song" must not be eaten by "full video", which
+  // strands a bare "Song" in the title. MEASURED on a real mix item —
+  // "Gira Gira Full Video Song" cleaned to "Gira Gira Song".
+  /\b(?:full\s+)?(?:video|audio|lyrical)\s+song\b/gi,
   /\b(?:full\s+song|full\s+video|video\s+song|full\s+audio)\b/gi,
   /\b(?:hd|hq|4k|1080p|720p|remaster(?:ed)?(?:\s+\d{4})?)\b/gi,
   /\bwith\s+lyrics\b/gi,
@@ -92,6 +96,26 @@ const EMOJI_GLUE = /[\uFE0E\uFE0F\u200D]/g;
  */
 const FROM_MOVIE = /\(\s*from\s*["“”'']([^"“”'']+)["“”'']\s*\)/i;
 
+/**
+ * Trailing decoration, stripped repeatedly because it stacks.
+ * Exported and applied to EACH SIDE of an "A - B" split as well as the whole
+ * string: MEASURED, "Inthandham Song - Sita Ramam" kept "Song" on the title
+ * after the split, dropping similarity to 0.667 on an otherwise exact match.
+ * Only ever at the END — mid-title these words belong to real names.
+ */
+export function stripTrailingDecoration(input) {
+  let s = String(input ?? '');
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(
+      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|quality|hd|hq|4k|8k|full)\b\s*$/i,
+      '',
+    );
+  } while (s !== prev);
+  return s.trim();
+}
+
 /** Collapse to comparable tokens. Diacritics folded, punctuation dropped. */
 export function tokens(s) {
   if (!s) return [];
@@ -126,8 +150,27 @@ export function cleanTitle(raw) {
   // Pipe-separated junk: "Song | Movie | Label | 2022". Keep only the head —
   // the tail is almost always credits, never the title.
   if (s.includes('|')) s = s.split('|')[0];
+  // Runs of 2+ spaces are the SAME separator. MEASURED on a real mix item:
+  // "Munjane Manjalli   Audio Song   Just Maath Maathali   Kiccha Sudeep …" —
+  // an amateur reupload using spaces where a label would use pipes. Without
+  // this the entire credit list becomes the title and nothing can match it.
+  else if (/\S {2,}\S/.test(s)) s = s.split(/ {2,}/)[0];
   // Any bracket left empty by the strips above is debris, not content.
   s = s.replace(/\(\s*\)/g, ' ').replace(/\[\s*\]/g, ' ');
+  // An UNMATCHED opener left behind by a strip: "Bel Air (Official Video)" can
+  // lose its tail and leave "Bel Air (" — MEASURED on three KATSEYE rows.
+  // Cosmetic for scoring (tokens drop punctuation) but it reaches the review
+  // screen, where a title ending in a stray bracket looks like a broken app.
+  if ((s.match(/\(/g) ?? []).length > (s.match(/\)/g) ?? []).length) {
+    s = s.replace(/\s*\([^)]*$/, '');
+  }
+  // Trailing decoration, stripped repeatedly because it stacks:
+  // "Poovukkul Official Quality Video" -> "Poovukkul".
+  // MEASURED: seven rows in one mix kept a bare trailing "Video"/"Official"/
+  // "8K"/"Song", each dragging title similarity from 1.0 down to ~0.92 or
+  // 0.667 and pushing a correct match out of auto. Only stripped at the END —
+  // mid-title these words can be part of a real name.
+  s = stripTrailingDecoration(s);
   return s.replace(/\s{2,}/g, ' ').replace(/[\s\-–—_,.]+$/g, '').trim();
 }
 
@@ -196,6 +239,63 @@ export function topicChannelArtist(channel) {
 }
 
 /**
+ * Phrases that are never a song name. MEASURED on a real mix: the pipe-split
+ * kept heads like "Title Track Video", "Official" and "Title Track", each of
+ * which is a label for a track rather than its name — and none could ever match
+ * anything. When the head is generic the real name is on the other side.
+ */
+const GENERIC_TITLES = new Set([
+  'title track',
+  'title song',
+  'title track video',
+  'official',
+  'official video',
+  'video',
+  'audio',
+  'song',
+  'lyrical',
+  'lyric video',
+  'teaser',
+  'trailer',
+  'promo',
+  'theme',
+  'theme music',
+  'bgm',
+]);
+
+export function isGenericTitle(t) {
+  const k = String(t ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return k === '' || GENERIC_TITLES.has(k);
+}
+
+/**
+ * Both readings of "A - B", because the convention is genuinely inconsistent
+ * and the parser cannot know which applies.
+ *
+ * MEASURED on one 50-track mix, both orders present:
+ *   "Tulasi - Sumedh K"            song first, artist second  (Indian norm)
+ *   "TREAM X BAUSA - DER SONNE …"  artist first, song second  (Western norm)
+ *
+ * Guessing one direction gets the other class wrong every time, and the failure
+ * is silent — we search the catalog for an artist name and find nothing. So we
+ * emit BOTH readings and let scoring against real candidates decide, which is
+ * the only place the evidence actually exists.
+ */
+export function parseVideoVariants(video) {
+  const primary = parseVideo(video);
+  // Art Tracks carry structured credits; there is nothing to guess.
+  if (primary.source === SOURCE.ART_TRACK) return [primary];
+
+  const swapped = primary.artists.length
+    ? { ...primary, title: primary.artists[0], artists: [primary.title] }
+    : null;
+
+  // A generic head is not ambiguous — it is simply wrong, so the swap leads.
+  if (swapped && isGenericTitle(primary.title)) return [swapped, primary];
+  return swapped ? [primary, swapped] : [primary];
+}
+
+/**
  * Full parse of one YouTube video into matchable fields.
  * `video` is { title, channelTitle, description, durationSec }.
  */
@@ -230,12 +330,12 @@ export function parseVideo(video) {
   let artists = topicArtist ? [topicArtist] : [];
   const split = rest.match(/^(.{2,60}?)\s+[-–—]\s+(.{2,})$/);
   if (split && !topicArtist) {
-    artists = [split[1].trim()];
-    title = split[2].trim();
+    artists = [stripTrailingDecoration(split[1].trim())];
+    title = stripTrailingDecoration(split[2].trim());
   } else if (split && topicArtist) {
     // A Topic channel already told us the artist; the hyphen is then usually
     // "Artist - Title" repeating it, so prefer the right-hand side as title.
-    title = split[2].trim();
+    title = stripTrailingDecoration(split[2].trim());
   }
 
   return {

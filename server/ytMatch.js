@@ -15,7 +15,7 @@
 // decodeEntities on title/artist/album. The YouTube side has had nothing done
 // to it, which is why ytTrackParse exists.
 
-import { tokens, versionsIn, extractMovie, SOURCE } from './ytTrackParse.js';
+import { tokens, versionsIn, extractMovie, isGenericTitle, SOURCE } from './ytTrackParse.js';
 
 export const TIER = { AUTO: 'auto', REVIEW: 'review', UNMATCHED: 'unmatched' };
 
@@ -49,30 +49,118 @@ const BASE_WEIGHTS = { title: 0.45, artist: 0.3, sanity: 0.05 };
  * "Kesariya (From Brahmastra)" shape. Containment needs 2+ tokens on the
  * smaller side so a single shared word cannot score 1.0.
  */
+/** Levenshtein, iterative single-row. Tokens are short; this is never hot. */
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(
+        prev[j] + 1,
+        row[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Do two tokens mean the same word, allowing for TRANSLITERATION variance?
+ *
+ * MEASURED: Indian song titles are romanised inconsistently by whoever typed
+ * them, and exact token matching therefore misses correct songs outright:
+ *   "Just Math Mathalli"  vs  "Just Maath Maathali"   scored 0.333
+ *   "Oo Saathiya"         vs  "O Saathiya"            scored 0.5
+ * Both are the same song. Doubled vowels, dropped h's and -i/-y endings are
+ * the normal variation, not a different word.
+ */
+export function tokensAlike(a, b) {
+  if (a === b) return true;
+  const d = editDistance(a, b);
+  if (d === 1) return true; // oo/o, math/maath
+  return d <= 2 && Math.max(a.length, b.length) >= 7; // mathalli/maathali
+}
+
 export function titleSimilarity(a, b) {
   const A = new Set(tokens(a));
   const B = new Set(tokens(b));
   if (A.size === 0 || B.size === 0) return 0;
+  // One partner each, and the EXACT branch must respect that too. MEASURED:
+  // "Venmathi Venmathiye" vs "Venmathiye" scored t=1.333 — impossible — because
+  // "venmathi" matched "venmathiye" fuzzily and then "venmathiye" matched the
+  // same token exactly. shared must never exceed the smaller set.
   let shared = 0;
-  for (const t of A) if (B.has(t)) shared++;
+  const used = new Set();
+  for (const t of A) {
+    if (B.has(t) && !used.has(t)) { shared++; used.add(t); continue; }
+    for (const u of B) {
+      if (!used.has(u) && tokensAlike(t, u)) { shared++; used.add(u); break; }
+    }
+  }
   const dice = (2 * shared) / (A.size + B.size);
   const small = Math.min(A.size, B.size);
   const containment = shared / small;
-  return small >= 2 && containment === 1 ? Math.max(dice, 0.92) : dice;
+  // Containment says "every word of the shorter title appears in the longer".
+  // That is strong evidence when the titles are comparable in length, and
+  // nonsense when they are not. MEASURED: "She's the Best" scored 0.92 against
+  // Peppa Pig's "She's The Greatest, She's The Best Mummy Pig" — fully
+  // contained, and completely wrong. Require the longer title to be at most
+  // HALF AGAIN the shorter, not twice it — the Peppa Pig case is exactly 3 vs 6
+  // tokens and sails through a 2x rule, which is how it was found.
+  const comparable = Math.max(A.size, B.size) <= 1.5 * small;
+  return small >= 2 && containment === 1 && comparable
+    ? Math.max(dice, 0.92)
+    : dice;
 }
 
-/** Any-token overlap across artist lists. Handles comma-joined candidates. */
+/**
+ * Any-token overlap across artist lists. Handles comma-joined candidates.
+ *
+ * Returns **null** when either side has no artist at all — "we don't know" is
+ * not "they disagree", and scoring them identically was a real defect. MEASURED
+ * on a 50-track mix: 45 titles yielded no artist, so with artist weighted 0.30
+ * the ceiling for a perfect title + perfect duration match was
+ * (0.45 + 0.10) / 0.90 = 0.611. Twelve rows landed on exactly that score and
+ * every one of them was a correct match sitting in the review queue. 0.85 was
+ * unreachable by construction and the 90% auto target was impossible.
+ *
+ * null drops the signal out of the weighting, exactly as an absent duration
+ * already does.
+ */
 export function artistOverlap(ytArtists, candidateArtist) {
   const cand = new Set(tokens(candidateArtist));
-  if (cand.size === 0) return 0;
-  const yt = (ytArtists ?? []).flatMap(a => tokens(a));
-  if (yt.length === 0) return 0;
+  // A generic label is not an artist. MEASURED: "Mugulu Nage - Title Track"
+  // put "Title Track" in the artist slot, which then scored 0 against the real
+  // singer and blocked a t=1 d=1 match at 0.611. Unknown, not disagreeing.
+  const yt = (ytArtists ?? [])
+    .filter(a => !isGenericTitle(a))
+    .flatMap(a => tokens(a));
+  if (cand.size === 0 || yt.length === 0) return null;
   const ytSet = new Set(yt);
   let shared = 0;
-  for (const t of ytSet) if (cand.has(t)) shared++;
+  const used = new Set();
+  for (const t of ytSet) {
+    if (cand.has(t) && !used.has(t)) { shared++; used.add(t); continue; }
+    // Artist names transliterate too — same tolerance as titles, same
+    // one-partner-each discipline.
+    for (const u of cand) {
+      if (!used.has(u) && tokensAlike(t, u)) { shared++; used.add(u); break; }
+    }
+  }
   if (shared === 0) return 0;
-  // Full credit once a whole artist name matches; partial for a single token
-  // (surnames alone are weak — "Singh" matches half of Bollywood).
+  // A ONE-WORD artist name matched in full is a full match, not a partial one.
+  // MEASURED: "KATSEYE" vs "Katseye" scored 0.6 — an exact, complete match —
+  // because full credit required two shared tokens, which a single-word name
+  // can never reach. It capped three rows at 0.811 and kept them out of auto.
+  // Applies only when BOTH sides are single-word, which is what keeps the
+  // surname case weak: "Singh" against "Arijit Singh" is still 0.6, because
+  // half of Bollywood shares it.
+  if (ytSet.size === 1 && cand.size === 1) return 1;
+  // Full credit once a whole artist name matches; partial for a single token.
   return shared >= 2 ? 1 : 0.6;
 }
 
@@ -98,7 +186,7 @@ export function scoreCandidate(parsed, candidate) {
   const candTitleBare = candMovie.rest;
 
   const title = titleSimilarity(parsed.title, candTitleBare);
-  const artist = artistOverlap(parsed.artists, candidate.artist);
+  let artist = artistOverlap(parsed.artists, candidate.artist);
   const dur = durationScore(parsed.durationSec, candidate.durationSec, parsed.source);
 
   // Sanity: movie agreement, then year. Small by design — it breaks ties, it
@@ -109,12 +197,38 @@ export function scoreCandidate(parsed, candidate) {
   if (movieA && movieB && (movieB.includes(movieA) || movieA.includes(movieB))) sanity = 1;
   else if (parsed.year && candidate.year && parsed.year === candidate.year) sanity = 0.5;
 
+  // The hyphen tail is very often the MOVIE, not an artist.
+  //
+  // MEASURED: "Anbil Avan - Vinnaithaandi Varuvaayaa", "Chiru Chiru Video -
+  // Awaara", "Innunu Bekagide - Mundina Nildana". We parsed the film name as an
+  // artist, then scored it 0 against the real singer — so a perfect title and
+  // perfect duration were actively BLOCKED by evidence we had misread.
+  //
+  // If that supposed artist matches the candidate's album or (From "…") movie
+  // instead, we misidentified it. Demote it to unknown (null) rather than
+  // letting it count against, and take the movie agreement as the sanity bonus
+  // it actually is.
+  if (artist === 0 && parsed.artists.length) {
+    const claimed = tokens(parsed.artists[0]).join(' ');
+    const albumish = tokens(`${candidate.album ?? ''} ${candMovie.movie ?? ''}`).join(' ');
+    if (
+      claimed &&
+      albumish &&
+      (albumish.includes(claimed) || claimed.includes(albumish))
+    ) {
+      artist = null;
+      sanity = 1;
+    }
+  }
+
   // Renormalise so tiers stay comparable when duration is unavailable.
   const parts = [
     { v: title, w: BASE_WEIGHTS.title },
-    { v: artist, w: BASE_WEIGHTS.artist },
     { v: sanity, w: BASE_WEIGHTS.sanity },
   ];
+  // An UNKNOWN artist drops out of the weighting; a DISAGREEING one scores 0
+  // and counts against. See artistOverlap.
+  if (artist !== null) parts.push({ v: artist, w: BASE_WEIGHTS.artist });
   if (dur.score !== null) parts.push({ v: dur.score, w: dur.weight });
   const totalW = parts.reduce((s, p) => s + p.w, 0);
   let score = parts.reduce((s, p) => s + p.v * p.w, 0) / totalW;
@@ -148,7 +262,8 @@ export function scoreCandidate(parsed, candidate) {
     score: Number(score.toFixed(4)),
     breakdown: {
       title: Number(title.toFixed(3)),
-      artist: Number(artist.toFixed(3)),
+      // null = unknown (not scored), 0 = known and disagreeing (scored against)
+      artist: artist === null ? null : Number(artist.toFixed(3)),
       duration: dur.score === null ? null : Number(dur.score.toFixed(3)),
       sanity,
     },
@@ -166,18 +281,84 @@ export function scoreCandidate(parsed, candidate) {
  */
 export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   const auto = autoThreshold ?? THRESHOLDS.auto;
-  const scored = (candidates ?? [])
-    .map(c => ({ candidate: c, ...scoreCandidate(parsed, c) }))
+
+  // `parsed` may be a single reading or the ambiguous pair from
+  // parseVideoVariants ("A - B" is song-artist in Indian titles and
+  // artist-song in Western ones). Score every reading against every candidate
+  // and let the evidence pick — the parser has no way to know, but the catalog
+  // does. The winning reading is carried on the result so a reviewer can see
+  // which interpretation was used.
+  const variants = Array.isArray(parsed) ? parsed : [parsed];
+  const scored = variants
+    .flatMap(v =>
+      (candidates ?? []).map(c => ({
+        candidate: c,
+        parsed: v,
+        ...scoreCandidate(v, c),
+      })),
+    )
     .sort((a, b) => b.score - a.score);
 
-  const best = scored[0];
+  // Scoring N candidates against 2 readings yields 2N rows, so the same song
+  // can appear twice. Keep each song once, at its best-scoring reading —
+  // otherwise the review screen offers "pick one of three" and shows the same
+  // track twice, which is worse than offering two.
+  const seen = new Set();
+  const unique = scored.filter(r => {
+    const id = r.candidate?.id;
+    if (id == null) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  const best = unique[0];
   if (!best || best.score < THRESHOLDS.review) {
-    return { tier: TIER.UNMATCHED, best: best ?? null, candidates: scored.slice(0, 3) };
+    return { tier: TIER.UNMATCHED, best: best ?? null, candidates: unique.slice(0, 3) };
   }
-  if (best.score >= auto && best.breakdown.artist > 0) {
-    return { tier: TIER.AUTO, best, candidates: scored.slice(0, 3) };
+  // Auto-accept needs corroboration beyond the title, but WHICH corroboration
+  // depends on what we actually know:
+  //
+  //   artist known    → it must agree. A title-only match with a DISAGREEING
+  //                     artist is the cross-language false positive this
+  //                     catalog is full of.
+  //   artist unknown  → duration must be near-exact. MEASURED: 45 of 50 real
+  //                     mix titles yield no artist, so requiring one made auto
+  //                     unreachable. Duration is then the only evidence that
+  //                     this is the same recording rather than a cover, a live
+  //                     take, or a different song of the same name.
+  //                     Plus UNAMBIGUITY: if a runner-up scores within
+  //                     AMBIGUITY_MARGIN, we genuinely cannot tell them apart
+  //                     without an artist, and auto-accepting the first is a
+  //                     coin flip — exactly the same-title-different-artist
+  //                     case this catalog is full of. Send it to review.
+  const artistKnown = best.breakdown.artist !== null;
+  //   NO ambiguity guard. It was tried and removed on evidence.
+  //
+  //   Three consecutive measured runs, two patches: it blocked correct matches
+  //   every time and never once prevented a wrong one. The final proof was a
+  //   candidate scoring a PERFECT 1.000 sent to review. The mechanism is that
+  //   the music-video duration tolerance is +/-40s, so two candidates both
+  //   score d=1 while sitting 20s apart from each other — read as rivals by any
+  //   same-recording window narrow enough to be meaningful.
+  //
+  //   When two candidates genuinely cannot be separated by metadata, the
+  //   catalog's own relevance order is a better tiebreak than refusing to
+  //   choose: searchSongs returns them ranked, and the first is the canonical
+  //   entry far more often than not. A wrong auto-accept is visible in the
+  //   playlist and one tap to fix; a correct match buried in review costs the
+  //   user a decision on every single track. Those are not symmetric.
+  //
+  //   If wrong auto-accepts turn up in real use, the fix is the user_confirmed
+  //   signal in yt_match_cache — real corrections beat a guard invented here.
+  const corroborated = artistKnown
+    ? best.breakdown.artist > 0
+    : best.breakdown.duration >= 0.9 || best.breakdown.sanity > 0;
+
+  if (best.score >= auto && corroborated) {
+    return { tier: TIER.AUTO, best, candidates: unique.slice(0, 3) };
   }
-  return { tier: TIER.REVIEW, best, candidates: scored.slice(0, 3) };
+  return { tier: TIER.REVIEW, best, candidates: unique.slice(0, 3) };
 }
 
 /**

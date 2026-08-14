@@ -7,20 +7,22 @@
 // playlist has no songs in it", which is a confusing lie about their own
 // library. Classify from the id alone and we can say the true thing.
 //
-// The other reason to classify first: `RD` is NOT lexically decisive. The split
-// is seeded-vs-seedless, not the first two characters. `RDCLAK5uy…` is a
-// YouTube Music EDITORIAL mix and the Data API serves it; `RD<videoId>`,
-// `RDMM…` and `RDAMVM…` are personal radio and it does not. Testing `RD` before
-// `RDCLAK` would misroute every editorial mix into the guided-conversion flow
-// and make the feature look far weaker than it is — so prefix order below is
-// most-specific-first, and the tests pin it.
+// The other reason to classify first: `RD` is NOT lexically decisive, and the
+// distinction is finer than "RD means unsupported". MEASURED against the live
+// API on 2026-08-14: `RDCLAK5uy…` (editorial) and `RD<videoId>` (video radio)
+// are BOTH served. Only the user-seeded forms — `RDMM…`, `RDAMVM…` — remain
+// unproven, and they are the ones a server key plausibly cannot see. Testing
+// `RD` before `RDCLAK`, or lumping every RD form together, misroutes servable
+// mixes into a guided-conversion detour they do not need — so prefix order
+// below is most-specific-first, and the tests pin it.
 
 /** Playlist kinds we can tell apart. */
 export const KIND = {
   USER_PLAYLIST: 'PL', // PL… — ordinary playlist, API-served
   ALBUM: 'OLAK', // OLAK5uy… — auto-generated album, API-served
   EDITORIAL_MIX: 'RDCLAK', // RDCLAK5uy… — YT Music editorial, API-served
-  PERSONAL_MIX: 'RD_MIX', // RD…/RDMM…/RDAMVM… — personal radio, NOT served
+  VIDEO_RADIO: 'RD_RADIO', // RD<videoId> — radio seeded by a video, IS served
+  PERSONAL_MIX: 'RD_MIX', // RDMM…/RDAMVM… — seeded by the signed-in user
   CHANNEL_UPLOADS: 'UU', // UU… — a channel's uploads, API-served
   LIKED: 'LL', // LL… — liked videos, OAuth only
   WATCH_LATER: 'WL', // WL — permanently unavailable
@@ -36,14 +38,30 @@ export const STRATEGY = {
 };
 
 // Most specific prefix first — see the note above about RDCLAK vs RD.
+//
+// MEASURED 2026-08-14, not assumed. The design (and the brief it came from) held
+// that RD-prefixed mixes are refused by the Data API. That is FALSE for video
+// radio. A live call — playlistItems.list?playlistId=RDs9Mtq4EUBkM, the exact id
+// from the brief — returned HTTP 200 with items and a nextPageToken, owned by
+// channel UCBR8-60-B28hp2BmDPdntcQ (YouTube's own auto-generated-playlist
+// channel). So `RD<videoId>` routes OFFICIAL and the guided-conversion detour is
+// not needed for it, which is the single biggest simplification in this feature.
+//
+// RDMM / RDAMVM / RDAMPL are left on GUIDED deliberately. Those are seeded by the
+// signed-in USER rather than by a video, so an unauthenticated server key
+// plausibly cannot see them — but that is now the only untested claim in this
+// table, and it should be settled the same way (one call, 1 unit) rather than
+// reasoned about. Until then GUIDED is the safe default: it degrades to an extra
+// step for the user, whereas wrongly routing them OFFICIAL degrades to a
+// confusing failure.
 const PREFIXES = [
   ['RDCLAK', KIND.EDITORIAL_MIX, STRATEGY.OFFICIAL],
   ['OLAK5uy', KIND.ALBUM, STRATEGY.OFFICIAL],
-  ['RDAMVM', KIND.PERSONAL_MIX, STRATEGY.GUIDED],
-  ['RDAMPL', KIND.PERSONAL_MIX, STRATEGY.GUIDED],
-  ['RDMM', KIND.PERSONAL_MIX, STRATEGY.GUIDED],
-  ['RDAT', KIND.PERSONAL_MIX, STRATEGY.GUIDED],
-  ['RD', KIND.PERSONAL_MIX, STRATEGY.GUIDED],
+  ['RDAMVM', KIND.PERSONAL_MIX, STRATEGY.GUIDED], // untested
+  ['RDAMPL', KIND.PERSONAL_MIX, STRATEGY.GUIDED], // untested
+  ['RDMM', KIND.PERSONAL_MIX, STRATEGY.GUIDED], // untested
+  ['RDAT', KIND.PERSONAL_MIX, STRATEGY.GUIDED], // untested
+  ['RD', KIND.VIDEO_RADIO, STRATEGY.OFFICIAL], // MEASURED: served
   ['UU', KIND.CHANNEL_UPLOADS, STRATEGY.OFFICIAL],
   ['PL', KIND.USER_PLAYLIST, STRATEGY.OFFICIAL],
   ['LL', KIND.LIKED, STRATEGY.OAUTH],

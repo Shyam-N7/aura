@@ -18,16 +18,24 @@ describe('RD is not lexically decisive', () => {
     expect(r.strategy).toBe(STRATEGY.OFFICIAL);
   });
 
-  it('routes a personal RD mix to guided conversion', () => {
+  // MEASURED against the live API, not assumed: playlistItems.list served this
+  // exact id (the one from the brief) with 200 + items + a nextPageToken. The
+  // original design said RD was refused; it is not, for video radio.
+  it('routes RD<videoId> video radio to the official API', () => {
     const r = classifyPlaylistId('RDs9Mtq4EUBkM');
-    expect(r.kind).toBe(KIND.PERSONAL_MIX);
-    expect(r.strategy).toBe(STRATEGY.GUIDED);
+    expect(r.kind).toBe(KIND.VIDEO_RADIO);
+    expect(r.strategy).toBe(STRATEGY.OFFICIAL);
   });
 
+  // Still GUIDED, deliberately: these are seeded by the signed-in user rather
+  // than a video, so an unauthenticated key plausibly cannot read them. Untested
+  // — and the safe default, because guided costs the user a step whereas a wrong
+  // OFFICIAL costs them a confusing failure.
   it.each(['RDMMs9Mtq4EUBkM', 'RDAMVMs9Mtq4EUBkM', 'RDAMPLs9Mtq4EUBkM'])(
-    'treats %s as personal radio',
+    'keeps %s on guided conversion until proven',
     id => {
       expect(classifyPlaylistId(id).kind).toBe(KIND.PERSONAL_MIX);
+      expect(classifyPlaylistId(id).strategy).toBe(STRATEGY.GUIDED);
     },
   );
 });
@@ -103,7 +111,7 @@ describe('URL shapes', () => {
       'https://www.youtube.com/watch?v=s9Mtq4EUBkM&list=RDs9Mtq4EUBkM',
     );
     expect(r.videoId).toBe('s9Mtq4EUBkM');
-    expect(r.strategy).toBe(STRATEGY.GUIDED);
+    expect(r.strategy).toBe(STRATEGY.OFFICIAL);
   });
 });
 

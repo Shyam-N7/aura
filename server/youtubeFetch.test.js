@@ -7,7 +7,10 @@ import {
   isUnavailableItem,
   YouTubeError,
   MAX_ITEMS,
+  RADIO_WINDOW,
+  windowForKind,
 } from './youtubeFetch.js';
+import { KIND } from './youtubeUrl.js';
 
 // A fake fetch driven by a queue of responses, so every path below is exercised
 // without a network or an API key. Also records the URLs, which is how the
@@ -222,5 +225,93 @@ describe('video enrichment', () => {
     const ids = new URL(videosCall).searchParams.get('id').split(',');
     expect(ids).toEqual(['a']);
     expect(r.videos[1].unavailable).toBe(true);
+  });
+});
+
+// Fixture taken VERBATIM from a live playlistItems.list call on 2026-08-14 for
+// playlistId=RDs9Mtq4EUBkM — the exact id from the product brief, which the
+// design wrongly assumed the API refuses. Two facts here were assumptions until
+// this response arrived, and both were wrong:
+//   1. RD video-radio IS served (200, items, nextPageToken).
+//   2. The VIDEO description arrives in playlistItems, Art Track block included.
+// Locking the shape so a refactor cannot quietly reintroduce either mistake.
+describe('measured RD mix response', () => {
+  const realItem = {
+    snippet: {
+      publishedAt: '2021-07-20T02:38:21Z',
+      channelId: 'UCBR8-60-B28hp2BmDPdntcQ',
+      title: 'Ee Tanuvu Ninnade',
+      description:
+        'Provided to YouTube by Virgin Music Group\n\nEe Tanuvu Ninnade · Raghu Dixit\n\nPsycho\n\n℗ 2008 Alpha Digitech\n\nReleased on: 2008-06-15',
+      channelTitle: 'YouTube',
+      playlistId: 'RDs9Mtq4EUBkM',
+      position: 0,
+      resourceId: { kind: 'youtube#video', videoId: 's9Mtq4EUBkM' },
+      videoOwnerChannelTitle: 'Raghu Dixit - Topic',
+      videoOwnerChannelId: 'UCj1GW9LiAoZjPa0Jm067zdQ',
+    },
+  };
+
+  it('carries the Art Track description straight from playlistItems', async () => {
+    const f = fakeFetch([{ body: { items: [realItem] } }]);
+    const r = await fetchPlaylistItems('RDs9Mtq4EUBkM', opts(f));
+    expect(r.items[0].description).toContain('Provided to YouTube by');
+    expect(r.items[0].description).toContain('Ee Tanuvu Ninnade · Raghu Dixit');
+  });
+
+  // The trap: on an auto-generated mix, snippet.channelTitle is literally
+  // "YouTube" — the playlist owner, not the uploader. Falling back to it would
+  // wipe out the "- Topic" signal that drives tier-1 artist confidence.
+  it('takes the uploader, not the mix owner, as the channel', async () => {
+    const f = fakeFetch([{ body: { items: [realItem] } }]);
+    const r = await fetchPlaylistItems('RDs9Mtq4EUBkM', opts(f));
+    expect(r.items[0].channelTitle).toBe('Raghu Dixit - Topic');
+    expect(r.items[0].channelTitle).not.toBe('YouTube');
+  });
+
+  it('does not mistake a mix item for unavailable', async () => {
+    expect(isUnavailableItem(realItem.snippet)).toBe(false);
+  });
+});
+
+// MEASURED 2026-08-14: a real RD mix paginated past 1000 items in a dry run and
+// tripped MAX_ITEMS. Radio has no end — YouTube keeps generating, and
+// pageInfo.totalResults is the page size, not a length. So radio takes a WINDOW
+// and stopping at it is success, not failure.
+describe('radio is infinite, so it gets a window not a ceiling', () => {
+  const page = n => Array.from({ length: 50 }, (_, i) => plItem(`v${n}-${i}`, 't'));
+
+  it('stops at the window instead of walking toward the cap', async () => {
+    // Endless pages, exactly like real radio.
+    const f = fakeFetch(
+      Array.from({ length: 40 }, (_, n) => ({
+        body: { items: page(n), nextPageToken: 'more' },
+      })),
+    );
+    const r = await fetchPlaylistItems('RDxxxx', { ...opts(f), maxItems: RADIO_WINDOW });
+    expect(r.items).toHaveLength(RADIO_WINDOW);
+    expect(r.windowed).toBe(true);
+    // The cost point: one page, not twenty. A dry run burned ~21 units before
+    // this existed.
+    expect(r.units).toBe(1);
+  });
+
+  it('still refuses a genuinely oversized FINITE playlist', async () => {
+    const f = fakeFetch(
+      Array.from({ length: MAX_ITEMS / 50 + 1 }, () => ({
+        body: { items: page(0), nextPageToken: 'more' },
+      })),
+    );
+    await expect(fetchPlaylistItems('PLx', opts(f))).rejects.toMatchObject({
+      code: 'YT_TOO_LARGE',
+    });
+  });
+
+  it('derives the window from the classification, not a hardcoded caller', () => {
+    expect(windowForKind(KIND.VIDEO_RADIO)).toBe(RADIO_WINDOW);
+    expect(windowForKind(KIND.PERSONAL_MIX)).toBe(RADIO_WINDOW);
+    expect(windowForKind(KIND.USER_PLAYLIST)).toBeNull();
+    expect(windowForKind(KIND.ALBUM)).toBeNull();
+    expect(windowForKind(KIND.EDITORIAL_MIX)).toBeNull();
   });
 });

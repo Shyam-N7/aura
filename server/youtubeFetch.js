@@ -5,24 +5,72 @@
 //   playlistItems.list  1 unit per 50 — video ids, titles, channels
 //   videos.list         1 unit per 50 — DURATION and DESCRIPTION
 //
-// videos.list is mandatory because playlistItems returns neither duration nor
-// the video description. Duration carries up to 0.28 of the match score, and the
-// "Provided to YouTube by …" Art Track block — the tier-1 path that gets near
-// exact metadata without a catalog search — lives in the video description. Skip
-// this call and the matcher silently degrades to title-guessing.
+// videos.list is mandatory for DURATION, which carries up to 0.28 of the match
+// score. Skip it and the matcher silently degrades while still appearing to work.
+//
+// It is NOT needed for the description, contrary to an earlier note here.
+// MEASURED 2026-08-14: playlistItems.list part=snippet returns the full VIDEO
+// description, including the "Provided to YouTube by …" Art Track block that
+// tier-1 matching reads. We take it from there and treat videos.list as the
+// fallback, which also means an item videos.list drops still has its Art Track
+// metadata.
 //
 // Quota: a 100-track import is 1 + 2 + 2 = 5 units against 10,000/day.
 // NEVER use search.list here. It costs 100 units — one 100-track playlist would
 // consume the entire daily quota. Catalog matching searches JioSaavn, not
 // YouTube, and it must stay that way.
 
+import { KIND } from './youtubeUrl.js';
+
 const API = 'https://www.googleapis.com/youtube/v3';
 const PAGE = 50;
 
-/** Hard ceiling. Above this we refuse rather than burn quota on a mistake. */
+/** Hard ceiling for a FINITE playlist. Above this we refuse rather than burn
+ *  quota on a mistake. */
 export const MAX_ITEMS = 1000;
 /** Above this we still import, but the caller should warn. */
 export const LARGE_ITEMS = 500;
+
+/**
+ * How many items to take from RADIO.
+ *
+ * MEASURED 2026-08-14: an RD mix is effectively INFINITE. A dry run against
+ * RDTkRv5-ELOyw paginated past 1000 items and tripped MAX_ITEMS — the cap doing
+ * its job, and revealing that "import the mix" is not a well-defined operation
+ * the way "import a playlist" is. YouTube keeps generating; the `totalResults`
+ * in the response is the page size, never a length.
+ *
+ * So radio gets a WINDOW, not a ceiling. Reaching it is the expected shape of
+ * the source, not an error — stop paginating and return what we have. This also
+ * takes an RD import from ~21 quota units (walking to 1000) down to 3.
+ *
+ * Why 30 and not 50 (the first guess):
+ *  - JioSaavn load is the binding constraint, not YouTube quota. 50 tracks is
+ *    ~65 catalog searches per import, 30 is ~40. Quota is identical either way
+ *    (both fit one page), so the saving is entirely on the constrained side.
+ *  - Review burden scales linearly. At the measured ~60% auto rate, 50 tracks
+ *    leaves ~20 confirmations; 30 leaves ~12 — a quick check rather than a job.
+ *  - Relevance decays with depth. Radio starts at the seed and wanders: the
+ *    measured mixes ran Kannada film music at the top and Peppa Pig, Turkish
+ *    pop and Sinhala hymns further down. A tighter window is a better playlist,
+ *    not merely a cheaper one.
+ * 30 over 25 because ~60% auto minus the catalog misses still leaves ~18 usable
+ * tracks, which reads as a playlist; 25 can fall under 15, which does not.
+ */
+export const RADIO_WINDOW = 30;
+
+/**
+ * How many items to take, given what kind of thing this is.
+ *
+ * Radio is infinite and gets a window; a real playlist is finite and gets the
+ * ceiling. Callers should not hardcode either — the whole point is that the
+ * decision follows from classification, which happens before any API call.
+ */
+export function windowForKind(kind) {
+  return kind === KIND.VIDEO_RADIO || kind === KIND.PERSONAL_MIX
+    ? RADIO_WINDOW
+    : null;
+}
 
 export class YouTubeError extends Error {
   constructor(code, message, { statusCode = 502, expose = true } = {}) {
@@ -160,6 +208,11 @@ export async function fetchPlaylistItems(playlistId, opts) {
   const items = [];
   let pageToken;
   let units = 0;
+  // A window means "this source has no end, take the first N". A ceiling means
+  // "this source is finite but implausibly large, refuse it". Radio needs the
+  // first; a real playlist needs the second. Conflating them is what made a
+  // dry run burn 20 pages and then fail.
+  const window = opts?.maxItems ?? null;
 
   do {
     const data = await call(
@@ -176,11 +229,22 @@ export async function fetchPlaylistItems(playlistId, opts) {
         videoId,
         position: sn.position ?? items.length,
         title: sn.title ?? '',
-        channelTitle: sn.videoOwnerChannelTitle ?? sn.channelTitle ?? null,
+        // videoOwnerChannelTitle is the UPLOADER ("Raghu Dixit - Topic");
+        // channelTitle on an auto-generated mix is just "YouTube", which would
+        // destroy the Topic-channel artist signal if used as a fallback first.
+        channelTitle: sn.videoOwnerChannelTitle ?? null,
+        // The full video description arrives here — see the note at the top.
+        description: sn.description ?? '',
         unavailable: isUnavailableItem(sn),
       });
     }
     pageToken = data?.nextPageToken;
+
+    // Windowed source: we have enough. Not an error — stop and return.
+    if (window !== null && items.length >= window) {
+      items.length = window;
+      return { items, units, large: false, windowed: true };
+    }
 
     if (items.length > MAX_ITEMS) {
       throw new YouTubeError(
@@ -191,7 +255,7 @@ export async function fetchPlaylistItems(playlistId, opts) {
     }
   } while (pageToken);
 
-  return { items, units, large: items.length > LARGE_ITEMS };
+  return { items, units, large: items.length > LARGE_ITEMS, windowed: false };
 }
 
 /**
@@ -241,7 +305,10 @@ export async function fetchVideoDetails(videoIds, opts) {
  */
 export async function fetchPlaylistForImport(playlistId, opts) {
   const meta = await fetchPlaylistMeta(playlistId, opts);
-  const { items, units: itemUnits, large } = await fetchPlaylistItems(playlistId, opts);
+  const { items, units: itemUnits, large, windowed } = await fetchPlaylistItems(
+    playlistId,
+    opts,
+  );
 
   const availableIds = items.filter(i => !i.unavailable).map(i => i.videoId);
   const { details, units: videoUnits } = await fetchVideoDetails(availableIds, opts);
@@ -252,8 +319,11 @@ export async function fetchPlaylistForImport(playlistId, opts) {
       videoId: i.videoId,
       position: i.position,
       title: d?.title ?? i.title,
-      channelTitle: d?.channelTitle ?? i.channelTitle,
-      description: d?.description ?? '',
+      // Prefer the playlist item's uploader over videos.list's channelTitle:
+      // both are the uploader, but the playlistItem one survives when
+      // videos.list drops the video.
+      channelTitle: i.channelTitle ?? d?.channelTitle ?? null,
+      description: i.description || d?.description || '',
       durationSec: d?.durationSec ?? null,
       unavailable: i.unavailable || !d,
       isMusic: d?.isMusic ?? false,
@@ -265,6 +335,9 @@ export async function fetchPlaylistForImport(playlistId, opts) {
     meta,
     videos,
     large,
+    // The UI must say "we took the first N from this mix" rather than implying
+    // it imported the whole thing — there is no whole thing.
+    windowed,
     units: meta.units + itemUnits + videoUnits,
   };
 }

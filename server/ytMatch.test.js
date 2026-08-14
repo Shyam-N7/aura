@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseVideo,
+  parseVideoVariants,
+  isGenericTitle,
+  stripTrailingDecoration,
   parseArtTrackDescription,
   cleanTitle,
   extractMovie,
@@ -10,6 +13,9 @@ import {
 import {
   matchVideo,
   scoreCandidate,
+  titleSimilarity,
+  tokensAlike,
+  artistOverlap,
   fingerprint,
   fingerprintKeys,
   TIER,
@@ -81,6 +87,32 @@ describe('tier 2 — ugly real-world titles', () => {
     // Regression: the bare feat-strip used to leave an orphan "(" here,
     // producing "Perfect (". Bracketed credits must be removed whole.
     ['Perfect (feat. Beyoncé) (Official Audio)', 'Perfect'],
+
+    // The four below are VERBATIM titles from live RD mix responses captured
+    // 2026-08-14. Two of them were parsed wrongly before those responses
+    // existed, which is the argument for testing against real data rather than
+    // titles I invented.
+    //
+    // Amateur reupload separating credits with RUNS OF SPACES where a label
+    // would use pipes. Previously the entire credit list became the title.
+    [
+      'Munjane Manjalli   Audio Song   Just Maath Maathali   Kiccha Sudeep   Ramya   Raghu Dixit',
+      'Munjane Manjalli',
+    ],
+    // "Full Video Song" was eaten by the shorter "full video" pattern, leaving
+    // a stranded "Song": "Gira Gira Song".
+    [
+      'Gira Gira Full Video Song | Dear Comrade Tamil | Vijay Deverakonda | Rashmika | Bharat Kamma',
+      'Gira Gira',
+    ],
+    [
+      'Nee Amrithadhare Lyrical | Harish | Supriya Acharya | Dhyan | Ramya | Manomurthy | Amrithadhare',
+      'Nee Amrithadhare',
+    ],
+    [
+      'Oo Saathiya Lyrical | Love Reddy | Anjan Ramachendra, Shravani | Smaran Reddy | Prince Henry',
+      'Oo Saathiya',
+    ],
   ])('cleans %s', (raw, want) => {
     expect(cleanTitle(raw)).toBe(want);
   });
@@ -151,15 +183,70 @@ describe('scoring', () => {
     expect(r.best.score).toBeLessThanOrEqual(0.55);
   });
 
-  it('never auto-accepts on title alone with no artist agreement', () => {
+  // MEASURED on a real 50-track mix: 45 titles yield NO artist, and those were
+  // overwhelmingly correct matches stuck at 0.611 in review. So "no artist"
+  // cannot block auto-accept. What must block it is AMBIGUITY — two candidates
+  // we cannot separate without an artist.
+  it('auto-accepts an artist-less match when it is unambiguous and duration is exact', () => {
     const p = parseVideo({
-      title: 'Kesariya',
-      channelTitle: 'Random Uploads',
+      title: 'Gudugudiya Sedi Nodo',
+      channelTitle: 'Raghu Dixit Music',
       durationSec: 268,
     });
     const r = matchVideo(p, [
-      song({ title: 'Kesariya', artist: 'Some Other Singer', durationSec: 268 }),
+      song({ title: 'Gudugudiya Sedi Nodo', artist: 'Raghu Dixit', durationSec: 268 }),
     ]);
+    expect(r.best.breakdown.artist).toBeNull(); // unknown, not disagreeing
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  // The ambiguity guard was TRIED AND REMOVED — see the note in matchVideo.
+  // Three measured runs, two patches: it blocked correct matches every time and
+  // never prevented a wrong one, ending with a perfect 1.000 sent to review.
+  //
+  // This test now pins the DECISION that replaced it: when metadata genuinely
+  // cannot separate two candidates, take the catalog's own ranking rather than
+  // refusing to choose. searchSongs returns them ranked and the first is the
+  // canonical entry far more often than not.
+  it('resolves a genuine tie by catalog order instead of refusing', () => {
+    // Two masters 12s apart: outside any meaningful same-recording window, both
+    // inside the music-video duration tolerance, so they score IDENTICALLY.
+    const p = parseVideo({ title: 'Uyire', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      song({ id: 'first', title: 'Uyire', artist: 'Singer One', durationSec: 240 }),
+      song({ id: 'second', title: 'Uyire', artist: 'Singer Two', durationSec: 252 }),
+    ]);
+    expect(r.candidates[0].score).toBe(r.candidates[1].score); // genuinely tied
+    expect(r.tier).toBe(TIER.AUTO);
+    expect(r.best.candidate.id).toBe('first'); // catalog order wins
+  });
+
+  // The protections that DID earn their place stay, and this is the line
+  // between them: a tie is chosen, a contradiction is not.
+  it('still refuses when the evidence actively disagrees', () => {
+    const p = parseVideo({ title: 'Uyire', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      // Right title, but 4 minutes adrift — that is a different recording.
+      song({ id: 'a', title: 'Uyire', artist: 'Someone', durationSec: 480 }),
+    ]);
+    expect(r.tier).not.toBe(TIER.AUTO);
+  });
+
+  it('treats the same recording under two credits as one candidate', () => {
+    const p = parseVideo({ title: 'Naan Pizhai', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      song({ id: 'composer', title: 'Naan Pizhai', artist: 'Anirudh Ravichander', durationSec: 240 }),
+      song({ id: 'singer', title: 'Naan Pizhai', artist: 'Sid Sriram', durationSec: 240 }),
+    ]);
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  it('still blocks a match whose artist is known and DISAGREES', () => {
+    const p = parseVideo({ title: 'Imagine Dragons - Believer', channelTitle: 'x', durationSec: 204 });
+    const r = matchVideo(p, [
+      song({ title: 'Believer', artist: 'Completely Different Person', durationSec: 204 }),
+    ]);
+    expect(r.best.breakdown.artist).toBe(0); // known, disagreeing
     expect(r.tier).not.toBe(TIER.AUTO);
   });
 
@@ -260,5 +347,220 @@ describe('fingerprint cache key', () => {
       versions: [],
     };
     expect(fingerprint(kesariya)).not.toBe(fingerprint(other));
+  });
+});
+
+// All four titles below are VERBATIM from the first real dry run, where they
+// produced wrong or unusable parses.
+describe('ambiguous "A - B", measured both ways', () => {
+  it.each([
+    ['Title Track', true],
+    ['Title Track Video', true],
+    ['Official', true],
+    ['Theme', true],
+    ['Gudugudiya Sedi Nodo', false],
+    ['Tulasi', false],
+  ])('isGenericTitle(%s) === %s', (t, want) => {
+    expect(isGenericTitle(t)).toBe(want);
+  });
+
+  // Indian norm: song first. Guessing the Western order made the catalog search
+  // look for an artist name and find nothing.
+  it('offers both readings of "Tulasi - Sumedh K"', () => {
+    const v = parseVideoVariants({ title: 'Tulasi - Sumedh K', channelTitle: 'x' });
+    expect(v).toHaveLength(2);
+    expect(v.map(p => p.title)).toEqual(expect.arrayContaining(['Tulasi', 'Sumedh K']));
+  });
+
+  // A generic head is not ambiguous, it is wrong — so the swap must LEAD.
+  it('leads with the swap when the head is generic', () => {
+    const v = parseVideoVariants({ title: 'Title Track - Mugulu Nage', channelTitle: 'x' });
+    expect(v[0].title).toBe('Mugulu Nage');
+  });
+
+  it('does not guess at all for an Art Track — credits are structured', () => {
+    const v = parseVideoVariants({
+      title: 'whatever', channelTitle: 'Pritam - Topic', description: ART_DESC,
+    });
+    expect(v).toHaveLength(1);
+  });
+
+  it('picks the reading the CATALOG supports, not the one we guessed', () => {
+    const variants = parseVideoVariants({ title: 'Tulasi - Sumedh K', channelTitle: 'x', durationSec: 200 });
+    const r = matchVideo(variants, [
+      song({ id: 'right', title: 'Tulasi', artist: 'Sumedh K', durationSec: 200 }),
+    ]);
+    expect(r.best.candidate.id).toBe('right');
+    expect(r.best.parsed.title).toBe('Tulasi');
+  });
+
+  it('never offers the same song twice in the top three', () => {
+    const variants = parseVideoVariants({ title: 'Tulasi - Sumedh K', channelTitle: 'x', durationSec: 200 });
+    const r = matchVideo(variants, [
+      song({ id: 'a', title: 'Tulasi', artist: 'Sumedh K', durationSec: 200 }),
+      song({ id: 'b', title: 'Tulasi', artist: 'Someone Else', durationSec: 200 }),
+    ]);
+    const ids = r.candidates.map(c => c.candidate.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// Every case below is verbatim from the second real dry run (20% auto), where
+// each was a CORRECT match blocked by a different defect.
+describe('defects found by the second measured run', () => {
+  it('does not let a duplicate listing count as a rival candidate', () => {
+    // Six rows scored 0.917 with exact duration and went to review because
+    // JioSaavn returned the same recording twice and the runner-up tied.
+    const p = parseVideo({ title: 'Urugi Urugi', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      song({ id: 'a', title: 'Urugi Urugi', artist: 'Vignesh Ramakrishna', durationSec: 240 }),
+      song({ id: 'b', title: 'Urugi Urugi', artist: 'Vignesh Ramakrishna', album: 'Other', durationSec: 240 }),
+    ]);
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  it('treats a film name parsed as an artist as unknown, not as disagreement', () => {
+    // "Anbil Avan - Vinnaithaandi Varuvaayaa": the tail is the MOVIE. Scoring
+    // it 0 against the real singer blocked a perfect title + duration match.
+    //
+    // Note this goes through parseVideoVariants + matchVideo, the real path.
+    // The PRIMARY reading takes the film as the title; it is the swapped
+    // reading that needs the demotion, and only matchVideo sees both.
+    const variants = parseVideoVariants({
+      title: 'Anbil Avan - Vinnaithaandi Varuvaayaa',
+      channelTitle: 'Label',
+      durationSec: 300,
+    });
+    const r = matchVideo(variants, [
+      song({
+        title: 'Anbil Avan',
+        artist: 'A.R. Rahman',
+        album: 'Vinnaithaandi Varuvaayaa',
+        durationSec: 300,
+      }),
+    ]);
+    expect(r.best.parsed.title).toBe('Anbil Avan'); // the song, not the film
+    expect(r.best.breakdown.artist).toBeNull(); // demoted from 0
+    expect(r.best.breakdown.sanity).toBe(1); // counted as movie agreement
+    expect(r.tier).toBe(TIER.AUTO);
+  });
+
+  it('still counts a genuinely wrong artist against the match', () => {
+    // The demotion must not become a blanket amnesty: an artist that matches
+    // neither the singer nor the album is real disagreement.
+    const p = parseVideo({ title: 'Anbil Avan - Some Random Band', channelTitle: 'x', durationSec: 300 });
+    const s2 = scoreCandidate(
+      p,
+      song({ title: 'Anbil Avan', artist: 'A.R. Rahman', album: 'Vinnaithaandi Varuvaayaa', durationSec: 300 }),
+    );
+    expect(s2.breakdown.artist).toBe(0);
+  });
+
+  it.each([
+    ['Naan Pizhai Video', 'Naan Pizhai'],
+    ['Kaagadada Doniyalli 8K', 'Kaagadada Doniyalli'],
+    ['Venmathi Venmathiye Official', 'Venmathi Venmathiye'],
+    ['Gira Gira Song', 'Gira Gira'],
+    ['Poovukkul Official Quality Video', 'Poovukkul'],
+    // …but a real title made of those words must survive.
+    ['Video Games', 'Video Games'],
+  ])('strips trailing decoration: %s', (raw, want) => {
+    expect(cleanTitle(raw)).toBe(want);
+  });
+});
+
+// From the 52% run — the three classes still blocking correct matches.
+describe('defects found by the 52% run', () => {
+  // Indian titles are romanised by whoever typed them. Doubled vowels, dropped
+  // h's and -i/-y endings are normal variation, not different words, and exact
+  // token matching missed the song entirely.
+  it.each([
+    ['Just Math Mathalli', 'Just Maath Maathali'],
+    ['Oo Saathiya', 'O Saathiya'],
+    ['Ulidavaru Kandante', 'Ulidavaru Kandanthe'],
+    ['Uyire', 'Uyirey'],
+  ])('matches transliteration variants: %s ~ %s', (a, b) => {
+    expect(titleSimilarity(a, b)).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('does not collapse genuinely different titles', () => {
+    expect(titleSimilarity('Kesariya', 'Naatu Naatu')).toBe(0);
+    expect(tokensAlike('kesariya', 'kantara')).toBe(false);
+  });
+
+  // "Mugulu Nage - Title Track" put a LABEL in the artist slot, which scored 0
+  // against the real singer and held a t=1 d=1 match at 0.611.
+  it('treats a generic label in the artist slot as unknown', () => {
+    const p = parseVideo({ title: 'Mugulu Nage - Title Track', channelTitle: 'x', durationSec: 300 });
+    const r = matchVideo(parseVideoVariants({
+      title: 'Mugulu Nage - Title Track', channelTitle: 'x', durationSec: 300,
+    }), [song({ title: 'Mugulu Nage', artist: 'Sonu Nigam', durationSec: 300 })]);
+    expect(r.best.breakdown.artist).toBeNull();
+    expect(r.tier).toBe(TIER.AUTO);
+    expect(p.title).toBeTruthy();
+  });
+
+  // "Inthandham Song - Sita Ramam" kept "Song" on the title AFTER the split,
+  // dropping an otherwise exact match to 0.667.
+  it('strips decoration on each side of the split, not just the whole string', () => {
+    expect(stripTrailingDecoration('Inthandham Song')).toBe('Inthandham');
+    const v = parseVideoVariants({ title: 'Inthandham Song - Sita Ramam', channelTitle: 'x' });
+    expect(v.some(p => p.title === 'Inthandham')).toBe(true);
+  });
+});
+
+// From the 58% run. The first two are defects I introduced with the
+// transliteration fix — real data caught them within one round.
+describe('defects found by the 58% run', () => {
+  it('never scores a similarity above 1.0', () => {
+    // "Venmathi Venmathiye" vs "Venmathiye" reported t=1.333: "venmathi"
+    // matched "venmathiye" fuzzily, then "venmathiye" matched the SAME token
+    // exactly. shared must never exceed the smaller set.
+    expect(titleSimilarity('Venmathi Venmathiye', 'Venmathiye')).toBeLessThanOrEqual(1);
+    expect(titleSimilarity('Venmathi Venmathiye', 'Venmathiye')).toBeCloseTo(0.667, 2);
+  });
+
+  it('does not treat a short title inside a much longer one as a match', () => {
+    // Peppa Pig. "She's the Best" is fully contained in "She's The Greatest,
+    // She's The Best Mummy Pig" and scored 0.92 — containment is only evidence
+    // when the titles are comparable in length.
+    const s2 = titleSimilarity("She's the Best", "She's The Greatest, She's The Best Mummy Pig");
+    expect(s2).toBeLessThan(0.85);
+  });
+
+  it('still rewards containment when the lengths ARE comparable', () => {
+    // The guard must not throw out the case it was built for.
+    expect(titleSimilarity('Wheels On The Birthday Bus', 'The Wheels on the Bus'))
+      .toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('drops an orphan bracket left by a strip', () => {
+    // Three KATSEYE rows arrived as "Bel Air (" — cosmetic for scoring, but it
+    // reaches the review screen looking like a broken app.
+    expect(cleanTitle('Bel Air (')).toBe('Bel Air');
+    expect(cleanTitle('Kesariya (From "Brahmastra")')).toBe('Kesariya (From "Brahmastra")');
+  });
+});
+
+describe('artist credit', () => {
+  // MEASURED: three KATSEYE rows capped at 0.811 because an EXACT, complete
+  // artist match scored 0.6 — full credit needed two shared tokens, which a
+  // one-word name can never reach.
+  it('gives full credit for a complete single-word artist match', () => {
+    expect(artistOverlap(['KATSEYE'], 'Katseye')).toBe(1);
+    expect(artistOverlap(['Milano'], 'Milano')).toBe(1);
+  });
+
+  // …but the surname case must stay weak: half of Bollywood shares one.
+  it('keeps a lone surname partial', () => {
+    expect(artistOverlap(['Singh'], 'Arijit Singh')).toBe(0.6);
+  });
+
+  it('tolerates transliteration in artist names too', () => {
+    expect(artistOverlap(['Arjit Singh'], 'Arijit Singh')).toBe(1);
+  });
+
+  it('still reports genuine disagreement as zero', () => {
+    expect(artistOverlap(['Nobody'], 'Someone Else')).toBe(0);
   });
 });
