@@ -196,26 +196,36 @@ describe('scoring', () => {
     expect(r.tier).toBe(TIER.AUTO);
   });
 
-  it('refuses to auto-accept an artist-less match when a genuine rival exists', () => {
-    // The coin-flip case: two DIFFERENT recordings sharing a name, told apart
-    // by runtime. Both score near-identically on title, nothing on the YouTube
-    // side breaks the tie, so it must go to review.
-    //
-    // The rival deliberately differs in DURATION rather than only in artist.
-    // MEASURED: this catalog lists one recording under several credits
-    // (composer on one row, playback singer on another), so "same title, same
-    // runtime, different credit" is a duplicate, not a rival — treating it as
-    // one sent a perfect 1.000 match to review.
-    // Two different masters 12s apart: outside the 3s same-recording window, but
-    // both inside the music-video duration tolerance, so they score IDENTICALLY
-    // and nothing can separate them. That is the real coin flip.
+  // The ambiguity guard was TRIED AND REMOVED — see the note in matchVideo.
+  // Three measured runs, two patches: it blocked correct matches every time and
+  // never prevented a wrong one, ending with a perfect 1.000 sent to review.
+  //
+  // This test now pins the DECISION that replaced it: when metadata genuinely
+  // cannot separate two candidates, take the catalog's own ranking rather than
+  // refusing to choose. searchSongs returns them ranked and the first is the
+  // canonical entry far more often than not.
+  it('resolves a genuine tie by catalog order instead of refusing', () => {
+    // Two masters 12s apart: outside any meaningful same-recording window, both
+    // inside the music-video duration tolerance, so they score IDENTICALLY.
     const p = parseVideo({ title: 'Uyire', channelTitle: 'Label', durationSec: 240 });
     const r = matchVideo(p, [
-      song({ id: 'a', title: 'Uyire', artist: 'Singer One', durationSec: 240 }),
-      song({ id: 'b', title: 'Uyire', artist: 'Singer Two', durationSec: 252 }),
+      song({ id: 'first', title: 'Uyire', artist: 'Singer One', durationSec: 240 }),
+      song({ id: 'second', title: 'Uyire', artist: 'Singer Two', durationSec: 252 }),
     ]);
     expect(r.candidates[0].score).toBe(r.candidates[1].score); // genuinely tied
-    expect(r.tier).toBe(TIER.REVIEW);
+    expect(r.tier).toBe(TIER.AUTO);
+    expect(r.best.candidate.id).toBe('first'); // catalog order wins
+  });
+
+  // The protections that DID earn their place stay, and this is the line
+  // between them: a tie is chosen, a contradiction is not.
+  it('still refuses when the evidence actively disagrees', () => {
+    const p = parseVideo({ title: 'Uyire', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      // Right title, but 4 minutes adrift — that is a different recording.
+      song({ id: 'a', title: 'Uyire', artist: 'Someone', durationSec: 480 }),
+    ]);
+    expect(r.tier).not.toBe(TIER.AUTO);
   });
 
   it('treats the same recording under two credits as one candidate', () => {

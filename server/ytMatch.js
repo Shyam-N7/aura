@@ -27,10 +27,6 @@ export const THRESHOLDS = {
   versionMismatchCap: 0.55,
   // Nor can a language disagreement.
   languageMismatchCap: 0.8,
-  // How far clear the top candidate must be before an artist-less match may
-  // auto-accept. Two near-tied candidates with no artist to separate them is a
-  // coin flip, not a match.
-  ambiguityMargin: 0.05,
 };
 
 // Duration is weighted by WHERE the video came from, because its reliability
@@ -261,35 +257,27 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   //                     coin flip — exactly the same-title-different-artist
   //                     case this catalog is full of. Send it to review.
   const artistKnown = best.breakdown.artist !== null;
-  //   Two entries of the SAME recording are not competing candidates. JioSaavn
-  //   lists one song across several albums, so a near-tied runner-up is usually
-  //   a duplicate listing, not a rival. MEASURED: six rows scored 0.917 with an
-  //   exact duration and were sent to review purely because a duplicate tied
-  //   with them. Only a runner-up with a DIFFERENT artist is genuine ambiguity.
-  const second = unique[1];
-  // Identity by TITLE + DURATION, not by artist string.
+  //   NO ambiguity guard. It was tried and removed on evidence.
   //
-  // MEASURED: matching on artist did not work, because JioSaavn lists one
-  // recording under different credits — composer on one row, playback singer on
-  // another. #22 "Naan Pizhai" scored a PERFECT 1.000 and was still sent to
-  // review because the runner-up carried a different credit for the same track.
-  // Two rows with the same title and the same runtime are the same recording,
-  // whatever the credit says.
-  const sameRecording =
-    second &&
-    titleSimilarity(best.candidate?.title ?? '', second.candidate?.title ?? '') >= 0.9 &&
-    Math.abs((best.candidate?.durationSec ?? -1) - (second.candidate?.durationSec ?? -2)) <= 3;
-  const unambiguous =
-    !second ||
-    sameRecording ||
-    best.score - second.score > THRESHOLDS.ambiguityMargin;
-  // Movie/album agreement is independent evidence and substitutes for an exact
-  // duration. MEASURED: #23 and #49 matched their film exactly (sanity=1) but
-  // ran 0.875 / 0.725 on duration — a video edit, not a different song — and
-  // were blocked by a duration rule that had no other evidence to weigh.
+  //   Three consecutive measured runs, two patches: it blocked correct matches
+  //   every time and never once prevented a wrong one. The final proof was a
+  //   candidate scoring a PERFECT 1.000 sent to review. The mechanism is that
+  //   the music-video duration tolerance is +/-40s, so two candidates both
+  //   score d=1 while sitting 20s apart from each other — read as rivals by any
+  //   same-recording window narrow enough to be meaningful.
+  //
+  //   When two candidates genuinely cannot be separated by metadata, the
+  //   catalog's own relevance order is a better tiebreak than refusing to
+  //   choose: searchSongs returns them ranked, and the first is the canonical
+  //   entry far more often than not. A wrong auto-accept is visible in the
+  //   playlist and one tap to fix; a correct match buried in review costs the
+  //   user a decision on every single track. Those are not symmetric.
+  //
+  //   If wrong auto-accepts turn up in real use, the fix is the user_confirmed
+  //   signal in yt_match_cache — real corrections beat a guard invented here.
   const corroborated = artistKnown
     ? best.breakdown.artist > 0
-    : (best.breakdown.duration >= 0.9 || best.breakdown.sanity > 0) && unambiguous;
+    : best.breakdown.duration >= 0.9 || best.breakdown.sanity > 0;
 
   if (best.score >= auto && corroborated) {
     return { tier: TIER.AUTO, best, candidates: unique.slice(0, 3) };
