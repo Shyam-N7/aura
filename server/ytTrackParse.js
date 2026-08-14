@@ -38,6 +38,16 @@ const NOISE_PATTERNS = [
   // "Gira Gira Full Video Song" cleaned to "Gira Gira Song".
   /\b(?:full\s+)?(?:video|audio|lyrical)\s+song\b/gi,
   /\b(?:full\s+song|full\s+video|video\s+song|full\s+audio)\b/gi,
+  // "<Song> - Title Track" is the standard Kannada/Telugu label shape for a
+  // film's namesake song. GENERIC_TITLES has known "title track" was meaningless
+  // all along, but only downstream — by then the "A - B" split had already made
+  // it an ARTIST, which spawned a whole second reading titled "Title Track" and
+  // spent one of only two catalogue searches per video on it. Stripping it here,
+  // as decoration, kills that at the source. Bracketed forms too, since
+  // "(Title Track)" is just as common as the dashed one.
+  /\(\s*title\s+(?:track|song)\s*\)/gi,
+  /\[\s*title\s+(?:track|song)\s*\]/gi,
+  /\btitle\s+(?:track|song)\b/gi,
   /\b(?:hd|hq|4k|1080p|720p|remaster(?:ed)?(?:\s+\d{4})?)\b/gi,
   /\bwith\s+lyrics\b/gi,
   /\bout\s+now\b/gi,
@@ -179,7 +189,15 @@ export function cleanTitle(raw) {
   // 0.667 and pushing a correct match out of auto. Only stripped at the END —
   // mid-title these words can be part of a real name.
   s = stripTrailingDecoration(s);
-  return s.replace(/\s{2,}/g, ' ').replace(/[\s\-–—_,.]+$/g, '').trim();
+  // Separator debris at BOTH ends. The trailing strip has always been here; the
+  // leading one was needed once a noise phrase could sit at the head — the
+  // existing suite caught it immediately: "Title Track - Mugulu Nage" cleaned to
+  // "- Mugulu Nage". Symmetric, because a title never legitimately opens with a
+  // dangling dash or comma either.
+  return s.replace(/\s{2,}/g, ' ')
+    .replace(/^[\s\-–—_,.]+/g, '')
+    .replace(/[\s\-–—_,.]+$/g, '')
+    .trim();
 }
 
 /** Pull `(From "Movie")` out, returning the movie and the title without it. */
@@ -300,6 +318,13 @@ export function parseVideoVariants(video) {
 
   // A generic head is not ambiguous — it is simply wrong, so the swap leads.
   if (swapped && isGenericTitle(primary.title)) return [swapped, primary];
+  // The mirror case, and the one that was costing us: if the SWAP's title is
+  // generic, the swap is not a rival reading at all — nobody released a song
+  // called "Title Track" or "Official Video". Emitting it anyway spends one of
+  // only two catalogue searches per video (MAX_SEARCHES_PER_ITEM) on a query
+  // built from a phrase isGenericTitle already rejects everywhere else. Drop it
+  // rather than rank it: an ambiguity with one meaningful side is not ambiguous.
+  if (swapped && isGenericTitle(swapped.title)) return [primary];
   return swapped ? [primary, swapped] : [primary];
 }
 

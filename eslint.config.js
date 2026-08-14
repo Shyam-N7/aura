@@ -43,6 +43,14 @@ export default [
     },
   },
   {
+    // Node scripts. The block above matches only .js/.jsx, so no globals block
+    // applied to .mjs at all and every `console` in scripts/ read as undefined
+    // — scripts/gen-og.mjs has been failing this way, unnoticed, because
+    // `npm run lint` is `eslint src` and never reaches the directory.
+    files: ['**/*.mjs'],
+    languageOptions: { globals: { ...globals.node } },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**'],
   },
 ];
