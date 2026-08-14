@@ -20,13 +20,44 @@
 // consume the entire daily quota. Catalog matching searches JioSaavn, not
 // YouTube, and it must stay that way.
 
+import { KIND } from './youtubeUrl.js';
+
 const API = 'https://www.googleapis.com/youtube/v3';
 const PAGE = 50;
 
-/** Hard ceiling. Above this we refuse rather than burn quota on a mistake. */
+/** Hard ceiling for a FINITE playlist. Above this we refuse rather than burn
+ *  quota on a mistake. */
 export const MAX_ITEMS = 1000;
 /** Above this we still import, but the caller should warn. */
 export const LARGE_ITEMS = 500;
+
+/**
+ * How many items to take from RADIO.
+ *
+ * MEASURED 2026-08-14: an RD mix is effectively INFINITE. A dry run against
+ * RDTkRv5-ELOyw paginated past 1000 items and tripped MAX_ITEMS — the cap doing
+ * its job, and revealing that "import the mix" is not a well-defined operation
+ * the way "import a playlist" is. YouTube keeps generating; the `totalResults`
+ * in the response is the page size, never a length.
+ *
+ * So radio gets a WINDOW, not a ceiling. Reaching it is the expected shape of
+ * the source, not an error — stop paginating and return what we have. This also
+ * takes an RD import from ~21 quota units (walking to 1000) down to 3.
+ */
+export const RADIO_WINDOW = 50;
+
+/**
+ * How many items to take, given what kind of thing this is.
+ *
+ * Radio is infinite and gets a window; a real playlist is finite and gets the
+ * ceiling. Callers should not hardcode either — the whole point is that the
+ * decision follows from classification, which happens before any API call.
+ */
+export function windowForKind(kind) {
+  return kind === KIND.VIDEO_RADIO || kind === KIND.PERSONAL_MIX
+    ? RADIO_WINDOW
+    : null;
+}
 
 export class YouTubeError extends Error {
   constructor(code, message, { statusCode = 502, expose = true } = {}) {
@@ -164,6 +195,11 @@ export async function fetchPlaylistItems(playlistId, opts) {
   const items = [];
   let pageToken;
   let units = 0;
+  // A window means "this source has no end, take the first N". A ceiling means
+  // "this source is finite but implausibly large, refuse it". Radio needs the
+  // first; a real playlist needs the second. Conflating them is what made a
+  // dry run burn 20 pages and then fail.
+  const window = opts?.maxItems ?? null;
 
   do {
     const data = await call(
@@ -191,6 +227,12 @@ export async function fetchPlaylistItems(playlistId, opts) {
     }
     pageToken = data?.nextPageToken;
 
+    // Windowed source: we have enough. Not an error — stop and return.
+    if (window !== null && items.length >= window) {
+      items.length = window;
+      return { items, units, large: false, windowed: true };
+    }
+
     if (items.length > MAX_ITEMS) {
       throw new YouTubeError(
         'YT_TOO_LARGE',
@@ -200,7 +242,7 @@ export async function fetchPlaylistItems(playlistId, opts) {
     }
   } while (pageToken);
 
-  return { items, units, large: items.length > LARGE_ITEMS };
+  return { items, units, large: items.length > LARGE_ITEMS, windowed: false };
 }
 
 /**
@@ -250,7 +292,10 @@ export async function fetchVideoDetails(videoIds, opts) {
  */
 export async function fetchPlaylistForImport(playlistId, opts) {
   const meta = await fetchPlaylistMeta(playlistId, opts);
-  const { items, units: itemUnits, large } = await fetchPlaylistItems(playlistId, opts);
+  const { items, units: itemUnits, large, windowed } = await fetchPlaylistItems(
+    playlistId,
+    opts,
+  );
 
   const availableIds = items.filter(i => !i.unavailable).map(i => i.videoId);
   const { details, units: videoUnits } = await fetchVideoDetails(availableIds, opts);
@@ -277,6 +322,9 @@ export async function fetchPlaylistForImport(playlistId, opts) {
     meta,
     videos,
     large,
+    // The UI must say "we took the first N from this mix" rather than implying
+    // it imported the whole thing — there is no whole thing.
+    windowed,
     units: meta.units + itemUnits + videoUnits,
   };
 }

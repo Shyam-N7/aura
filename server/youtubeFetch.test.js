@@ -7,7 +7,10 @@ import {
   isUnavailableItem,
   YouTubeError,
   MAX_ITEMS,
+  RADIO_WINDOW,
+  windowForKind,
 } from './youtubeFetch.js';
+import { KIND } from './youtubeUrl.js';
 
 // A fake fetch driven by a queue of responses, so every path below is exercised
 // without a network or an API key. Also records the URLs, which is how the
@@ -268,5 +271,47 @@ describe('measured RD mix response', () => {
 
   it('does not mistake a mix item for unavailable', async () => {
     expect(isUnavailableItem(realItem.snippet)).toBe(false);
+  });
+});
+
+// MEASURED 2026-08-14: a real RD mix paginated past 1000 items in a dry run and
+// tripped MAX_ITEMS. Radio has no end — YouTube keeps generating, and
+// pageInfo.totalResults is the page size, not a length. So radio takes a WINDOW
+// and stopping at it is success, not failure.
+describe('radio is infinite, so it gets a window not a ceiling', () => {
+  const page = n => Array.from({ length: 50 }, (_, i) => plItem(`v${n}-${i}`, 't'));
+
+  it('stops at the window instead of walking toward the cap', async () => {
+    // Endless pages, exactly like real radio.
+    const f = fakeFetch(
+      Array.from({ length: 40 }, (_, n) => ({
+        body: { items: page(n), nextPageToken: 'more' },
+      })),
+    );
+    const r = await fetchPlaylistItems('RDxxxx', { ...opts(f), maxItems: RADIO_WINDOW });
+    expect(r.items).toHaveLength(RADIO_WINDOW);
+    expect(r.windowed).toBe(true);
+    // The cost point: one page, not twenty. A dry run burned ~21 units before
+    // this existed.
+    expect(r.units).toBe(1);
+  });
+
+  it('still refuses a genuinely oversized FINITE playlist', async () => {
+    const f = fakeFetch(
+      Array.from({ length: MAX_ITEMS / 50 + 1 }, () => ({
+        body: { items: page(0), nextPageToken: 'more' },
+      })),
+    );
+    await expect(fetchPlaylistItems('PLx', opts(f))).rejects.toMatchObject({
+      code: 'YT_TOO_LARGE',
+    });
+  });
+
+  it('derives the window from the classification, not a hardcoded caller', () => {
+    expect(windowForKind(KIND.VIDEO_RADIO)).toBe(RADIO_WINDOW);
+    expect(windowForKind(KIND.PERSONAL_MIX)).toBe(RADIO_WINDOW);
+    expect(windowForKind(KIND.USER_PLAYLIST)).toBeNull();
+    expect(windowForKind(KIND.ALBUM)).toBeNull();
+    expect(windowForKind(KIND.EDITORIAL_MIX)).toBeNull();
   });
 });
