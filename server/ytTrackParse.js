@@ -96,6 +96,26 @@ const EMOJI_GLUE = /[\uFE0E\uFE0F\u200D]/g;
  */
 const FROM_MOVIE = /\(\s*from\s*["“”'']([^"“”'']+)["“”'']\s*\)/i;
 
+/**
+ * Trailing decoration, stripped repeatedly because it stacks.
+ * Exported and applied to EACH SIDE of an "A - B" split as well as the whole
+ * string: MEASURED, "Inthandham Song - Sita Ramam" kept "Song" on the title
+ * after the split, dropping similarity to 0.667 on an otherwise exact match.
+ * Only ever at the END — mid-title these words belong to real names.
+ */
+export function stripTrailingDecoration(input) {
+  let s = String(input ?? '');
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(
+      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|quality|hd|hq|4k|8k|full)\b\s*$/i,
+      '',
+    );
+  } while (s !== prev);
+  return s.trim();
+}
+
 /** Collapse to comparable tokens. Diacritics folded, punctuation dropped. */
 export function tokens(s) {
   if (!s) return [];
@@ -143,14 +163,7 @@ export function cleanTitle(raw) {
   // "8K"/"Song", each dragging title similarity from 1.0 down to ~0.92 or
   // 0.667 and pushing a correct match out of auto. Only stripped at the END —
   // mid-title these words can be part of a real name.
-  let prev;
-  do {
-    prev = s;
-    s = s.replace(
-      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|quality|hd|hq|4k|8k|full)\b\s*$/i,
-      '',
-    );
-  } while (s !== prev);
+  s = stripTrailingDecoration(s);
   return s.replace(/\s{2,}/g, ' ').replace(/[\s\-–—_,.]+$/g, '').trim();
 }
 
@@ -310,12 +323,12 @@ export function parseVideo(video) {
   let artists = topicArtist ? [topicArtist] : [];
   const split = rest.match(/^(.{2,60}?)\s+[-–—]\s+(.{2,})$/);
   if (split && !topicArtist) {
-    artists = [split[1].trim()];
-    title = split[2].trim();
+    artists = [stripTrailingDecoration(split[1].trim())];
+    title = stripTrailingDecoration(split[2].trim());
   } else if (split && topicArtist) {
     // A Topic channel already told us the artist; the hyphen is then usually
     // "Artist - Title" repeating it, so prefer the right-hand side as title.
-    title = split[2].trim();
+    title = stripTrailingDecoration(split[2].trim());
   }
 
   return {

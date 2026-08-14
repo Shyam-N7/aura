@@ -15,7 +15,7 @@
 // decodeEntities on title/artist/album. The YouTube side has had nothing done
 // to it, which is why ytTrackParse exists.
 
-import { tokens, versionsIn, extractMovie, SOURCE } from './ytTrackParse.js';
+import { tokens, versionsIn, extractMovie, isGenericTitle, SOURCE } from './ytTrackParse.js';
 
 export const TIER = { AUTO: 'auto', REVIEW: 'review', UNMATCHED: 'unmatched' };
 
@@ -49,12 +49,55 @@ const BASE_WEIGHTS = { title: 0.45, artist: 0.3, sanity: 0.05 };
  * "Kesariya (From Brahmastra)" shape. Containment needs 2+ tokens on the
  * smaller side so a single shared word cannot score 1.0.
  */
+/** Levenshtein, iterative single-row. Tokens are short; this is never hot. */
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(
+        prev[j] + 1,
+        row[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Do two tokens mean the same word, allowing for TRANSLITERATION variance?
+ *
+ * MEASURED: Indian song titles are romanised inconsistently by whoever typed
+ * them, and exact token matching therefore misses correct songs outright:
+ *   "Just Math Mathalli"  vs  "Just Maath Maathali"   scored 0.333
+ *   "Oo Saathiya"         vs  "O Saathiya"            scored 0.5
+ * Both are the same song. Doubled vowels, dropped h's and -i/-y endings are
+ * the normal variation, not a different word.
+ */
+export function tokensAlike(a, b) {
+  if (a === b) return true;
+  const d = editDistance(a, b);
+  if (d === 1) return true; // oo/o, math/maath
+  return d <= 2 && Math.max(a.length, b.length) >= 7; // mathalli/maathali
+}
+
 export function titleSimilarity(a, b) {
   const A = new Set(tokens(a));
   const B = new Set(tokens(b));
   if (A.size === 0 || B.size === 0) return 0;
   let shared = 0;
-  for (const t of A) if (B.has(t)) shared++;
+  const used = new Set();
+  for (const t of A) {
+    if (B.has(t)) { shared++; used.add(t); continue; }
+    // Fall back to a transliteration-tolerant match, one partner each.
+    for (const u of B) {
+      if (!used.has(u) && tokensAlike(t, u)) { shared++; used.add(u); break; }
+    }
+  }
   const dice = (2 * shared) / (A.size + B.size);
   const small = Math.min(A.size, B.size);
   const containment = shared / small;
@@ -77,7 +120,12 @@ export function titleSimilarity(a, b) {
  */
 export function artistOverlap(ytArtists, candidateArtist) {
   const cand = new Set(tokens(candidateArtist));
-  const yt = (ytArtists ?? []).flatMap(a => tokens(a));
+  // A generic label is not an artist. MEASURED: "Mugulu Nage - Title Track"
+  // put "Title Track" in the artist slot, which then scored 0 against the real
+  // singer and blocked a t=1 d=1 match at 0.611. Unknown, not disagreeing.
+  const yt = (ytArtists ?? [])
+    .filter(a => !isGenericTitle(a))
+    .flatMap(a => tokens(a));
   if (cand.size === 0 || yt.length === 0) return null;
   const ytSet = new Set(yt);
   let shared = 0;

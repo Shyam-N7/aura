@@ -3,6 +3,7 @@ import {
   parseVideo,
   parseVideoVariants,
   isGenericTitle,
+  stripTrailingDecoration,
   parseArtTrackDescription,
   cleanTitle,
   extractMovie,
@@ -12,6 +13,8 @@ import {
 import {
   matchVideo,
   scoreCandidate,
+  titleSimilarity,
+  tokensAlike,
   fingerprint,
   fingerprintKeys,
   TIER,
@@ -462,5 +465,45 @@ describe('defects found by the second measured run', () => {
     ['Video Games', 'Video Games'],
   ])('strips trailing decoration: %s', (raw, want) => {
     expect(cleanTitle(raw)).toBe(want);
+  });
+});
+
+// From the 52% run — the three classes still blocking correct matches.
+describe('defects found by the 52% run', () => {
+  // Indian titles are romanised by whoever typed them. Doubled vowels, dropped
+  // h's and -i/-y endings are normal variation, not different words, and exact
+  // token matching missed the song entirely.
+  it.each([
+    ['Just Math Mathalli', 'Just Maath Maathali'],
+    ['Oo Saathiya', 'O Saathiya'],
+    ['Ulidavaru Kandante', 'Ulidavaru Kandanthe'],
+    ['Uyire', 'Uyirey'],
+  ])('matches transliteration variants: %s ~ %s', (a, b) => {
+    expect(titleSimilarity(a, b)).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('does not collapse genuinely different titles', () => {
+    expect(titleSimilarity('Kesariya', 'Naatu Naatu')).toBe(0);
+    expect(tokensAlike('kesariya', 'kantara')).toBe(false);
+  });
+
+  // "Mugulu Nage - Title Track" put a LABEL in the artist slot, which scored 0
+  // against the real singer and held a t=1 d=1 match at 0.611.
+  it('treats a generic label in the artist slot as unknown', () => {
+    const p = parseVideo({ title: 'Mugulu Nage - Title Track', channelTitle: 'x', durationSec: 300 });
+    const r = matchVideo(parseVideoVariants({
+      title: 'Mugulu Nage - Title Track', channelTitle: 'x', durationSec: 300,
+    }), [song({ title: 'Mugulu Nage', artist: 'Sonu Nigam', durationSec: 300 })]);
+    expect(r.best.breakdown.artist).toBeNull();
+    expect(r.tier).toBe(TIER.AUTO);
+    expect(p.title).toBeTruthy();
+  });
+
+  // "Inthandham Song - Sita Ramam" kept "Song" on the title AFTER the split,
+  // dropping an otherwise exact match to 0.667.
+  it('strips decoration on each side of the split, not just the whole string', () => {
+    expect(stripTrailingDecoration('Inthandham Song')).toBe('Inthandham');
+    const v = parseVideoVariants({ title: 'Inthandham Song - Sita Ramam', channelTitle: 'x' });
+    expect(v.some(p => p.title === 'Inthandham')).toBe(true);
   });
 });
