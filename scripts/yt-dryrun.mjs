@@ -55,6 +55,18 @@ if (limit != null && !Number.isFinite(limit)) {
   process.exit(2);
 }
 
+// PowerShell does not use "\" for line continuation — that is bash. A command
+// copied from a bash-style example passes the backslash through as the FIRST
+// argument, so it lands here as the url and the real link is never read. It
+// surfaced as a raw LinkError stack trace, which tells you nothing about the
+// actual mistake.
+if (url === '\\' || url === '`') {
+  console.error(`"${url}" is a shell line-continuation character, not a url — it was passed as an argument.`);
+  console.error('In PowerShell, put the whole command on ONE line:');
+  console.error('  node --env-file=.env.local scripts/yt-dryrun.mjs "<url>"');
+  process.exit(2);
+}
+
 if (!url) {
   console.error('usage: node --env-file=.env.local scripts/yt-dryrun.mjs "<url>" [--limit N] [--json]');
   process.exit(2);
@@ -70,15 +82,49 @@ if (!process.env.YOUTUBE_API_KEY) {
 const pad = (s, n) => String(s ?? '').slice(0, n).padEnd(n);
 const pct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : '—');
 
-const link = parseYouTubeLink(url);
+// A bad link or an upstream refusal is a USER-FACING outcome here, exactly as it
+// is in the app — both carry a .code, and the server already writes a sentence
+// for each. Letting them reach the terminal as a stack trace buries the sentence
+// under a call stack and makes an ordinary mistake look like a crash.
+const die = (err, what) => {
+  // Deliberately IGNORES err.expose, which the server sets false on YT_UPSTREAM
+  // so an end user never sees upstream detail. That is right for the app and
+  // wrong here: the audience for this script is whoever is debugging it, and
+  // "YouTube returned an error" without the code is a dead end.
+  if (err?.code) console.error(`${err.code}: ${err.message}`);
+  else console.error(`${what} failed: ${err?.message ?? err}`);
+
+  // By far the most common cause, and not guessable from the message.
+  if (err?.code === 'YT_UPSTREAM') {
+    console.error('  Usually the key: check YOUTUBE_API_KEY is valid, that the'
+      + ' YouTube Data API v3 is enabled for that project, and that any HTTP-referrer'
+      + ' restriction on it does not block a server-side call.');
+  }
+  if (process.env.DEBUG) console.error(err);
+  else console.error('  (set DEBUG=1 for the full error)');
+  process.exit(1);
+};
+
+let link;
+try {
+  link = parseYouTubeLink(url);
+} catch (err) {
+  die(err, 'link parse');
+}
 console.error(`# ${link.kind} ${link.playlistId} — fetching…`);
 
-const { videos, meta, windowed, units } = await fetchPlaylistForImport(link.playlistId, {
-  apiKey: process.env.YOUTUBE_API_KEY,
-  // Same derivation importJobs.fetchPhase uses. Omitting it does not fall back
-  // to a default — it removes the window entirely.
-  maxItems: limit ?? windowForKind(link.kind),
-});
+let fetched;
+try {
+  fetched = await fetchPlaylistForImport(link.playlistId, {
+    apiKey: process.env.YOUTUBE_API_KEY,
+    // Same derivation importJobs.fetchPhase uses. Omitting it does not fall back
+    // to a default — it removes the window entirely.
+    maxItems: limit ?? windowForKind(link.kind),
+  });
+} catch (err) {
+  die(err, 'youtube fetch');
+}
+const { videos, meta, windowed, units } = fetched;
 
 // Same filter as fetchPhase: an unavailable video has no title to match on.
 const usable = videos.filter(v => !v.unavailable && v.title);
