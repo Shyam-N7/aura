@@ -192,10 +192,21 @@ export function scoreCandidate(parsed, candidate) {
   // Sanity: movie agreement, then year. Small by design — it breaks ties, it
   // must never decide a match.
   let sanity = 0;
-  const movieA = (parsed.movie ?? '').toLowerCase();
-  const movieB = (candMovie.movie ?? candidate.album ?? '').toLowerCase();
-  if (movieA && movieB && (movieB.includes(movieA) || movieA.includes(movieB))) sanity = 1;
-  else if (parsed.year && candidate.year && parsed.year === candidate.year) sanity = 0.5;
+  // Compared as TOKEN SETS, not raw substrings. The substring form matched
+  // "Sir" inside "Sirivennela" — harmless while the only movie source was an
+  // explicit (From "…"), but movies are now also recovered from pipe segments,
+  // and sanity > 0 is one of the two routes to AUTO. A false agreement there
+  // does not just nudge a score, it silently accepts a wrong track.
+  // Token-subset still allows the real case, "Pushpa" against the album
+  // "Pushpa: The Rise", which is the shape this needs to keep.
+  const movieA = tokens(parsed.movie ?? '');
+  const movieB = tokens(candMovie.movie ?? candidate.album ?? '');
+  if (movieA.length && movieB.length) {
+    const [small, large] = movieA.length <= movieB.length ? [movieA, movieB] : [movieB, movieA];
+    const set = new Set(large);
+    if (small.every(t => set.has(t))) sanity = 1;
+  }
+  if (!sanity && parsed.year && candidate.year && parsed.year === candidate.year) sanity = 0.5;
 
   // The hyphen tail is very often the MOVIE, not an artist.
   //
