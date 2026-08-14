@@ -30,14 +30,20 @@ const NOISE_PATTERNS = [
   /\((?:official\s+)?(?:audio|lyric[s]?|lyrical|visuali[sz]er|teaser|trailer)\)/gi,
   /\[(?:official\s+)?(?:music\s+)?video\]/gi,
   /\[(?:audio|lyric[s]?|lyrical|visuali[sz]er|hd|hq|4k|full\s*hd)\]/gi,
-  /\((?:full\s+)?(?:video|song|movie)\s*(?:song)?\)/gi,
+  /\((?:full\s+)?(?:video|songs?|movie)\s*(?:songs?)?\)/gi,
   /\b(?:official\s+video|official\s+audio|official\s+trailer)\b/gi,
   /\b(?:lyric[s]?\s*video|lyrical\s*video|lyrical)\b/gi,
   // Longest first: "Full Video Song" must not be eaten by "full video", which
   // strands a bare "Song" in the title. MEASURED on a real mix item —
   // "Gira Gira Full Video Song" cleaned to "Gira Gira Song".
-  /\b(?:full\s+)?(?:video|audio|lyrical)\s+song\b/gi,
-  /\b(?:full\s+song|full\s+video|video\s+song|full\s+audio)\b/gi,
+  //
+  // The PLURAL was missing everywhere, and it failed in both directions —
+  // MEASURED on a 26-row Telugu playlist: "Evaraina Eppudaina Audio Songs |
+  // Jukebox" kept the whole phrase and scored 0.000, while "Full Video Songs"
+  // stripped only its head and left "X Songs" — precisely the orphan the note
+  // above exists to prevent. Jukebox and compilation uploads are always plural.
+  /\b(?:full\s+)?(?:video|audio|lyrical)\s+songs?\b/gi,
+  /\b(?:full\s+songs?|full\s+video|video\s+songs?|full\s+audio)\b/gi,
   // "<Song> - Title Track" is the standard Kannada/Telugu label shape for a
   // film's namesake song. GENERIC_TITLES has known "title track" was meaningless
   // all along, but only downstream — by then the "A - B" split had already made
@@ -127,7 +133,7 @@ export function stripTrailingDecoration(input) {
       // "<song> Lyric | <cast>" is one of the most common Tamil/Telugu label
       // title shapes there is — so the drag was being paid across a whole class
       // of rows, not just this one.
-      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|lyric|quality|hd|hq|4k|8k|full)\b\s*$/i,
+      /[\s\-–—|]*\b(?:videos?|audio|songs?|official|lyrical|lyrics|lyric|quality|hd|hq|4k|8k|full)\b\s*$/i,
       '',
     );
   } while (s !== prev);
@@ -161,8 +167,28 @@ export function versionsIn(s) {
 }
 
 /** Strip the noise humans add to video titles. */
+/**
+ * "#SaradagaKasepaina" → "Saradaga Kasepaina".
+ *
+ * A promo hashtag glues the words together, and tokens() only splits on
+ * whitespace — so the whole thing became ONE token and shared nothing with the
+ * catalogue's ["saradaga", "kasepaina"]. MEASURED on a Telugu playlist: title
+ * similarity 0.167, unmatched, against a candidate that was plainly correct.
+ *
+ * Deliberately narrow. Splitting camelCase anywhere in a title would wreck real
+ * names, so this fires ONLY after a "#", and only on a lower→upper boundary —
+ * which leaves acronym runs ("#ARRahman") alone rather than guessing at them.
+ * "#Leharaayi", a single word, is untouched and already scored 0.917.
+ */
+export function splitHashtagWords(input) {
+  return String(input ?? '').replace(
+    /#(\p{L}[\p{L}\p{N}]*)/gu,
+    (_, word) => ' ' + word.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2'),
+  );
+}
+
 export function cleanTitle(raw) {
-  let s = String(raw ?? '').replace(EMOJI, ' ').replace(EMOJI_GLUE, '');
+  let s = splitHashtagWords(String(raw ?? '').replace(EMOJI, ' ').replace(EMOJI_GLUE, ''));
   for (const re of NOISE_PATTERNS) s = s.replace(re, ' ');
   s = s.replace(FEAT, ' ');
   // Pipe-separated junk: "Song | Movie | Label | 2022". Keep only the head —
@@ -198,6 +224,47 @@ export function cleanTitle(raw) {
     .replace(/^[\s\-–—_,.]+/g, '')
     .replace(/[\s\-–—_,.]+$/g, '')
     .trim();
+}
+
+// "SIR Telugu Movie" → "SIR". A label writes the language and the word "movie"
+// into the segment; neither is part of the film's name.
+const MOVIE_LABEL = /\b(?:telugu|tamil|kannada|malayalam|hindi|movie|film|cinema|songs?|jukebox|lyrical|video)\b/gi;
+
+/**
+ * Recover the film name from the SECOND pipe segment.
+ *
+ * cleanTitle keeps only the head — right for the title, but it throws away the
+ * one piece of corroborating evidence these uploads reliably carry. MEASURED on
+ * 53 Telugu/Kannada rows: the review pile was dominated by correct matches with
+ * a perfect title that could not reach auto, because a "Full Video Song" is the
+ * film cut and runs far longer than the audio track the catalogue holds, so
+ * duration — the only other corroboration when no artist is known — failed.
+ *
+ * Recovering the movie flipped one such row from review 0.819 to auto 0.902,
+ * same candidate and same duration gap.
+ *
+ * A wrong guess is CHEAP by construction: the movie only ever raises sanity when
+ * it agrees with the candidate's album, and that comparison is now token-based,
+ * so a segment holding an artist or a channel name simply scores 0 — exactly
+ * what happens today when there is no movie at all.
+ */
+export function movieFromPipeSegments(rawTitle) {
+  const parts = String(rawTitle ?? '').split('|').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  let seg = splitHashtagWords(parts[1]);
+  for (const re of NOISE_PATTERNS) seg = seg.replace(re, ' ');
+  seg = seg.replace(MOVIE_LABEL, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s\-–—_,.]+/, '')
+    .replace(/[\s\-–—_,.]+$/, '')
+    .trim();
+
+  if (!seg || isGenericTitle(seg)) return null;
+  // A single short token is where a false album substring used to come from, and
+  // it is rarely a film name on its own.
+  if (seg.length < 3 || seg.length > 60) return null;
+  return seg;
 }
 
 /** Pull `(From "Movie")` out, returning the movie and the title without it. */
@@ -355,6 +422,8 @@ export function parseVideo(video) {
   // Tier 2 — title parsing.
   const cleaned = cleanTitle(video?.title);
   const { movie, rest } = extractMovie(cleaned);
+  // An explicit (From "…") wins; the pipe segment is the fallback.
+  const film = movie ?? movieFromPipeSegments(video?.title);
 
   // "Artist - Title" on the FIRST hyphen. Only when both sides look real;
   // a leading hyphen or a one-character side means it was punctuation, not a
@@ -375,7 +444,7 @@ export function parseVideo(video) {
     source,
     title,
     artists,
-    movie,
+    movie: film,
     album: null,
     year: null,
     versions: versionsIn(video?.title ?? ''),

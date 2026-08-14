@@ -7,6 +7,7 @@ import {
   parseArtTrackDescription,
   cleanTitle,
   extractMovie,
+  movieFromPipeSegments,
   topicChannelArtist,
   SOURCE,
 } from './ytTrackParse.js';
@@ -574,6 +575,110 @@ describe('defects found by the first LIVE import', () => {
     // Word-boundary only. Nothing here should touch a legitimate title.
     expect(stripTrailingDecoration('Panegyric')).toBe('Panegyric');
     expect(stripTrailingDecoration('Lyric Suite Movement')).toBe('Lyric Suite Movement');
+  });
+});
+
+describe('defects found by the 53-row Telugu/Kannada measurement', () => {
+  // Two real playlists through the dry-run harness: 62.3% auto, 26.4% review,
+  // 11.3% unmatched — and, contrary to what we had been claiming, ZERO
+  // zero-candidate rows. Romanised titles search fine; it is native SCRIPT that
+  // the catalogue cannot answer.
+
+  const match = (title, cands, durationSec = 330) =>
+    matchVideo(parseVideoVariants({ title, channelTitle: '', durationSec, description: '' }), cands);
+
+  describe('the movie in pipe segment 2 is evidence, not junk', () => {
+    // The review pile's dominant cause. A "Full Video Song" is the film cut and
+    // runs far longer than the audio track the catalogue holds, so duration —
+    // the only corroboration available when no artist is known — fails, and a
+    // PERFECT title match cannot reach auto. The film name sits right there in
+    // the title, and cleanTitle was throwing it away.
+    const SIR = [{ id: 'x', title: 'Mastaaru Mastaaru', artist: 'G.V. Prakash Kumar', album: 'SIR', durationSec: 243 }];
+
+    it('recovers it, and that flips a correct match from review to auto', () => {
+      const v = match('Mastaaru Mastaaru Full Video Song | SIR Telugu Movie | Dhanush', SIR);
+      expect(v.best.breakdown.sanity).toBe(1);
+      expect(v.tier).toBe(TIER.AUTO);
+      // Duration still disagrees — the film cut is 87s longer. Sanity is what
+      // carries it, which is the whole point.
+      expect(v.best.breakdown.duration).toBeLessThan(0.9);
+    });
+
+    it('strips the language and the word "movie" from the segment', () => {
+      expect(movieFromPipeSegments('X Full Video Song | SIR Telugu Movie | Dhanush')).toBe('SIR');
+      expect(movieFromPipeSegments('Srivalli (Video) | Pushpa | Allu Arjun')).toBe('Pushpa');
+      expect(movieFromPipeSegments('Kaagadada Doniyalli - Video Song | Kirik Party | Rakshit'))
+        .toBe('Kirik Party');
+    });
+
+    it('an explicit (From "…") still wins over the pipe guess', () => {
+      const [r] = parseVideoVariants({
+        title: 'Undiporaadhey (From "Hushaaru") | Some Other Film | X', channelTitle: '',
+      });
+      expect(r.movie).toBe('Hushaaru');
+    });
+
+    it('costs nothing when segment 2 is not a film', () => {
+      // A series name. It must simply fail to corroborate, exactly as a missing
+      // movie does today — never invent agreement.
+      const v = match('Gudugudiya Sedi Nodo | Courtyard Jam Sessions',
+        [{ id: 'z', title: 'Gudugudiya Sedi Nodo', artist: 'Raghu Dixit', album: 'Jhankaar', durationSec: 300 }]);
+      expect(v.best.breakdown.sanity).toBe(0);
+    });
+
+    it('does NOT match a short film name inside an unrelated album', () => {
+      // The reason movie agreement is compared as token sets rather than
+      // substrings: "SIR" is inside "Sirivennela". Harmless when the only movie
+      // source was an explicit (From "…"); not harmless once movies are guessed,
+      // because sanity > 0 is a route to AUTO — it would silently accept a wrong
+      // track rather than merely nudge a score.
+      const v = match('Mastaaru Full Video Song | SIR Telugu Movie | X',
+        [{ id: 'y', title: 'Mastaaru', artist: 'Someone', album: 'Sirivennela', durationSec: 243 }]);
+      expect(v.best.breakdown.sanity).toBe(0);
+      expect(v.tier).toBe(TIER.REVIEW);
+    });
+
+    it('still agrees when the album merely extends the film name', () => {
+      // Token-subset has to keep the real case it was protecting.
+      const v = match('Srivalli (Video) | Pushpa | Allu Arjun',
+        [{ id: 'p', title: 'Srivalli', artist: 'Sid Sriram', album: 'Pushpa: The Rise', durationSec: 240 }]);
+      expect(v.best.breakdown.sanity).toBe(1);
+    });
+  });
+
+  describe('hashtag compounds', () => {
+    it('splits #SaradagaKasepaina, which scored 0.167 and went unmatched', () => {
+      // tokens() splits on whitespace, so the glued hashtag was ONE token and
+      // shared nothing with the catalogue's two.
+      expect(cleanTitle('#SaradagaKasepaina Full Video Song | Paagal')).toBe('Saradaga Kasepaina');
+      const v = match('#SaradagaKasepaina Full Video Song | Paagal Movie',
+        [{ id: 's', title: 'Saradaga Kasepaina', artist: 'Karthik', album: 'Paagal', durationSec: 240 }]);
+      expect(v.best.breakdown.title).toBe(1);
+      expect(v.tier).not.toBe(TIER.UNMATCHED);
+    });
+
+    it('leaves a single-word hashtag alone — it already worked', () => {
+      expect(cleanTitle('#Leharaayi Full Video | Most Eligible Bachelor')).toBe('Leharaayi');
+    });
+
+    it('does not guess at acronym runs', () => {
+      // Only a lower→upper boundary splits, so "#ARRahman" is left intact
+      // rather than mangled into "A R Rahman".
+      expect(cleanTitle('#ARRahman Live')).toBe('ARRahman Live');
+    });
+  });
+
+  describe('plural "Songs"', () => {
+    it('strips it — "Audio Songs" survived whole and scored 0.000', () => {
+      expect(cleanTitle('Evaraina Eppudaina Audio Songs | Jukebox | V'))
+        .toBe('Evaraina Eppudaina');
+    });
+
+    it('does not strand a bare "Songs", the orphan the singular rule exists to stop', () => {
+      // "Full Video Songs" used to strip only its head and leave "X Songs".
+      expect(cleanTitle('Ninnu Kori Full Video Songs | Nani')).toBe('Ninnu Kori');
+      expect(cleanTitle('X Full Songs | Y')).toBe('X');
+    });
   });
 });
 
