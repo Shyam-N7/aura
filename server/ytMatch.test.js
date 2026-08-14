@@ -81,6 +81,32 @@ describe('tier 2 — ugly real-world titles', () => {
     // Regression: the bare feat-strip used to leave an orphan "(" here,
     // producing "Perfect (". Bracketed credits must be removed whole.
     ['Perfect (feat. Beyoncé) (Official Audio)', 'Perfect'],
+
+    // The four below are VERBATIM titles from live RD mix responses captured
+    // 2026-08-14. Two of them were parsed wrongly before those responses
+    // existed, which is the argument for testing against real data rather than
+    // titles I invented.
+    //
+    // Amateur reupload separating credits with RUNS OF SPACES where a label
+    // would use pipes. Previously the entire credit list became the title.
+    [
+      'Munjane Manjalli   Audio Song   Just Maath Maathali   Kiccha Sudeep   Ramya   Raghu Dixit',
+      'Munjane Manjalli',
+    ],
+    // "Full Video Song" was eaten by the shorter "full video" pattern, leaving
+    // a stranded "Song": "Gira Gira Song".
+    [
+      'Gira Gira Full Video Song | Dear Comrade Tamil | Vijay Deverakonda | Rashmika | Bharat Kamma',
+      'Gira Gira',
+    ],
+    [
+      'Nee Amrithadhare Lyrical | Harish | Supriya Acharya | Dhyan | Ramya | Manomurthy | Amrithadhare',
+      'Nee Amrithadhare',
+    ],
+    [
+      'Oo Saathiya Lyrical | Love Reddy | Anjan Ramachendra, Shravani | Smaran Reddy | Prince Henry',
+      'Oo Saathiya',
+    ],
   ])('cleans %s', (raw, want) => {
     expect(cleanTitle(raw)).toBe(want);
   });

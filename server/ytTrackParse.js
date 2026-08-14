@@ -33,6 +33,10 @@ const NOISE_PATTERNS = [
   /\((?:full\s+)?(?:video|song|movie)\s*(?:song)?\)/gi,
   /\b(?:official\s+video|official\s+audio|official\s+trailer)\b/gi,
   /\b(?:lyric[s]?\s*video|lyrical\s*video|lyrical)\b/gi,
+  // Longest first: "Full Video Song" must not be eaten by "full video", which
+  // strands a bare "Song" in the title. MEASURED on a real mix item —
+  // "Gira Gira Full Video Song" cleaned to "Gira Gira Song".
+  /\b(?:full\s+)?(?:video|audio|lyrical)\s+song\b/gi,
   /\b(?:full\s+song|full\s+video|video\s+song|full\s+audio)\b/gi,
   /\b(?:hd|hq|4k|1080p|720p|remaster(?:ed)?(?:\s+\d{4})?)\b/gi,
   /\bwith\s+lyrics\b/gi,
@@ -126,6 +130,11 @@ export function cleanTitle(raw) {
   // Pipe-separated junk: "Song | Movie | Label | 2022". Keep only the head —
   // the tail is almost always credits, never the title.
   if (s.includes('|')) s = s.split('|')[0];
+  // Runs of 2+ spaces are the SAME separator. MEASURED on a real mix item:
+  // "Munjane Manjalli   Audio Song   Just Maath Maathali   Kiccha Sudeep …" —
+  // an amateur reupload using spaces where a label would use pipes. Without
+  // this the entire credit list becomes the title and nothing can match it.
+  else if (/\S {2,}\S/.test(s)) s = s.split(/ {2,}/)[0];
   // Any bracket left empty by the strips above is debris, not content.
   s = s.replace(/\(\s*\)/g, ' ').replace(/\[\s*\]/g, ' ');
   return s.replace(/\s{2,}/g, ' ').replace(/[\s\-–—_,.]+$/g, '').trim();
