@@ -15,6 +15,7 @@ import {
   scoreCandidate,
   titleSimilarity,
   tokensAlike,
+  artistOverlap,
   fingerprint,
   fingerprintKeys,
   TIER,
@@ -538,5 +539,28 @@ describe('defects found by the 58% run', () => {
     // reaches the review screen looking like a broken app.
     expect(cleanTitle('Bel Air (')).toBe('Bel Air');
     expect(cleanTitle('Kesariya (From "Brahmastra")')).toBe('Kesariya (From "Brahmastra")');
+  });
+});
+
+describe('artist credit', () => {
+  // MEASURED: three KATSEYE rows capped at 0.811 because an EXACT, complete
+  // artist match scored 0.6 — full credit needed two shared tokens, which a
+  // one-word name can never reach.
+  it('gives full credit for a complete single-word artist match', () => {
+    expect(artistOverlap(['KATSEYE'], 'Katseye')).toBe(1);
+    expect(artistOverlap(['Milano'], 'Milano')).toBe(1);
+  });
+
+  // …but the surname case must stay weak: half of Bollywood shares one.
+  it('keeps a lone surname partial', () => {
+    expect(artistOverlap(['Singh'], 'Arijit Singh')).toBe(0.6);
+  });
+
+  it('tolerates transliteration in artist names too', () => {
+    expect(artistOverlap(['Arjit Singh'], 'Arijit Singh')).toBe(1);
+  });
+
+  it('still reports genuine disagreement as zero', () => {
+    expect(artistOverlap(['Nobody'], 'Someone Else')).toBe(0);
   });
 });

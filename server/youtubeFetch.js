@@ -43,8 +43,21 @@ export const LARGE_ITEMS = 500;
  * So radio gets a WINDOW, not a ceiling. Reaching it is the expected shape of
  * the source, not an error — stop paginating and return what we have. This also
  * takes an RD import from ~21 quota units (walking to 1000) down to 3.
+ *
+ * Why 30 and not 50 (the first guess):
+ *  - JioSaavn load is the binding constraint, not YouTube quota. 50 tracks is
+ *    ~65 catalog searches per import, 30 is ~40. Quota is identical either way
+ *    (both fit one page), so the saving is entirely on the constrained side.
+ *  - Review burden scales linearly. At the measured ~60% auto rate, 50 tracks
+ *    leaves ~20 confirmations; 30 leaves ~12 — a quick check rather than a job.
+ *  - Relevance decays with depth. Radio starts at the seed and wanders: the
+ *    measured mixes ran Kannada film music at the top and Peppa Pig, Turkish
+ *    pop and Sinhala hymns further down. A tighter window is a better playlist,
+ *    not merely a cheaper one.
+ * 30 over 25 because ~60% auto minus the catalog misses still leaves ~18 usable
+ * tracks, which reads as a playlist; 25 can fall under 15, which does not.
  */
-export const RADIO_WINDOW = 50;
+export const RADIO_WINDOW = 30;
 
 /**
  * How many items to take, given what kind of thing this is.

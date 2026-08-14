@@ -142,10 +142,25 @@ export function artistOverlap(ytArtists, candidateArtist) {
   if (cand.size === 0 || yt.length === 0) return null;
   const ytSet = new Set(yt);
   let shared = 0;
-  for (const t of ytSet) if (cand.has(t)) shared++;
+  const used = new Set();
+  for (const t of ytSet) {
+    if (cand.has(t) && !used.has(t)) { shared++; used.add(t); continue; }
+    // Artist names transliterate too — same tolerance as titles, same
+    // one-partner-each discipline.
+    for (const u of cand) {
+      if (!used.has(u) && tokensAlike(t, u)) { shared++; used.add(u); break; }
+    }
+  }
   if (shared === 0) return 0;
-  // Full credit once a whole artist name matches; partial for a single token
-  // (surnames alone are weak — "Singh" matches half of Bollywood).
+  // A ONE-WORD artist name matched in full is a full match, not a partial one.
+  // MEASURED: "KATSEYE" vs "Katseye" scored 0.6 — an exact, complete match —
+  // because full credit required two shared tokens, which a single-word name
+  // can never reach. It capped three rows at 0.811 and kept them out of auto.
+  // Applies only when BOTH sides are single-word, which is what keeps the
+  // surname case weak: "Singh" against "Arijit Singh" is still 0.6, because
+  // half of Bollywood shares it.
+  if (ytSet.size === 1 && cand.size === 1) return 1;
+  // Full credit once a whole artist name matches; partial for a single token.
   return shared >= 2 ? 1 : 0.6;
 }
 
