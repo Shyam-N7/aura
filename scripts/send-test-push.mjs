@@ -1,4 +1,3 @@
-/* global console */
 // One-off test push: sends to the most recently registered device (the
 // phone that just enrolled). Needs env: DATABASE_URL (prod, read-only use)
 // + FIREBASE_ADMIN_JSON (the service-account JSON string). Run:
