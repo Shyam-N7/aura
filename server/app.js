@@ -51,6 +51,7 @@ import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middlewa
 import { getPrefs, sendToUser, prunePushLog } from './push.js';
 import { allowedArtUrl, fetchArt, renderCardPng } from './cardArt.js';
 import { notifyMixesReady, notifyTrackAdded, notifyInviteAccepted, sweepNudges } from './notify.js';
+import { recordNotification, listNotifications, markNotificationsSeen } from './notifications.js';
 import { isAdminEmail } from './adminGate.js';
 import { asyncHandler, clientError, errorMiddleware, notFound } from './middleware/errors.js';
 import { isId, clampInt } from './validate.js';
@@ -890,6 +891,27 @@ app.put('/api/push/prefs', requireAuth, async (req, res) => {
   }
 });
 
+// ── In-app notification feed (the bell/panel) ────────────────────────
+// A durable log of the same cards the triggers push (server/notify.js) —
+// always written regardless of push prefs/quiet hours, so nothing is lost
+// to a muted category or a phone with no token. See server/notifications.js.
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    res.json({ notifications: await listNotifications(req.userId) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.post('/api/notifications/seen', requireAuth, async (req, res) => {
+  try {
+    await markNotificationsSeen(req.userId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
 // ── Admin push console ───────────────────────────────────────────────
 // Authorization = the signed-in user's email is on the ADMIN_EMAILS
 // allowlist (server env). Independent of ADMIN_ONLY (the dev sign-in gate):
@@ -970,6 +992,7 @@ app.post('/api/admin/push/send', requireAuth, requireAdmin, async (req, res) => 
     for (const uid of userIds) {
       const out = await sendToUser(uid, payload);
       sent += out.sent;
+      await recordNotification(uid, 'note', payload);
     }
     res.json({ users: userIds.length, sent });
   } catch (err) {

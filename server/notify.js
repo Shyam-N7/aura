@@ -2,11 +2,14 @@
 // (fresh mixes, playlist activity, a library gone quiet). Every send goes
 // through push.js sendCategory, which owns the guardrails — per-category
 // switches, quiet hours, frequency caps — so triggers here stay simple and
-// can never spam on their own. All functions are fire-and-forget safe: they
-// swallow their own errors so a notification hiccup never fails the request
-// that caused it.
+// can never spam on their own. Each real trigger also writes the same card
+// to the in-app panel (recordNotification) UNCONDITIONALLY — the panel is
+// the quiet channel, so it isn't silenced by the push-only guardrails above.
+// All functions are fire-and-forget safe: they swallow their own errors so a
+// notification hiccup never fails the request that caused it.
 import { query } from './db.js';
 import { sendCategory, cardArtUrl } from './push.js';
+import { recordNotification } from './notifications.js';
 
 const HOME = 'https://www.aurafm.live/';
 
@@ -29,15 +32,16 @@ export async function notifyMixesReady(userId, names, coverTrackId) {
   try {
     if (!Array.isArray(names) || !names.length) return;
     const one = names.length === 1;
-    await sendCategory(userId, 'mixes', {
+    const card = {
       title: one ? `your ${names[0]} is ready` : 'your mixes are ready',
       body: one
         ? 'a fresh edition for today. tap to listen.'
         : `${names.length} fresh mixes for today. tap to listen.`,
       image: cardArtUrl(await trackArt(coverTrackId), `mixes-${userId}`),
       link: HOME,
-      collapseKey: 'mixes',
-    });
+    };
+    await recordNotification(userId, 'mixes', card);
+    await sendCategory(userId, 'mixes', { ...card, collapseKey: 'mixes' });
   } catch (err) {
     console.warn('[notify] mixes-ready failed:', err?.message ?? err);
   }
@@ -64,13 +68,14 @@ export async function notifyTrackAdded(actorId, playlistId, trackId) {
     recipients.delete(actorId);
     const image = cardArtUrl(await trackArt(trackId), `pl-${playlistId}`);
     for (const uid of recipients) {
-      await sendCategory(uid, 'social', {
+      const card = {
         title: `${meta.actor_name} added a song`,
         body: `"${meta.track_title}" is now in ${meta.playlist_name}.`,
         image,
         link: HOME,
-        collapseKey: `pl-${playlistId}`,
-      });
+      };
+      await recordNotification(uid, 'social', card);
+      await sendCategory(uid, 'social', { ...card, collapseKey: `pl-${playlistId}` });
     }
   } catch (err) {
     console.warn('[notify] track-added failed:', err?.message ?? err);
@@ -87,13 +92,14 @@ export async function notifyInviteAccepted(actorId, playlistId) {
       [playlistId, actorId],
     );
     if (!rows.length || rows[0].owner_id === actorId) return;
-    await sendCategory(rows[0].owner_id, 'social', {
+    const card = {
       title: `${rows[0].actor_name} joined your playlist`,
       body: `${rows[0].playlist_name} has a new member. say hi with a song.`,
       image: cardArtUrl(null, `pl-${playlistId}`),
       link: HOME,
-      collapseKey: `pl-${playlistId}`,
-    });
+    };
+    await recordNotification(rows[0].owner_id, 'social', card);
+    await sendCategory(rows[0].owner_id, 'social', { ...card, collapseKey: `pl-${playlistId}` });
   } catch (err) {
     console.warn('[notify] invite-accepted failed:', err?.message ?? err);
   }
