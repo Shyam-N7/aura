@@ -157,6 +157,13 @@ export function cleanTitle(raw) {
   else if (/\S {2,}\S/.test(s)) s = s.split(/ {2,}/)[0];
   // Any bracket left empty by the strips above is debris, not content.
   s = s.replace(/\(\s*\)/g, ' ').replace(/\[\s*\]/g, ' ');
+  // An UNMATCHED opener left behind by a strip: "Bel Air (Official Video)" can
+  // lose its tail and leave "Bel Air (" — MEASURED on three KATSEYE rows.
+  // Cosmetic for scoring (tokens drop punctuation) but it reaches the review
+  // screen, where a title ending in a stray bracket looks like a broken app.
+  if ((s.match(/\(/g) ?? []).length > (s.match(/\)/g) ?? []).length) {
+    s = s.replace(/\s*\([^)]*$/, '');
+  }
   // Trailing decoration, stripped repeatedly because it stacks:
   // "Poovukkul Official Quality Video" -> "Poovukkul".
   // MEASURED: seven rows in one mix kept a bare trailing "Video"/"Official"/

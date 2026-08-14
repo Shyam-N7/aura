@@ -89,11 +89,14 @@ export function titleSimilarity(a, b) {
   const A = new Set(tokens(a));
   const B = new Set(tokens(b));
   if (A.size === 0 || B.size === 0) return 0;
+  // One partner each, and the EXACT branch must respect that too. MEASURED:
+  // "Venmathi Venmathiye" vs "Venmathiye" scored t=1.333 — impossible — because
+  // "venmathi" matched "venmathiye" fuzzily and then "venmathiye" matched the
+  // same token exactly. shared must never exceed the smaller set.
   let shared = 0;
   const used = new Set();
   for (const t of A) {
-    if (B.has(t)) { shared++; used.add(t); continue; }
-    // Fall back to a transliteration-tolerant match, one partner each.
+    if (B.has(t) && !used.has(t)) { shared++; used.add(t); continue; }
     for (const u of B) {
       if (!used.has(u) && tokensAlike(t, u)) { shared++; used.add(u); break; }
     }
@@ -101,7 +104,17 @@ export function titleSimilarity(a, b) {
   const dice = (2 * shared) / (A.size + B.size);
   const small = Math.min(A.size, B.size);
   const containment = shared / small;
-  return small >= 2 && containment === 1 ? Math.max(dice, 0.92) : dice;
+  // Containment says "every word of the shorter title appears in the longer".
+  // That is strong evidence when the titles are comparable in length, and
+  // nonsense when they are not. MEASURED: "She's the Best" scored 0.92 against
+  // Peppa Pig's "She's The Greatest, She's The Best Mummy Pig" — fully
+  // contained, and completely wrong. Require the longer title to be at most
+  // HALF AGAIN the shorter, not twice it — the Peppa Pig case is exactly 3 vs 6
+  // tokens and sails through a 2x rule, which is how it was found.
+  const comparable = Math.max(A.size, B.size) <= 1.5 * small;
+  return small >= 2 && containment === 1 && comparable
+    ? Math.max(dice, 0.92)
+    : dice;
 }
 
 /**

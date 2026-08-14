@@ -507,3 +507,36 @@ describe('defects found by the 52% run', () => {
     expect(v.some(p => p.title === 'Inthandham')).toBe(true);
   });
 });
+
+// From the 58% run. The first two are defects I introduced with the
+// transliteration fix — real data caught them within one round.
+describe('defects found by the 58% run', () => {
+  it('never scores a similarity above 1.0', () => {
+    // "Venmathi Venmathiye" vs "Venmathiye" reported t=1.333: "venmathi"
+    // matched "venmathiye" fuzzily, then "venmathiye" matched the SAME token
+    // exactly. shared must never exceed the smaller set.
+    expect(titleSimilarity('Venmathi Venmathiye', 'Venmathiye')).toBeLessThanOrEqual(1);
+    expect(titleSimilarity('Venmathi Venmathiye', 'Venmathiye')).toBeCloseTo(0.667, 2);
+  });
+
+  it('does not treat a short title inside a much longer one as a match', () => {
+    // Peppa Pig. "She's the Best" is fully contained in "She's The Greatest,
+    // She's The Best Mummy Pig" and scored 0.92 — containment is only evidence
+    // when the titles are comparable in length.
+    const s2 = titleSimilarity("She's the Best", "She's The Greatest, She's The Best Mummy Pig");
+    expect(s2).toBeLessThan(0.85);
+  });
+
+  it('still rewards containment when the lengths ARE comparable', () => {
+    // The guard must not throw out the case it was built for.
+    expect(titleSimilarity('Wheels On The Birthday Bus', 'The Wheels on the Bus'))
+      .toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('drops an orphan bracket left by a strip', () => {
+    // Three KATSEYE rows arrived as "Bel Air (" — cosmetic for scoring, but it
+    // reaches the review screen looking like a broken app.
+    expect(cleanTitle('Bel Air (')).toBe('Bel Air');
+    expect(cleanTitle('Kesariya (From "Brahmastra")')).toBe('Kesariya (From "Brahmastra")');
+  });
+});
