@@ -542,6 +542,41 @@ describe('defects found by the 58% run', () => {
   });
 });
 
+describe('defects found by the first LIVE import', () => {
+  // A real user, a real key, a real Tamil mix: 21 auto / 5 review / 1 unmatched
+  // out of 27 usable. These come from reading that run's output rather than a
+  // harness.
+
+  it('strips a bare trailing "Lyric", not just "Lyrics" and "Lyrical"', () => {
+    // The singular was simply missing from the alternation. Live title:
+    // "Master - Andha Kanna Paathaakaa Lyric | Thalapathy Vijay | …" parsed to
+    // the title "Andha Kanna Paathaakaa Lyric". It matched anyway — fuzzy
+    // scoring absorbed the token — but "<song> Lyric | <cast>" is one of the
+    // most common Tamil/Telugu label title shapes, so the drag was being paid
+    // across a whole class of rows.
+    expect(stripTrailingDecoration('Andha Kanna Paathaakaa Lyric')).toBe('Andha Kanna Paathaakaa');
+    expect(stripTrailingDecoration('Andha Kanna Paathaakaa Lyrics')).toBe('Andha Kanna Paathaakaa');
+    expect(stripTrailingDecoration('Andha Kanna Paathaakaa Lyrical')).toBe('Andha Kanna Paathaakaa');
+  });
+
+  it('recovers the exact title from the real live video title', () => {
+    expect(cleanTitle('Master - Andha Kanna Paathaakaa Lyric | Thalapathy Vijay | Anirudh Ravichander | Lokesh Kanagaraj'))
+      .toBe('Master - Andha Kanna Paathaakaa');
+  });
+
+  it('lifts that row to an exact title match instead of a fuzzy one', () => {
+    // The point of the fix, stated as the score it changes.
+    expect(titleSimilarity('Andha Kanna Paathaakaa Lyric', 'Andha Kanna Paathaakaa')).toBeLessThan(1);
+    expect(titleSimilarity(cleanTitle('Andha Kanna Paathaakaa Lyric'), 'Andha Kanna Paathaakaa')).toBe(1);
+  });
+
+  it('does not eat a real word ending in "lyric"', () => {
+    // Word-boundary only. Nothing here should touch a legitimate title.
+    expect(stripTrailingDecoration('Panegyric')).toBe('Panegyric');
+    expect(stripTrailingDecoration('Lyric Suite Movement')).toBe('Lyric Suite Movement');
+  });
+});
+
 describe('artist credit', () => {
   // MEASURED: three KATSEYE rows capped at 0.811 because an EXACT, complete
   // artist match scored 0.6 — full credit needed two shared tokens, which a
