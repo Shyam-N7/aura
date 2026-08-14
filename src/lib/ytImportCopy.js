@@ -154,6 +154,14 @@ export const IMPORT_ERRORS = {
     body: null,
     retryable: false,
   },
+  YT_NO_LINK: {
+    // Reached when a refresh is attempted on a playlist with no stored source —
+    // most often one built from a mix, which regenerates every time YouTube
+    // makes it and so has nothing stable to refresh against.
+    title: "There's nothing to refresh",
+    body: 'This playlist wasn’t imported from a YouTube playlist we can check again.',
+    retryable: false,
+  },
 };
 
 // ── The steady states ───────────────────────────────────────────────

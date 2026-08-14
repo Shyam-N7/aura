@@ -24,8 +24,10 @@ import { clientError } from './middleware/errors.js';
 import { pool } from './db.js';
 import { parseYouTubeLink, STRATEGY } from './youtubeUrl.js';
 import { windowForKind } from './youtubeFetch.js';
+import { isId } from './validate.js';
 import {
-  youtubeImportEnabled, enqueueImport, drainJob, getJob, resolveReviewItem, STATUS,
+  youtubeImportEnabled, enqueueImport, drainJob, getJob, resolveReviewItem,
+  listLinks, refreshPlaylist, STATUS,
 } from './importJobs.js';
 
 const router = Router();
@@ -101,6 +103,41 @@ router.post('/preview', requireAuth, requireEnabled, (req, res) => {
     });
   } catch (err) {
     fail(res, err, 'preview');
+  }
+});
+
+// ── Refresh ─────────────────────────────────────────────────────────
+//
+// Declared BEFORE the /:jobId routes. Express matches in declaration order, so
+// `/links` placed after would be captured by `/:jobId` and rejected by its id
+// guard — a 400 on a route that exists.
+
+// Which of the user's playlists came from YouTube. The clients use this to
+// decide whether to show a refresh button at all: no link row means the source
+// was a mix, which regenerates on every fetch and has nothing to refresh
+// against.
+router.get('/links', requireAuth, requireEnabled, async (req, res) => {
+  try {
+    res.json({ links: await listLinks(req.userId) });
+  } catch (err) {
+    fail(res, err, 'links');
+  }
+});
+
+// Check for new songs, and import them if there are any. The common answer is
+// "nothing new" and it costs one YouTube unit.
+router.post('/refresh', requireAuth, requireEnabled, async (req, res) => {
+  try {
+    const { playlistId } = req.body ?? {};
+    if (!isId(playlistId)) {
+      return res.status(400).json({ error: 'invalid playlist id', code: 'YT_BAD_ID' });
+    }
+    const result = await refreshPlaylist(req.userId, playlistId);
+    if (!result.changed) return res.json({ changed: false });
+    await drainJob(result.jobId, { budgetMs: POST_BUDGET_MS }).catch(() => {});
+    res.json({ changed: true, ...shape(await getJob(req.userId, result.jobId)) });
+  } catch (err) {
+    fail(res, err, 'refresh');
   }
 });
 

@@ -21,6 +21,8 @@ vi.mock('./importJobs.js', () => ({
   drainJob: vi.fn().mockResolvedValue({}),
   getJob: vi.fn(),
   resolveReviewItem: vi.fn(),
+  listLinks: vi.fn(),
+  refreshPlaylist: vi.fn(),
   STATUS: {
     QUEUED: 'queued', FETCHING: 'fetching', MATCHING: 'matching',
     READY: 'ready', COMPLETE: 'complete', FAILED: 'failed',
@@ -29,7 +31,9 @@ vi.mock('./importJobs.js', () => ({
 vi.mock('./db.js', () => ({ pool: { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }) } }));
 
 import router from './importRoutes.js';
-import { enqueueImport, getJob, resolveReviewItem, drainJob } from './importJobs.js';
+import {
+  enqueueImport, getJob, resolveReviewItem, drainJob, listLinks, refreshPlaylist,
+} from './importJobs.js';
 
 const app = express();
 app.use(express.json());
@@ -158,6 +162,53 @@ describe('create and poll', () => {
     getJob.mockResolvedValue(jobView({ status: 'complete' }));
     await request().get('/api/import/youtube/yti_abc123');
     expect(drainJob).not.toHaveBeenCalled();
+  });
+});
+
+describe('refresh', () => {
+  it('/links is not swallowed by the /:jobId route', async () => {
+    // Express matches in declaration order. Declared after /:jobId, this path
+    // would be captured as a job id and 400 on the guard — a route that exists
+    // returning "invalid import id".
+    listLinks.mockResolvedValue([{ playlist_id: 'pl_1', yt_playlist_id: 'PLx', kind: 'PL' }]);
+    const res = await request().get('/api/import/youtube/links');
+    expect(res.status).toBe(200);
+    expect(res.body.links).toHaveLength(1);
+  });
+
+  it('reports "nothing new" without doing any work', async () => {
+    // The cheap check is the whole point: the common answer costs one unit and
+    // must not start a job.
+    refreshPlaylist.mockResolvedValue({ changed: false, jobId: null });
+    const res = await request().post('/api/import/youtube/refresh').send({ playlistId: 'pl_1' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ changed: false });
+    expect(drainJob).not.toHaveBeenCalled();
+  });
+
+  it('drains and returns the job when something changed', async () => {
+    refreshPlaylist.mockResolvedValue({ changed: true, jobId: 'yti_ref123' });
+    getJob.mockResolvedValue(jobView({ id: 'yti_ref123' }));
+    const res = await request().post('/api/import/youtube/refresh').send({ playlistId: 'pl_1' });
+    expect(res.status).toBe(200);
+    expect(res.body.changed).toBe(true);
+    expect(res.body.counts).toBeTruthy();
+    expect(drainJob).toHaveBeenCalledWith('yti_ref123', expect.anything());
+  });
+
+  it('rejects a junk playlist id', async () => {
+    const res = await request().post('/api/import/youtube/refresh').send({ playlistId: { evil: 1 } });
+    expect(res.status).toBe(400);
+    expect(refreshPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('says so when the playlist did not come from YouTube', async () => {
+    refreshPlaylist.mockRejectedValue(Object.assign(new Error('that playlist did not come from YouTube'), {
+      statusCode: 404, expose: true, code: 'YT_NO_LINK',
+    }));
+    const res = await request().post('/api/import/youtube/refresh').send({ playlistId: 'pl_9' });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('YT_NO_LINK');
   });
 });
 

@@ -38,7 +38,7 @@ import {
   YOUTUBE_API_KEY, YT_IMPORT_DAILY_CAP, YT_IMPORT_USER_DAILY,
 } from './config.js';
 import { parseYouTubeLink, STRATEGY } from './youtubeUrl.js';
-import { fetchPlaylistForImport, windowForKind, YouTubeError } from './youtubeFetch.js';
+import { fetchPlaylistForImport, fetchPlaylistMeta, windowForKind, YouTubeError } from './youtubeFetch.js';
 import { parseVideoVariants } from './ytTrackParse.js';
 import { matchVideo, fingerprint, fingerprintKeys, TIER, THRESHOLDS } from './ytMatch.js';
 import { findCandidates } from './ytSearch.js';
@@ -522,20 +522,41 @@ async function finishJob(job) {
   );
   const trackIds = autoRows.map(r => r.track_id);
 
+  const { rows: j } = await query(`SELECT title, windowed FROM yt_import_jobs WHERE id=$1`, [job.id]);
+  const windowed = !!j[0]?.windowed;
+
   let playlistId = job.playlist_id;
   if (!playlistId) {
-    const { rows: j } = await query(`SELECT title, windowed FROM yt_import_jobs WHERE id=$1`, [job.id]);
     const created = await createPlaylistFromImport(job.user_id, {
       name: j[0]?.title || 'Imported from YouTube',
-      description: j[0]?.windowed
+      description: windowed
         ? 'Imported from a YouTube mix — a snapshot of the first tracks, not a live sync.'
         : 'Imported from YouTube.',
       trackIds,
     });
     playlistId = created.id;
   } else if (trackIds.length) {
-    // Re-entry after a crash between playlist creation and the counts update.
+    // Either a REFRESH writing into the playlist it already owns, or re-entry
+    // after a crash between playlist creation and the counts update. Both are
+    // the same operation, and it is idempotent: appendTracksToPlaylist absorbs
+    // tracks already present.
     await appendTracksToPlaylist(job.user_id, playlistId, trackIds);
+  }
+
+  // Remember the source so this playlist can be refreshed later — but ONLY for
+  // a finite one. A windowed mix regenerates on every fetch (measured twice:
+  // the same link returned Kannada film music one run and KATSEYE the next), so
+  // there is no stable source to diff against and "refresh" would promise a
+  // sync that cannot exist. Absence of a link row is what hides the button.
+  if (!windowed) {
+    await pool.query(
+      `INSERT INTO yt_playlist_links (playlist_id, yt_playlist_id, kind, last_item_count, last_synced_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$5)
+       ON CONFLICT (playlist_id) DO UPDATE SET
+         last_item_count = EXCLUDED.last_item_count,
+         last_synced_at  = EXCLUDED.last_synced_at`,
+      [playlistId, job.yt_playlist_id, job.kind, auto + review + unmatched, Date.now()],
+    ).catch((e) => console.warn('[yt-import] link write failed:', e?.message ?? e));
   }
 
   const status = review > 0 ? STATUS.READY : STATUS.COMPLETE;
@@ -617,6 +638,81 @@ async function refreshJobProgress(jobId) {
     );
   }
   return { pending, accepted: rows[0]?.accepted ?? 0 };
+}
+
+// ── Refresh ─────────────────────────────────────────────────────────
+
+/** The YouTube sources this user's playlists were imported from. */
+export async function listLinks(userId) {
+  const { rows } = await query(
+    `SELECT l.playlist_id, l.yt_playlist_id, l.kind, l.last_item_count, l.last_synced_at
+       FROM yt_playlist_links l JOIN playlists p ON p.id = l.playlist_id
+      WHERE p.user_id = $1`,
+    [userId],
+  );
+  return rows;
+}
+
+/**
+ * Check whether a linked playlist changed on YouTube, and import what is new.
+ *
+ * The cheap check first: playlists.list returns itemCount for ONE unit. An
+ * unchanged count ends it there, which is what makes a refresh button safe to
+ * offer at all — the common answer is "nothing new" and it should cost nothing.
+ *
+ * ── The part worth explaining ──
+ * There is no diff. The obvious design compares stored video ids against the
+ * new list, but the 30-day retention rule deletes those ids, so past a month
+ * there is nothing to compare against and the diff needs a special case.
+ *
+ * Re-matching the whole playlist instead removes the special case AND is nearly
+ * free: every fingerprint from the first import is already in yt_match_cache,
+ * so a re-run costs ~3 YouTube units and almost no catalog searches, and the
+ * append is idempotent. Delta and full-rebuild converge on the same operation,
+ * which is a better outcome than making them agree.
+ */
+export async function refreshPlaylist(userId, playlistId, { fetchOpts } = {}) {
+  if (!youtubeImportEnabled()) throw disabled();
+
+  const { rows } = await query(
+    `SELECT l.yt_playlist_id, l.kind, l.last_item_count
+       FROM yt_playlist_links l JOIN playlists p ON p.id = l.playlist_id
+      WHERE l.playlist_id = $1 AND p.user_id = $2`,
+    [playlistId, userId],
+  );
+  const link = rows[0];
+  if (!link) {
+    const err = new Error('that playlist did not come from YouTube');
+    err.statusCode = 404; err.expose = true; err.code = 'YT_NO_LINK';
+    throw err;
+  }
+
+  const meta = await fetchPlaylistMeta(link.yt_playlist_id, {
+    apiKey: YOUTUBE_API_KEY,
+    ...fetchOpts,
+  });
+
+  if (meta.itemCount != null && meta.itemCount === link.last_item_count) {
+    await pool.query(
+      `UPDATE yt_playlist_links SET last_synced_at=$2 WHERE playlist_id=$1`,
+      [playlistId, Date.now()],
+    );
+    return { changed: false, jobId: null };
+  }
+
+  await assertUnderCaps(userId);
+
+  // The job is bound to the EXISTING playlist, so finishJob appends instead of
+  // creating a second one.
+  const id = newJobId();
+  const ts = Date.now();
+  await pool.query(
+    `INSERT INTO yt_import_jobs
+       (id, user_id, yt_playlist_id, kind, strategy, status, playlist_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,'queued',$6,$7,$7)`,
+    [id, userId, link.yt_playlist_id, link.kind, STRATEGY.OFFICIAL, playlistId, ts],
+  );
+  return { changed: true, jobId: id, itemCount: meta.itemCount };
 }
 
 // ── Cron ────────────────────────────────────────────────────────────
