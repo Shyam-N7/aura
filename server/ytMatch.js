@@ -185,13 +185,40 @@ export function scoreCandidate(parsed, candidate) {
  */
 export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   const auto = autoThreshold ?? THRESHOLDS.auto;
-  const scored = (candidates ?? [])
-    .map(c => ({ candidate: c, ...scoreCandidate(parsed, c) }))
+
+  // `parsed` may be a single reading or the ambiguous pair from
+  // parseVideoVariants ("A - B" is song-artist in Indian titles and
+  // artist-song in Western ones). Score every reading against every candidate
+  // and let the evidence pick — the parser has no way to know, but the catalog
+  // does. The winning reading is carried on the result so a reviewer can see
+  // which interpretation was used.
+  const variants = Array.isArray(parsed) ? parsed : [parsed];
+  const scored = variants
+    .flatMap(v =>
+      (candidates ?? []).map(c => ({
+        candidate: c,
+        parsed: v,
+        ...scoreCandidate(v, c),
+      })),
+    )
     .sort((a, b) => b.score - a.score);
 
-  const best = scored[0];
+  // Scoring N candidates against 2 readings yields 2N rows, so the same song
+  // can appear twice. Keep each song once, at its best-scoring reading —
+  // otherwise the review screen offers "pick one of three" and shows the same
+  // track twice, which is worse than offering two.
+  const seen = new Set();
+  const unique = scored.filter(r => {
+    const id = r.candidate?.id;
+    if (id == null) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  const best = unique[0];
   if (!best || best.score < THRESHOLDS.review) {
-    return { tier: TIER.UNMATCHED, best: best ?? null, candidates: scored.slice(0, 3) };
+    return { tier: TIER.UNMATCHED, best: best ?? null, candidates: unique.slice(0, 3) };
   }
   // Auto-accept needs corroboration beyond the title, but WHICH corroboration
   // depends on what we actually know:
@@ -210,7 +237,7 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   //                     coin flip — exactly the same-title-different-artist
   //                     case this catalog is full of. Send it to review.
   const artistKnown = best.breakdown.artist !== null;
-  const second = scored[1];
+  const second = unique[1];
   const unambiguous =
     !second || best.score - second.score > THRESHOLDS.ambiguityMargin;
   const corroborated = artistKnown
@@ -220,9 +247,9 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
       unambiguous;
 
   if (best.score >= auto && corroborated) {
-    return { tier: TIER.AUTO, best, candidates: scored.slice(0, 3) };
+    return { tier: TIER.AUTO, best, candidates: unique.slice(0, 3) };
   }
-  return { tier: TIER.REVIEW, best, candidates: scored.slice(0, 3) };
+  return { tier: TIER.REVIEW, best, candidates: unique.slice(0, 3) };
 }
 
 /**

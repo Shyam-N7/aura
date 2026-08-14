@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseVideo,
+  parseVideoVariants,
+  isGenericTitle,
   parseArtTrackDescription,
   cleanTitle,
   extractMovie,
@@ -311,5 +313,60 @@ describe('fingerprint cache key', () => {
       versions: [],
     };
     expect(fingerprint(kesariya)).not.toBe(fingerprint(other));
+  });
+});
+
+// All four titles below are VERBATIM from the first real dry run, where they
+// produced wrong or unusable parses.
+describe('ambiguous "A - B", measured both ways', () => {
+  it.each([
+    ['Title Track', true],
+    ['Title Track Video', true],
+    ['Official', true],
+    ['Theme', true],
+    ['Gudugudiya Sedi Nodo', false],
+    ['Tulasi', false],
+  ])('isGenericTitle(%s) === %s', (t, want) => {
+    expect(isGenericTitle(t)).toBe(want);
+  });
+
+  // Indian norm: song first. Guessing the Western order made the catalog search
+  // look for an artist name and find nothing.
+  it('offers both readings of "Tulasi - Sumedh K"', () => {
+    const v = parseVideoVariants({ title: 'Tulasi - Sumedh K', channelTitle: 'x' });
+    expect(v).toHaveLength(2);
+    expect(v.map(p => p.title)).toEqual(expect.arrayContaining(['Tulasi', 'Sumedh K']));
+  });
+
+  // A generic head is not ambiguous, it is wrong — so the swap must LEAD.
+  it('leads with the swap when the head is generic', () => {
+    const v = parseVideoVariants({ title: 'Title Track - Mugulu Nage', channelTitle: 'x' });
+    expect(v[0].title).toBe('Mugulu Nage');
+  });
+
+  it('does not guess at all for an Art Track — credits are structured', () => {
+    const v = parseVideoVariants({
+      title: 'whatever', channelTitle: 'Pritam - Topic', description: ART_DESC,
+    });
+    expect(v).toHaveLength(1);
+  });
+
+  it('picks the reading the CATALOG supports, not the one we guessed', () => {
+    const variants = parseVideoVariants({ title: 'Tulasi - Sumedh K', channelTitle: 'x', durationSec: 200 });
+    const r = matchVideo(variants, [
+      song({ id: 'right', title: 'Tulasi', artist: 'Sumedh K', durationSec: 200 }),
+    ]);
+    expect(r.best.candidate.id).toBe('right');
+    expect(r.best.parsed.title).toBe('Tulasi');
+  });
+
+  it('never offers the same song twice in the top three', () => {
+    const variants = parseVideoVariants({ title: 'Tulasi - Sumedh K', channelTitle: 'x', durationSec: 200 });
+    const r = matchVideo(variants, [
+      song({ id: 'a', title: 'Tulasi', artist: 'Sumedh K', durationSec: 200 }),
+      song({ id: 'b', title: 'Tulasi', artist: 'Someone Else', durationSec: 200 }),
+    ]);
+    const ids = r.candidates.map(c => c.candidate.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

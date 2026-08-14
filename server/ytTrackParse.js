@@ -205,6 +205,63 @@ export function topicChannelArtist(channel) {
 }
 
 /**
+ * Phrases that are never a song name. MEASURED on a real mix: the pipe-split
+ * kept heads like "Title Track Video", "Official" and "Title Track", each of
+ * which is a label for a track rather than its name — and none could ever match
+ * anything. When the head is generic the real name is on the other side.
+ */
+const GENERIC_TITLES = new Set([
+  'title track',
+  'title song',
+  'title track video',
+  'official',
+  'official video',
+  'video',
+  'audio',
+  'song',
+  'lyrical',
+  'lyric video',
+  'teaser',
+  'trailer',
+  'promo',
+  'theme',
+  'theme music',
+  'bgm',
+]);
+
+export function isGenericTitle(t) {
+  const k = String(t ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return k === '' || GENERIC_TITLES.has(k);
+}
+
+/**
+ * Both readings of "A - B", because the convention is genuinely inconsistent
+ * and the parser cannot know which applies.
+ *
+ * MEASURED on one 50-track mix, both orders present:
+ *   "Tulasi - Sumedh K"            song first, artist second  (Indian norm)
+ *   "TREAM X BAUSA - DER SONNE …"  artist first, song second  (Western norm)
+ *
+ * Guessing one direction gets the other class wrong every time, and the failure
+ * is silent — we search the catalog for an artist name and find nothing. So we
+ * emit BOTH readings and let scoring against real candidates decide, which is
+ * the only place the evidence actually exists.
+ */
+export function parseVideoVariants(video) {
+  const primary = parseVideo(video);
+  // Art Tracks carry structured credits; there is nothing to guess.
+  if (primary.source === SOURCE.ART_TRACK) return [primary];
+
+  const swapped = primary.artists.length
+    ? { ...primary, title: primary.artists[0], artists: [primary.title] }
+    : null;
+
+  // A generic head is not ambiguous — it is simply wrong, so the swap leads.
+  if (swapped && isGenericTitle(primary.title)) return [swapped, primary];
+  return swapped ? [primary, swapped] : [primary];
+}
+
+/**
  * Full parse of one YouTube video into matchable fields.
  * `video` is { title, channelTitle, description, durationSec }.
  */
