@@ -68,6 +68,7 @@ if (url === '\\' || url === '`') {
 }
 
 if (!url) {
+  console.error('usage: node scripts/yt-dryrun.mjs "<playlist url>" [--limit N] [--json]');
   console.error('usage: node --env-file=.env.local scripts/yt-dryrun.mjs "<url>" [--limit N] [--json]');
   process.exit(2);
 }
