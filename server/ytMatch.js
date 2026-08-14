@@ -267,23 +267,29 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   //   exact duration and were sent to review purely because a duplicate tied
   //   with them. Only a runner-up with a DIFFERENT artist is genuine ambiguity.
   const second = unique[1];
-  // Full credit only (=== 1, i.e. a whole name in common), never the 0.6
-  // single-token score. "Singer One" and "Singer Two" share the token "singer"
-  // and are obviously not the same artist — a shared surname would do the same
-  // across half of Indian film music, which is exactly the collision this
-  // guard exists to avoid.
+  // Identity by TITLE + DURATION, not by artist string.
+  //
+  // MEASURED: matching on artist did not work, because JioSaavn lists one
+  // recording under different credits — composer on one row, playback singer on
+  // another. #22 "Naan Pizhai" scored a PERFECT 1.000 and was still sent to
+  // review because the runner-up carried a different credit for the same track.
+  // Two rows with the same title and the same runtime are the same recording,
+  // whatever the credit says.
   const sameRecording =
     second &&
-    artistOverlap([second.candidate?.artist ?? ''], best.candidate?.artist ?? '') === 1;
+    titleSimilarity(best.candidate?.title ?? '', second.candidate?.title ?? '') >= 0.9 &&
+    Math.abs((best.candidate?.durationSec ?? -1) - (second.candidate?.durationSec ?? -2)) <= 3;
   const unambiguous =
     !second ||
     sameRecording ||
     best.score - second.score > THRESHOLDS.ambiguityMargin;
+  // Movie/album agreement is independent evidence and substitutes for an exact
+  // duration. MEASURED: #23 and #49 matched their film exactly (sanity=1) but
+  // ran 0.875 / 0.725 on duration — a video edit, not a different song — and
+  // were blocked by a duration rule that had no other evidence to weigh.
   const corroborated = artistKnown
     ? best.breakdown.artist > 0
-    : best.breakdown.duration !== null &&
-      best.breakdown.duration >= 0.9 &&
-      unambiguous;
+    : (best.breakdown.duration >= 0.9 || best.breakdown.sanity > 0) && unambiguous;
 
   if (best.score >= auto && corroborated) {
     return { tier: TIER.AUTO, best, candidates: unique.slice(0, 3) };

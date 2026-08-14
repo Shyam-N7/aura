@@ -196,15 +196,35 @@ describe('scoring', () => {
     expect(r.tier).toBe(TIER.AUTO);
   });
 
-  it('refuses to auto-accept an artist-less match when candidates are tied', () => {
-    // The coin-flip case: same title, same duration, different artists, and
-    // nothing on the YouTube side to break the tie.
-    const p = parseVideo({ title: 'Kesariya', channelTitle: 'Random Uploads', durationSec: 268 });
+  it('refuses to auto-accept an artist-less match when a genuine rival exists', () => {
+    // The coin-flip case: two DIFFERENT recordings sharing a name, told apart
+    // by runtime. Both score near-identically on title, nothing on the YouTube
+    // side breaks the tie, so it must go to review.
+    //
+    // The rival deliberately differs in DURATION rather than only in artist.
+    // MEASURED: this catalog lists one recording under several credits
+    // (composer on one row, playback singer on another), so "same title, same
+    // runtime, different credit" is a duplicate, not a rival — treating it as
+    // one sent a perfect 1.000 match to review.
+    // Two different masters 12s apart: outside the 3s same-recording window, but
+    // both inside the music-video duration tolerance, so they score IDENTICALLY
+    // and nothing can separate them. That is the real coin flip.
+    const p = parseVideo({ title: 'Uyire', channelTitle: 'Label', durationSec: 240 });
     const r = matchVideo(p, [
-      song({ id: 'a', title: 'Kesariya', artist: 'Singer One', durationSec: 268 }),
-      song({ id: 'b', title: 'Kesariya', artist: 'Singer Two', durationSec: 268 }),
+      song({ id: 'a', title: 'Uyire', artist: 'Singer One', durationSec: 240 }),
+      song({ id: 'b', title: 'Uyire', artist: 'Singer Two', durationSec: 252 }),
     ]);
+    expect(r.candidates[0].score).toBe(r.candidates[1].score); // genuinely tied
     expect(r.tier).toBe(TIER.REVIEW);
+  });
+
+  it('treats the same recording under two credits as one candidate', () => {
+    const p = parseVideo({ title: 'Naan Pizhai', channelTitle: 'Label', durationSec: 240 });
+    const r = matchVideo(p, [
+      song({ id: 'composer', title: 'Naan Pizhai', artist: 'Anirudh Ravichander', durationSec: 240 }),
+      song({ id: 'singer', title: 'Naan Pizhai', artist: 'Sid Sriram', durationSec: 240 }),
+    ]);
+    expect(r.tier).toBe(TIER.AUTO);
   });
 
   it('still blocks a match whose artist is known and DISAGREES', () => {
