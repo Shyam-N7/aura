@@ -32,6 +32,16 @@ const NOISE_PATTERNS = [
   /\[(?:audio|lyric[s]?|lyrical|visuali[sz]er|hd|hq|4k|full\s*hd)\]/gi,
   /\((?:full\s+)?(?:video|songs?|movie)\s*(?:songs?)?\)/gi,
   /\b(?:official\s+video|official\s+audio|official\s+trailer)\b/gi,
+  // Unbracketed "Music Video". Only the BRACKETED form was covered, so
+  // MEASURED on two mix rows: "Aura 10/10 - Music Video | Meesaya Murukku 2"
+  // split on the hyphen and left the title as the bare word "Music" (the
+  // trailing strip ate "Video" and stopped), and "Mutta Kalakki Music Video"
+  // became "Mutta Kalakki Music". Stripped whole, before any split can see it.
+  /\b(?:official\s+)?music\s+video\b/gi,
+  // Slash-joined quality tags: "8K/4K", "4K/1080p". The individual tokens were
+  // already handled, but never the pair — "Mudhal Nee Mudivum Nee Title Track
+  // 8K/4K Video" kept a trailing "8K/" once its partner was stripped.
+  /\b(?:8k|4k|hd|hq|1080p|720p)\s*\/\s*(?:8k|4k|hd|hq|1080p|720p)\b/gi,
   /\b(?:lyric[s]?\s*video|lyrical\s*video|lyrical)\b/gi,
   // Longest first: "Full Video Song" must not be eaten by "full video", which
   // strands a bare "Song" in the title. MEASURED on a real mix item —
