@@ -64,6 +64,13 @@ const NOISE_PATTERNS = [
   /\(\s*title\s+(?:track|song)\s*\)/gi,
   /\[\s*title\s+(?:track|song)\s*\]/gi,
   /\btitle\s+(?:track|song)\b/gi,
+  // "<Film> Kannada Movie | <Song> …". MOVIE_LABEL already strips this shape
+  // when reading a film name out of pipe segment 2, but the HEAD never got the
+  // same treatment — so "Durga Shakti Kannada Movie" reached both the catalog
+  // query and the review screen with the label still attached. Requires the
+  // word "movie", so an ordinary title containing a language name is untouched.
+  /\b(?:kannada|tamil|telugu|malayalam|hindi|punjabi|marathi|bengali)?\s*movie\s+songs?\b/gi,
+  /\b(?:kannada|tamil|telugu|malayalam|hindi|punjabi|marathi|bengali)\s+movie\b/gi,
   /\b(?:hd|hq|4k|1080p|720p|remaster(?:ed)?(?:\s+\d{4})?)\b/gi,
   /\bwith\s+lyrics\b/gi,
   /\bout\s+now\b/gi,
@@ -402,7 +409,25 @@ export function parseVideoVariants(video) {
   // built from a phrase isGenericTitle already rejects everywhere else. Drop it
   // rather than rank it: an ambiguity with one meaningful side is not ambiguous.
   if (swapped && isGenericTitle(swapped.title)) return [primary];
-  return swapped ? [primary, swapped] : [primary];
+  if (swapped) return [primary, swapped];
+
+  // No hyphen to swap on — but the PIPE carries the same ambiguity, and we had
+  // only ever read it one way.
+  //
+  // "Kaagadada Doniyalli | Kirik Party" is SONG | MOVIE. "Milana | Ninnindale"
+  // is MOVIE | SONG, and the parser called the film the song and the song the
+  // film. MEASURED on one 30-row mix: Milana, Durga Shakti, Aasai Aasaiyai and
+  // Pooparika Varugirom, plus Bachchan and Krishnan Love Story on the Kannada
+  // list — the largest remaining error class, and the one that lands WRONG
+  // tracks in a playlist rather than merely missing them.
+  //
+  // Same answer as the hyphen: do not guess a direction, emit both and let the
+  // catalog decide. The film reading is second because SONG | MOVIE is the more
+  // common shape, and reading order decides which query runs first.
+  const pipeSwapped = primary.movie && !isGenericTitle(primary.movie)
+    ? { ...primary, title: primary.movie, movie: primary.title }
+    : null;
+  return pipeSwapped ? [primary, pipeSwapped] : [primary];
 }
 
 /**

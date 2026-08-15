@@ -12,9 +12,15 @@
 // offline then means something online.
 
 import { tokens, isGenericTitle } from './ytTrackParse.js';
+import { titleSimilarity } from './ytMatch.js';
 
 /** Never ask the catalog for more than this per video. Two searches maximum. */
 export const MAX_SEARCHES_PER_ITEM = 2;
+
+// How much a returned title must resemble the query before we accept that the
+// query was answered and stop. Below this we keep the results but try the next
+// reading — see the note at the break.
+export const STOP_SIMILARITY = 0.8;
 
 /** How many results to score. Beyond ~20 the tail is noise, and it costs latency. */
 export const SEARCH_LIMIT = 20;
@@ -84,13 +90,18 @@ export async function findCandidates(parsed, { search, limit = SEARCH_LIMIT } = 
       const key = tokens(q).join(' ');
       if (seen.has(key)) continue;
       seen.add(key);
-      queries.push(q);
+      // The reading's TITLE travels with the query. The stop check compares
+      // against the song we are looking for, not the query string — those
+      // differ whenever an artist is appended, and comparing a candidate title
+      // to "Tum Hi Ho Arijit Singh" scores badly for an exact match. Caught by
+      // the existing "stops after the first query" test.
+      queries.push({ q, title: reading?.title ?? q });
     }
   }
 
   const byId = new Map();
   let searches = 0;
-  for (const q of queries.slice(0, MAX_SEARCHES_PER_ITEM)) {
+  for (const { q, title } of queries.slice(0, MAX_SEARCHES_PER_ITEM)) {
     let results;
     try {
       results = await searchFn(q, { limit });
@@ -115,11 +126,56 @@ export async function findCandidates(parsed, { search, limit = SEARCH_LIMIT } = 
       // ytMatch.matchVideo) worth preserving across the merge.
       if (r?.id && !byId.has(r.id)) byId.set(r.id, r);
     }
-    // Stop early when the first query already answered. Saves roughly one
-    // search per track on the common case, which is the whole second half of
-    // the catalog-load budget.
-    if (byId.size > 0) break;
+    // Stop early when the first query already answered — but "answered" has to
+    // mean a candidate that LOOKS LIKE what we searched for, not merely a
+    // candidate.
+    //
+    // MEASURED, and this was the largest remaining error class: a YouTube title
+    // of the shape "Milana | Ninnindale | …" is MOVIE | SONG, the reverse of
+    // what the parser assumes, so the first query searches the film name.
+    // "Milana" returns a real song called "Milana Milana" — wrong, but present.
+    // `byId.size > 0` then broke the loop, and the query for the ACTUAL song
+    // never ran. That row reached auto at 0.917 against a song the catalog was
+    // never asked about.
+    //
+    // Anything is better than nothing when nothing is the alternative, so a weak
+    // result is still kept and returned; it just no longer PREVENTS the next
+    // query — the rival reading — from running. See answersQuery for how a
+    // film-name query is told apart from a song one, which similarity alone
+    // cannot do.
+    if (answersQuery(title, byId)) break;
   }
 
   return { candidates: [...byId.values()], searches };
+}
+
+// Does anything returned actually resemble what we asked for?
+//
+// titleSimilarity is imported from ytMatch rather than re-implemented here. A
+// second similarity function would drift from the one that decides matches, and
+// then this gate would be stopping on a different notion of "good" than the
+// scorer uses — the same class of mistake as a harness measuring a path the
+// server does not take.
+function answersQuery(wantedTitle, byId) {
+  if (byId.size === 0) return false;
+  for (const c of byId.values()) {
+    if (titleSimilarity(wantedTitle, c.title) < STOP_SIMILARITY) continue;
+    // The tell that we searched a FILM name rather than a song.
+    //
+    // Similarity alone cannot see this — "Milana" against "Milana Milana"
+    // scores a perfect 1.000. But look at the ALBUM: when the query is a film
+    // name, the catalog hands back that film's namesake song, whose album is
+    // ALSO the query. When the query is a real song, the album is the film and
+    // does not match. MEASURED on the O Sona mix:
+    //
+    //   Milana  -> title 1.00  album 1.00   (film — the rival must be tried)
+    //   O Sona  -> title 1.00  album 0.00   (song — stop here, one search)
+    //
+    // A self-titled single (Era Istrefi's "Bad", album "Bad") trips this and
+    // pays one extra search. Wasted work, never a wrong answer — the right
+    // direction to fail in.
+    if (c.album && titleSimilarity(wantedTitle, c.album) >= STOP_SIMILARITY) continue;
+    return true;
+  }
+  return false;
 }
