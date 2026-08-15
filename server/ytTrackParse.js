@@ -424,53 +424,70 @@ export function parseVideoVariants(video) {
   // Art Tracks carry structured credits; there is nothing to guess.
   if (primary.source === SOURCE.ART_TRACK) return [primary];
 
-  const swapped = primary.artists.length
-    ? { ...primary, title: primary.artists[0], artists: [primary.title] }
-    : null;
+  // ── Enumerate, then rank ──────────────────────────────────────────────
+  //
+  // This was five sequential branches, one added per measured case, and they
+  // were mutually exclusive BY ACCIDENT: the hyphen branch returned before the
+  // pipe branch could be reached. So a title carrying both separators had its
+  // film name parsed out and then thrown away —
+  //
+  //   "Radhe - The Wedding Song | Ibbani Tabbida Ileyali"
+  //      readings: ["The Wedding", "Radhe"]
+  //      movie:    "Ibbani Tabbida Ileyali"   <- extracted, never offered
+  //
+  // — which is why that row came back unmatched at 0.532.
+  //
+  // Enumerating every hypothesis and ranking them makes the orderings DATA
+  // rather than control flow: each rule below is one of those old branches,
+  // and the next measured case is a new prior instead of a sixth branch.
+  const hypotheses = [
+    // The head: pipe segment 1, hyphen right-hand side. The common reading.
+    { reading: primary, prior: 0 },
+  ];
 
-  // A generic head is not ambiguous — it is simply wrong, so the swap leads.
-  if (swapped && isGenericTitle(primary.title)) return [swapped, primary];
-  // The mirror case, and the one that was costing us: if the SWAP's title is
-  // generic, the swap is not a rival reading at all — nobody released a song
-  // called "Title Track" or "Official Video". Emitting it anyway spends one of
-  // only two catalogue searches per video (MAX_SEARCHES_PER_ITEM) on a query
-  // built from a phrase isGenericTitle already rejects everywhere else. Drop it
-  // rather than rank it: an ambiguity with one meaningful side is not ambiguous.
-  if (swapped && isGenericTitle(swapped.title)) return [primary];
-  if (swapped) return [primary, swapped];
+  // The hyphen's other side. "Tulasi - Sumedh K" is song-artist (Indian norm),
+  // "TREAM X BAUSA - DER SONNE" is artist-song (Western). Both real, in one mix.
+  if (primary.artists.length) {
+    hypotheses.push({
+      reading: { ...primary, title: primary.artists[0], artists: [primary.title] },
+      prior: -1,
+    });
+  }
 
-  // No hyphen to swap on — but the PIPE carries the same ambiguity, and we had
-  // only ever read it one way.
-  //
-  // "Kaagadada Doniyalli | Kirik Party" is SONG | MOVIE. "Milana | Ninnindale"
-  // is MOVIE | SONG, and the parser called the film the song and the song the
-  // film. MEASURED on one 30-row mix: Milana, Durga Shakti, Aasai Aasaiyai and
-  // Pooparika Varugirom, plus Bachchan and Krishnan Love Story on the Kannada
-  // list — the largest remaining error class, and the one that lands WRONG
-  // tracks in a playlist rather than merely missing them.
-  //
-  // Same answer as the hyphen: do not guess a direction, emit both and let the
-  // catalog decide. The film reading is second because SONG | MOVIE is the more
-  // common shape, and reading order decides which query runs first.
-  const pipeSwapped = primary.movie && !isGenericTitle(primary.movie)
-    ? { ...primary, title: primary.movie, movie: primary.title }
-    : null;
-  if (!pipeSwapped) return [primary];
+  // Pipe segment 2. "Kaagadada Doniyalli | Kirik Party" is SONG | MOVIE;
+  // "Milana | Ninnindale" is MOVIE | SONG. Same ambiguity, different separator.
+  if (primary.movie) {
+    hypotheses.push({
+      reading: { ...primary, title: primary.movie, movie: primary.title },
+      prior: -1,
+    });
+  }
 
-  // …unless the title SAID which half is the film, in which case there is no
-  // ambiguity left to resolve and the song reading leads.
-  //
-  // This is the correction to that first assumption. Emitting both readings
-  // still relies on the catalog to pick, and for "Durga Shakti Kannada Movie"
-  // the catalog picks WRONG: it holds a DJ single genuinely titled "Durga
-  // Shakti", so the film query returns a perfect title match whose album is not
-  // the film — invisible to ytSearch's album tell — and the loop stops before
-  // the real song is ever searched. Both rows landed on confident, wrong autos.
-  //
-  // Leading with the song is also CHEAPER: the right query answers first, so it
-  // costs one search rather than two.
-  if (headIsFilmLabelled(video?.title)) return [pipeSwapped, primary];
-  return [primary, pipeSwapped];
+  // A hypothesis titled with a phrase nobody released is not a rival reading at
+  // all — it is a wasted search out of only two. Dropped, never ranked.
+  const live = hypotheses.filter(h => !isGenericTitle(h.reading.title));
+  if (!live.length) return [primary];
+
+  for (const h of live) {
+    // A generic HEAD is not ambiguous, it is simply wrong — so anything else
+    // outranks it.
+    if (h.reading === primary && isGenericTitle(primary.title)) h.prior -= 10;
+
+    // The title SAID which half is the film. That is certainty rather than
+    // ambiguity, so the segment-2 song leads: the catalog holds singles named
+    // after films (a DJ track called "Durga Shakti"), and letting the film
+    // query run first produced confident, wrong autos.
+    if (h.reading.title === primary.movie && headIsFilmLabelled(video?.title)) h.prior += 10;
+  }
+
+  // Stable sort — equal priors keep enumeration order, which is what preserves
+  // "head first" as the default for a genuinely ambiguous title.
+  live.sort((a, b) => b.prior - a.prior);
+
+  // Only two searches are ever spent (MAX_SEARCHES_PER_ITEM), so a third
+  // reading could never be tried. Ranking is precisely the decision of which
+  // two to spend them on — the cascade was making it implicitly.
+  return live.slice(0, 2).map(h => h.reading);
 }
 
 /**

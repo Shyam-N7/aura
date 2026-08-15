@@ -580,6 +580,63 @@ describe('defects found by the first LIVE import', () => {
   });
 });
 
+describe('readings are ranked, not branched to', () => {
+  const titles = (t) => parseVideoVariants({ title: t, channelTitle: '', durationSec: 240 }).map(r => r.title);
+
+  it('consults the film marker even when the head also has a hyphen', () => {
+    // The gap the ranking closes. As a cascade, the hyphen branch RETURNED
+    // before the pipe branch — so a film-labelled head containing a hyphen
+    // never had its marker checked at all:
+    //
+    //   before: ["Ganga", "Shankar"]        (the film, and half its title)
+    //   after:  ["Om Shakthi Jaya Jaya", …] (the song)
+    expect(titles('Shankar - Ganga Kannada Movie | Om Shakthi Jaya Jaya Video Song')[0])
+      .toBe('Om Shakthi Jaya Jaya');
+  });
+
+  it('still prefers the head when nothing outranks it', () => {
+    // Equal priors keep enumeration order, which is what preserves "head
+    // first" as the default for a genuinely ambiguous title.
+    expect(titles('Kaagadada Doniyalli - Video Song | Kirik Party')[0]).toBe('Kaagadada Doniyalli');
+    expect(titles('Milana | Ninnindale | Puneeth')[0]).toBe('Milana');
+  });
+
+  it('ranks a film name BELOW both halves of a hyphen split', () => {
+    // Correcting my own claim: I cited this row as evidence the pipe reading
+    // was being lost. It is enumerated now and still does not make the cut —
+    // correctly. Three hypotheses, two searches, and "Ibbani Tabbida Ileyali"
+    // is the FILM, the least likely of the three to be a song title.
+    expect(titles('Radhe - The Wedding Song | Ibbani Tabbida Ileyali'))
+      .toEqual(['The Wedding', 'Radhe']);
+  });
+
+  it('carries the film for corroboration even when it is not a reading', () => {
+    // Which is why dropping it costs nothing: sanity still gets the film.
+    const [r] = parseVideoVariants({
+      title: 'Radhe - The Wedding Song | Ibbani Tabbida Ileyali', channelTitle: '', durationSec: 240,
+    });
+    expect(r.movie).toBe('Ibbani Tabbida Ileyali');
+  });
+
+  it('never returns more than the search budget allows', () => {
+    // MAX_SEARCHES_PER_ITEM is 2, so a third reading could never be tried.
+    // Ranking decides which two are spent; emitting more would be a lie.
+    for (const t of [
+      'Radhe - The Wedding Song | Ibbani Tabbida Ileyali',
+      'Shankar - Ganga Kannada Movie | Om Shakthi Jaya Jaya',
+      'Milana | Ninnindale | Puneeth',
+    ]) {
+      expect(titles(t).length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('drops a hypothesis nobody released rather than ranking it', () => {
+    // A generic title is a wasted search out of only two, not a rival reading.
+    expect(titles('Sapta Sagaradaache Ello - Title Track | Rakshit Shetty'))
+      .not.toContain('Title Track');
+  });
+});
+
 describe('when the title SAYS which half is the film', () => {
   // The correction to the block below. Emitting both readings and letting the
   // catalog pick is right when the direction is genuinely unknown — but
