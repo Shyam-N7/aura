@@ -476,3 +476,35 @@
      AFTER this file, so putting them here would lose the source-order cascade
      to the artist base rules and never apply on phones. */
 }
+
+/* "Check for new songs" — only rendered for a playlist imported from a finite
+   YouTube source. Deliberately quieter than Play all: it sits in the same row
+   but is a maintenance action, not the thing you came here to do. */
+.aura-dpd__yt-refresh {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-ink-soft);
+  border: 1px solid var(--color-line);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+.aura-dpd__yt-refresh:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent), transparent 45%);
+  color: var(--color-ink);
+}
+.aura-dpd__yt-refresh:disabled { opacity: 0.55; cursor: default; }
+
+/* The review follow-up carries the accent, because unlike the refresh itself
+   it is a decision waiting on the user rather than a check they may run. */
+.aura-dpd__yt-refresh--review {
+  border-color: color-mix(in srgb, var(--color-accent), transparent 40%);
+  color: var(--color-accent);
+}

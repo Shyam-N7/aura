@@ -117,10 +117,54 @@ export async function listLinks({ signal } = {}) {
   return links ?? [];
 }
 
+// The link set, fetched once per session.
+//
+// Every playlist-detail view needs one bit — did this come from a YouTube source
+// we can check again? — and for almost every playlist the honest answer is no.
+// Asking the server per view would put a request on the ~99% that never came
+// from YouTube, in order to render nothing. The set only changes when an import
+// or a refresh runs, and both invalidate it.
+let linksPromise = null;
+
+export function invalidateYtLinks() {
+  linksPromise = null;
+}
+
+/**
+ * The link row for a playlist, or null.
+ *
+ * Null is the gate for the entire refresh feature. finishJob writes a link row
+ * ONLY for a finite playlist, never for a mix — a mix regenerates every time
+ * YouTube builds it, so there is no stable source to diff against. "No row" and
+ * "not refreshable" are therefore the same statement, and the UI needs no
+ * separate kind check.
+ *
+ * Never throws. A failed lookup means the button does not render — the same
+ * outcome as no link, which fails toward absence rather than toward a button
+ * that leads nowhere.
+ */
+export async function getYtLink(playlistId, { signal } = {}) {
+  if (!playlistId) return null;
+  if (!linksPromise) {
+    linksPromise = listLinks({ signal }).catch(() => {
+      // Do not cache a failure — the next view should get a fresh attempt.
+      linksPromise = null;
+      return [];
+    });
+  }
+  const links = await linksPromise;
+  // snake_case on purpose: listLinks returns rows straight from SQL (see
+  // importJobs.listLinks), unlike every other camelCase payload in this client.
+  return links.find(l => l.playlist_id === playlistId) ?? null;
+}
+
 /** Check for new songs and import them. `{changed:false}` is the common answer. */
 export async function refreshPlaylist(playlistId) {
   const res = await fetchAuthed('/api/import/youtube/refresh', json({ playlistId }));
   if (!res.ok) throw await fail(res, 'could not check for updates');
+  // A refresh can create the very first link row for a playlist, and always
+  // moves last_synced_at. Drop the cache so the next view reads the truth.
+  invalidateYtLinks();
   return res.json();
 }
 

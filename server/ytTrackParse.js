@@ -30,14 +30,30 @@ const NOISE_PATTERNS = [
   /\((?:official\s+)?(?:audio|lyric[s]?|lyrical|visuali[sz]er|teaser|trailer)\)/gi,
   /\[(?:official\s+)?(?:music\s+)?video\]/gi,
   /\[(?:audio|lyric[s]?|lyrical|visuali[sz]er|hd|hq|4k|full\s*hd)\]/gi,
-  /\((?:full\s+)?(?:video|song|movie)\s*(?:song)?\)/gi,
+  /\((?:full\s+)?(?:video|songs?|movie)\s*(?:songs?)?\)/gi,
   /\b(?:official\s+video|official\s+audio|official\s+trailer)\b/gi,
+  // Unbracketed "Music Video". Only the BRACKETED form was covered, so
+  // MEASURED on two mix rows: "Aura 10/10 - Music Video | Meesaya Murukku 2"
+  // split on the hyphen and left the title as the bare word "Music" (the
+  // trailing strip ate "Video" and stopped), and "Mutta Kalakki Music Video"
+  // became "Mutta Kalakki Music". Stripped whole, before any split can see it.
+  /\b(?:official\s+)?music\s+video\b/gi,
+  // Slash-joined quality tags: "8K/4K", "4K/1080p". The individual tokens were
+  // already handled, but never the pair — "Mudhal Nee Mudivum Nee Title Track
+  // 8K/4K Video" kept a trailing "8K/" once its partner was stripped.
+  /\b(?:8k|4k|hd|hq|1080p|720p)\s*\/\s*(?:8k|4k|hd|hq|1080p|720p)\b/gi,
   /\b(?:lyric[s]?\s*video|lyrical\s*video|lyrical)\b/gi,
   // Longest first: "Full Video Song" must not be eaten by "full video", which
   // strands a bare "Song" in the title. MEASURED on a real mix item —
   // "Gira Gira Full Video Song" cleaned to "Gira Gira Song".
-  /\b(?:full\s+)?(?:video|audio|lyrical)\s+song\b/gi,
-  /\b(?:full\s+song|full\s+video|video\s+song|full\s+audio)\b/gi,
+  //
+  // The PLURAL was missing everywhere, and it failed in both directions —
+  // MEASURED on a 26-row Telugu playlist: "Evaraina Eppudaina Audio Songs |
+  // Jukebox" kept the whole phrase and scored 0.000, while "Full Video Songs"
+  // stripped only its head and left "X Songs" — precisely the orphan the note
+  // above exists to prevent. Jukebox and compilation uploads are always plural.
+  /\b(?:full\s+)?(?:video|audio|lyrical)\s+songs?\b/gi,
+  /\b(?:full\s+songs?|full\s+video|video\s+songs?|full\s+audio)\b/gi,
   // "<Song> - Title Track" is the standard Kannada/Telugu label shape for a
   // film's namesake song. GENERIC_TITLES has known "title track" was meaningless
   // all along, but only downstream — by then the "A - B" split had already made
@@ -48,6 +64,13 @@ const NOISE_PATTERNS = [
   /\(\s*title\s+(?:track|song)\s*\)/gi,
   /\[\s*title\s+(?:track|song)\s*\]/gi,
   /\btitle\s+(?:track|song)\b/gi,
+  // "<Film> Kannada Movie | <Song> …". MOVIE_LABEL already strips this shape
+  // when reading a film name out of pipe segment 2, but the HEAD never got the
+  // same treatment — so "Durga Shakti Kannada Movie" reached both the catalog
+  // query and the review screen with the label still attached. Requires the
+  // word "movie", so an ordinary title containing a language name is untouched.
+  /\b(?:kannada|tamil|telugu|malayalam|hindi|punjabi|marathi|bengali)?\s*movie\s+songs?\b/gi,
+  /\b(?:kannada|tamil|telugu|malayalam|hindi|punjabi|marathi|bengali)\s+movie\b/gi,
   /\b(?:hd|hq|4k|1080p|720p|remaster(?:ed)?(?:\s+\d{4})?)\b/gi,
   /\bwith\s+lyrics\b/gi,
   /\bout\s+now\b/gi,
@@ -127,7 +150,7 @@ export function stripTrailingDecoration(input) {
       // "<song> Lyric | <cast>" is one of the most common Tamil/Telugu label
       // title shapes there is — so the drag was being paid across a whole class
       // of rows, not just this one.
-      /[\s\-–—|]*\b(?:video|audio|song|official|lyrical|lyrics|lyric|quality|hd|hq|4k|8k|full)\b\s*$/i,
+      /[\s\-–—|]*\b(?:videos?|audio|songs?|official|lyrical|lyrics|lyric|quality|hd|hq|4k|8k|full)\b\s*$/i,
       '',
     );
   } while (s !== prev);
@@ -161,8 +184,28 @@ export function versionsIn(s) {
 }
 
 /** Strip the noise humans add to video titles. */
+/**
+ * "#SaradagaKasepaina" → "Saradaga Kasepaina".
+ *
+ * A promo hashtag glues the words together, and tokens() only splits on
+ * whitespace — so the whole thing became ONE token and shared nothing with the
+ * catalogue's ["saradaga", "kasepaina"]. MEASURED on a Telugu playlist: title
+ * similarity 0.167, unmatched, against a candidate that was plainly correct.
+ *
+ * Deliberately narrow. Splitting camelCase anywhere in a title would wreck real
+ * names, so this fires ONLY after a "#", and only on a lower→upper boundary —
+ * which leaves acronym runs ("#ARRahman") alone rather than guessing at them.
+ * "#Leharaayi", a single word, is untouched and already scored 0.917.
+ */
+export function splitHashtagWords(input) {
+  return String(input ?? '').replace(
+    /#(\p{L}[\p{L}\p{N}]*)/gu,
+    (_, word) => ' ' + word.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2'),
+  );
+}
+
 export function cleanTitle(raw) {
-  let s = String(raw ?? '').replace(EMOJI, ' ').replace(EMOJI_GLUE, '');
+  let s = splitHashtagWords(String(raw ?? '').replace(EMOJI, ' ').replace(EMOJI_GLUE, ''));
   for (const re of NOISE_PATTERNS) s = s.replace(re, ' ');
   s = s.replace(FEAT, ' ');
   // Pipe-separated junk: "Song | Movie | Label | 2022". Keep only the head —
@@ -198,6 +241,75 @@ export function cleanTitle(raw) {
     .replace(/^[\s\-–—_,.]+/g, '')
     .replace(/[\s\-–—_,.]+$/g, '')
     .trim();
+}
+
+// "SIR Telugu Movie" → "SIR". A label writes the language and the word "movie"
+// into the segment; neither is part of the film's name.
+const MOVIE_LABEL = /\b(?:telugu|tamil|kannada|malayalam|hindi|movie|film|cinema|songs?|jukebox|lyrical|video)\b/gi;
+
+// The same label, but ANCHORED to the end of a string — a suffix, where an
+// uploader actually writes it.
+const FILM_LABEL_SUFFIX =
+  /\b(?:kannada|tamil|telugu|malayalam|hindi|punjabi|marathi|bengali)?\s*movie(?:\s+songs?)?\s*$/i;
+
+/**
+ * Does the head of this title announce itself as a FILM?
+ *
+ * "Durga Shakti Kannada Movie | Om Shakthi Jaya Jaya" is not an ambiguous
+ * title — the uploader said which half is the film. cleanTitle strips that
+ * label as noise, which is right for the query but threw away the only evidence
+ * of which half was the song, and the film name was then searched as if it were
+ * one. MEASURED: two rows went from unmatched/review to CONFIDENTLY WRONG auto,
+ * because the catalog holds real songs named after films (a DJ single called
+ * "Durga Shakti") and the album tell in ytSearch cannot see those.
+ *
+ * Read from the RAW title, before cleanTitle removes the label.
+ *
+ * Anchored deliberately. Unanchored it also fires on "Movie Star", which is a
+ * name rather than a label — the marker only means what we want it to mean when
+ * it TRAILS the head.
+ */
+export function headIsFilmLabelled(rawTitle) {
+  const raw = String(rawTitle ?? '');
+  if (!raw.includes('|')) return false;
+  return FILM_LABEL_SUFFIX.test(raw.split('|')[0].trim());
+}
+
+/**
+ * Recover the film name from the SECOND pipe segment.
+ *
+ * cleanTitle keeps only the head — right for the title, but it throws away the
+ * one piece of corroborating evidence these uploads reliably carry. MEASURED on
+ * 53 Telugu/Kannada rows: the review pile was dominated by correct matches with
+ * a perfect title that could not reach auto, because a "Full Video Song" is the
+ * film cut and runs far longer than the audio track the catalogue holds, so
+ * duration — the only other corroboration when no artist is known — failed.
+ *
+ * Recovering the movie flipped one such row from review 0.819 to auto 0.902,
+ * same candidate and same duration gap.
+ *
+ * A wrong guess is CHEAP by construction: the movie only ever raises sanity when
+ * it agrees with the candidate's album, and that comparison is now token-based,
+ * so a segment holding an artist or a channel name simply scores 0 — exactly
+ * what happens today when there is no movie at all.
+ */
+export function movieFromPipeSegments(rawTitle) {
+  const parts = String(rawTitle ?? '').split('|').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  let seg = splitHashtagWords(parts[1]);
+  for (const re of NOISE_PATTERNS) seg = seg.replace(re, ' ');
+  seg = seg.replace(MOVIE_LABEL, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s\-–—_,.]+/, '')
+    .replace(/[\s\-–—_,.]+$/, '')
+    .trim();
+
+  if (!seg || isGenericTitle(seg)) return null;
+  // A single short token is where a false album substring used to come from, and
+  // it is rarely a film name on its own.
+  if (seg.length < 3 || seg.length > 60) return null;
+  return seg;
 }
 
 /** Pull `(From "Movie")` out, returning the movie and the title without it. */
@@ -325,7 +437,40 @@ export function parseVideoVariants(video) {
   // built from a phrase isGenericTitle already rejects everywhere else. Drop it
   // rather than rank it: an ambiguity with one meaningful side is not ambiguous.
   if (swapped && isGenericTitle(swapped.title)) return [primary];
-  return swapped ? [primary, swapped] : [primary];
+  if (swapped) return [primary, swapped];
+
+  // No hyphen to swap on — but the PIPE carries the same ambiguity, and we had
+  // only ever read it one way.
+  //
+  // "Kaagadada Doniyalli | Kirik Party" is SONG | MOVIE. "Milana | Ninnindale"
+  // is MOVIE | SONG, and the parser called the film the song and the song the
+  // film. MEASURED on one 30-row mix: Milana, Durga Shakti, Aasai Aasaiyai and
+  // Pooparika Varugirom, plus Bachchan and Krishnan Love Story on the Kannada
+  // list — the largest remaining error class, and the one that lands WRONG
+  // tracks in a playlist rather than merely missing them.
+  //
+  // Same answer as the hyphen: do not guess a direction, emit both and let the
+  // catalog decide. The film reading is second because SONG | MOVIE is the more
+  // common shape, and reading order decides which query runs first.
+  const pipeSwapped = primary.movie && !isGenericTitle(primary.movie)
+    ? { ...primary, title: primary.movie, movie: primary.title }
+    : null;
+  if (!pipeSwapped) return [primary];
+
+  // …unless the title SAID which half is the film, in which case there is no
+  // ambiguity left to resolve and the song reading leads.
+  //
+  // This is the correction to that first assumption. Emitting both readings
+  // still relies on the catalog to pick, and for "Durga Shakti Kannada Movie"
+  // the catalog picks WRONG: it holds a DJ single genuinely titled "Durga
+  // Shakti", so the film query returns a perfect title match whose album is not
+  // the film — invisible to ytSearch's album tell — and the loop stops before
+  // the real song is ever searched. Both rows landed on confident, wrong autos.
+  //
+  // Leading with the song is also CHEAPER: the right query answers first, so it
+  // costs one search rather than two.
+  if (headIsFilmLabelled(video?.title)) return [pipeSwapped, primary];
+  return [primary, pipeSwapped];
 }
 
 /**
@@ -355,6 +500,8 @@ export function parseVideo(video) {
   // Tier 2 — title parsing.
   const cleaned = cleanTitle(video?.title);
   const { movie, rest } = extractMovie(cleaned);
+  // An explicit (From "…") wins; the pipe segment is the fallback.
+  const film = movie ?? movieFromPipeSegments(video?.title);
 
   // "Artist - Title" on the FIRST hyphen. Only when both sides look real;
   // a leading hyphen or a one-character side means it was punctuation, not a
@@ -375,7 +522,7 @@ export function parseVideo(video) {
     source,
     title,
     artists,
-    movie,
+    movie: film,
     album: null,
     year: null,
     versions: versionsIn(video?.title ?? ''),
