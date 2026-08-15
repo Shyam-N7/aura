@@ -21,6 +21,7 @@ import {
   fingerprintKeys,
   TIER,
 } from './ytMatch.js';
+import { findCandidates } from './ytSearch.js';
 
 // A JioSaavn candidate in `mapSong` shape (catalog.js:82). `artist` is ONE
 // string but often a comma-joined list, and `language` is passed through raw —
@@ -578,6 +579,88 @@ describe('defects found by the first LIVE import', () => {
   });
 });
 
+describe('MOVIE | SONG, and the early stop that hid it', () => {
+  // The largest remaining error class, from the O Sona mix. "Kaagadada
+  // Doniyalli | Kirik Party" is SONG | MOVIE; "Milana | Ninnindale" is the
+  // reverse, and the parser called the film the song. Worse than a miss: those
+  // rows reached AUTO against songs the catalog was never asked about.
+
+  // The catalog as measured: a FILM-name query returns that film's namesake
+  // song; the SONG name returns the right track.
+  const CATALOG = {
+    'milana': [{ id: 'w', title: 'Milana Milana', artist: 'S.P. Balasubrahmanyam', album: 'Milana', durationSec: 279 }],
+    'ninnindale': [{ id: 'r', title: 'Ninnindale', artist: 'Sonu Nigam', album: 'Milana', durationSec: 280 }],
+    'durga shakti': [],
+    'om shakthi jaya jaya': [{ id: 'o', title: 'Om Shakthi Jaya Jaya', artist: 'S. Janaki', album: 'Durga Shakti', durationSec: 300 }],
+    'kaagadada doniyalli': [{ id: 'k', title: 'Kaagadada Doniyalli', artist: 'Ajaneesh', album: 'Kirik Party', durationSec: 207 }],
+    'o sona': [{ id: 's', title: 'O Sona', artist: 'K. Kalyan', album: 'Vaalee', durationSec: 351 }],
+  };
+
+  const run = async (title, durationSec) => {
+    const ran = [];
+    const search = async (q) => { ran.push(q); return CATALOG[String(q).toLowerCase().trim()] ?? []; };
+    const rs = parseVideoVariants({ title, channelTitle: '', durationSec, description: '' });
+    const { candidates } = await findCandidates(rs, { search });
+    return { verdict: matchVideo(rs, candidates), ran };
+  };
+
+  it('resolves MOVIE | SONG to the song, not the film', async () => {
+    // Was: auto 0.917 on "Milana Milana" — a real song, wrong one, and the
+    // catalog was never asked for "Ninnindale" at all.
+    const { verdict } = await run('Milana | Ninnindale | Puneeth Rajkumar', 290);
+    expect(verdict.best.candidate.title).toBe('Ninnindale');
+    expect(verdict.tier).toBe(TIER.AUTO);
+  });
+
+  it('resolves it when the head carries a film label too', async () => {
+    // Was unmatched at 0.385 against "Shree Durga".
+    const { verdict } = await run('Durga Shakti Kannada Movie | Om Shakthi Jaya Jaya Video Song', 310);
+    expect(verdict.best.candidate.title).toBe('Om Shakthi Jaya Jaya');
+  });
+
+  it('strips the film label from the head, which reaches the review screen', () => {
+    expect(cleanTitle('Durga Shakti Kannada Movie | Om Shakthi')).toBe('Durga Shakti');
+    expect(cleanTitle('Pooparika Varugirom Tamil Movie Songs | Thikku')).toBe('Pooparika Varugirom');
+  });
+
+  it('does not strip a language name used normally', () => {
+    // The pattern requires the word "movie"; a language alone must not trigger.
+    expect(cleanTitle('Kannada Folk Medley')).toBe('Kannada Folk Medley');
+    expect(cleanTitle('Movie Star')).toBe('Movie Star');
+  });
+
+  it('leaves SONG | MOVIE alone, and spends only ONE search on it', async () => {
+    // The common shape. It must neither change answer nor cost more.
+    const { verdict, ran } = await run('Kaagadada Doniyalli - Video Song | Kirik Party', 266);
+    expect(verdict.best.candidate.title).toBe('Kaagadada Doniyalli');
+    expect(verdict.tier).toBe(TIER.AUTO);
+    expect(ran).toHaveLength(1);
+  });
+
+  it('spends only ONE search when the first query answers convincingly', async () => {
+    const { ran } = await run('O Sona 8K Video Song | Vaalee | Kiccha Sudeepa', 355);
+    expect(ran).toEqual(['O Sona']);
+  });
+
+  it('spends the second search only when the first answer looks like a film', async () => {
+    // The discriminator similarity alone cannot provide: "Milana" scores a
+    // perfect 1.000 against "Milana Milana". What separates them is the ALBUM —
+    // a film-name query returns a song whose album is also that query.
+    const { ran } = await run('Milana | Ninnindale | Puneeth Rajkumar', 290);
+    expect(ran).toEqual(['Milana', 'Ninnindale']);
+  });
+
+  it('keeps a weak result rather than discarding it', async () => {
+    // A weak candidate no longer BLOCKS the next query, but it is still
+    // returned — anything beats nothing when nothing is the alternative.
+    const search = async (q) => (String(q).toLowerCase() === 'milana'
+      ? CATALOG.milana : []);
+    const rs = parseVideoVariants({ title: 'Milana | Nothing Here', channelTitle: '', durationSec: 290 });
+    const { candidates } = await findCandidates(rs, { search });
+    expect(candidates.map(c => c.title)).toContain('Milana Milana');
+  });
+});
+
 describe('a long video is uninformative, not contradictory', () => {
   // From the instrumented run: 25 strong-title rows, deltas -56 to +272, and
   // only TWO held out of auto — +130 and +272. Both had a perfect title AND
@@ -819,12 +902,37 @@ describe('"Title Track", the Kannada/Telugu label shape', () => {
     expect(r.artists).not.toContain('Title Track');
   });
 
-  it('emits ONE reading, not a rival built on a phrase nobody released', () => {
-    // The saving. Two readings meant two queries, and the second was
-    // "Title Track <song>" — spending half this video's search budget on a
-    // reading isGenericTitle rejects everywhere else in the codebase.
-    expect(readings('Sapta Sagaradaache Ello - Title Track | Rakshit Shetty')).toHaveLength(1);
-    expect(readings('Mugulu Nage - Title Track | Ganesh')).toHaveLength(1);
+  it('never builds a rival reading on "Title Track" itself', () => {
+    // The original saving: the second reading used to be TITLED "Title Track",
+    // a phrase isGenericTitle rejects everywhere else, and it spent half this
+    // video's search budget.
+    //
+    // This no longer asserts "exactly one reading". Pipe-swap readings were
+    // added later to fix MOVIE | SONG ordering, so a second reading now exists
+    // here carrying pipe segment 2 ("Rakshit Shetty" — an actor). What must
+    // still hold is what the original fix was really protecting: no search is
+    // spent on nonsense. The next test makes that guarantee where it belongs.
+    for (const t of [
+      'Sapta Sagaradaache Ello - Title Track | Rakshit Shetty',
+      'Mugulu Nage - Title Track | Ganesh',
+    ]) {
+      expect(readings(t).map(r => r.title)).not.toContain('Title Track');
+    }
+  });
+
+  it('spends no search on the rival when the first query answers convincingly', async () => {
+    const catalog = {
+      'sapta sagaradaache ello': [
+        { id: 'a', title: 'Sapta Sagaradaache Ello', artist: 'Charan Raj', album: 'Side A', durationSec: 240 },
+      ],
+    };
+    const ran = [];
+    const search = async (q) => { ran.push(q); return catalog[String(q).toLowerCase().trim()] ?? []; };
+    const { searches } = await findCandidates(
+      readings('Sapta Sagaradaache Ello - Title Track | Rakshit Shetty'), { search },
+    );
+    expect(searches).toBe(1);
+    expect(ran).toEqual(['Sapta Sagaradaache Ello']);
   });
 
   it('handles the bracketed form too', () => {
