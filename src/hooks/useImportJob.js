@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { pollImport, isLive } from '../api/ytImport';
+import { pollImport, isLive, invalidateYtLinks } from '../api/ytImport';
 
 // Polling an import job.
 //
@@ -58,7 +58,15 @@ export function useImportJob(initialJob) {
         setError(null);
         // Terminal: let the effect tear itself down rather than scheduling
         // another tick against a job that will never change again.
-        if (!isLive(next.status)) return;
+        if (!isLive(next.status)) {
+          // finishJob writes the yt_playlist_links row at the END of the work,
+          // not at enqueue — so THIS is the moment a freshly imported playlist
+          // becomes refreshable. Invalidating any earlier would just re-cache
+          // the absence that was true a second ago, and the refresh button
+          // would not appear until the next session.
+          invalidateYtLinks();
+          return;
+        }
       } catch (err) {
         if (err.name === 'AbortError' || stoppedRef.current) return;
         // A failed poll is not a failed import — the job is still on the server

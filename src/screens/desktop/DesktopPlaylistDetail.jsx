@@ -16,6 +16,10 @@ import { AnchoredMenu } from '../../components/AnchoredMenu';
 import { CrumbBack } from './CrumbBack';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { BackToTop } from '../../components/BackToTop';
+import { getYtLink, getFeatures, refreshPlaylist } from '../../api/ytImport';
+import { useImportJob } from '../../hooks/useImportJob';
+import { COPY as YT_COPY, copyForCode } from '../../lib/ytImportCopy';
+import { YouTubeReviewScreen } from '../YouTubeReviewScreen';
 import '../PlaylistsScreen.css'; // .aura-pl-menu-item (AnchoredMenu items)
 import './DesktopPlaylistDetail.css';
 
@@ -57,6 +61,12 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
   const [shareBusy, setShareBusy] = useState(false); // public-link toggle in flight
   const [coverPicking, setCoverPicking] = useState(false);   // cover-picker sheet open
   const [membersOpen, setMembersOpen] = useState(false);     // "who has access" sheet open
+  // YouTube refresh. `ytLink` null means this playlist did not come from a
+  // YouTube source we can check again — which is also true of every mix, since
+  // finishJob writes a link row only for a finite playlist. No row, no button.
+  const [ytLink, setYtLink] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const status = hit.error ? 'error' : hit.data ? 'ok' : 'loading';
   const scrollRef = useScrollMemory(`playlist:${playlistId}`, { ready: status === 'ok' });
 
@@ -70,6 +80,53 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
       });
     return () => ctl.abort();
   }, [playlistId]);
+
+  // Is this playlist refreshable? Both calls are best-effort and never throw —
+  // a failure here must leave the screen exactly as it is today, with no button,
+  // rather than surfacing an error for a feature the user did not ask for.
+  useEffect(() => {
+    let alive = true;
+    const ctl = new AbortController();
+    getFeatures({ signal: ctl.signal })
+      .then(f => (f.youtubeImport ? getYtLink(playlistId, { signal: ctl.signal }) : null))
+      .then(link => { if (alive) setYtLink(link ?? null); })
+      .catch(() => { /* no button */ });
+    return () => { alive = false; ctl.abort(); };
+  }, [playlistId]);
+
+  // A refresh that could not finish inside the POST keeps working through this
+  // poll, exactly as an import does — same hook, same job shape.
+  const { job: refreshJob, setJob: setRefreshJob, live: refreshLive } = useImportJob(null);
+
+  const reloadPlaylist = () =>
+    getPlaylist(playlistId).then(data => setHit({ data, error: null })).catch(() => {});
+
+  // Report the outcome once, when the work is actually over.
+  useEffect(() => {
+    if (!refreshJob || refreshLive) return;
+    const added = refreshJob.counts?.auto ?? 0;
+    reloadPlaylist().then(() => toast(YT_COPY.refresh.added(added)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshJob?.id, refreshLive]);
+
+  const checkForNewSongs = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const result = await refreshPlaylist(playlistId);
+      // The common answer, and the one that must cost nothing and say so.
+      if (!result.changed) { toast(YT_COPY.refresh.unchanged); return; }
+      // The route drains inline before responding, so this is usually already
+      // finished; setJob lets the hook take over only if it is not.
+      setRefreshJob(result);
+    } catch (err) {
+      // YT_NO_LINK renders as "mixes change every time YouTube generates them"
+      // rather than a status code — the reason that copy exists.
+      toast(copyForCode(err.code, err.message).title);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const tracks = hit.data?.tracks ?? [];
   const myId = getUser()?.id;
@@ -315,6 +372,25 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
               </button>
             )}
             <div className="aura-dpd__actions">
+              {/* Only when a link row exists: a mix never has one, so this
+                  cannot appear for something there is nothing stable to
+                  refresh against. */}
+              {ytLink && (
+                <button type="button" onClick={checkForNewSongs} disabled={refreshing || refreshLive}
+                  className="aura-dpd__yt-refresh"
+                  title={ytLink.last_synced_at ? `last checked ${relTime(Number(ytLink.last_synced_at))}` : undefined}>
+                  {refreshing || refreshLive ? YT_COPY.refresh.checking : YT_COPY.refresh.action}
+                </button>
+              )}
+              {/* Only after a refresh that actually found something ambiguous.
+                  Not a permanent control — it disappears once the queue is
+                  answered, because there is nothing left to check. */}
+              {!refreshLive && (refreshJob?.counts?.review ?? 0) > 0 && !reviewing && (
+                <button type="button" onClick={() => setReviewing(true)}
+                  className="aura-dpd__yt-refresh aura-dpd__yt-refresh--review">
+                  {YT_COPY.done.reviewAction}
+                </button>
+              )}
               {tracks.length > 0 && (
                 <button onClick={playAll} className="aura-dpd__play-all">
                   <span className="aura-dpd__play-disc">
@@ -433,6 +509,21 @@ export function DesktopPlaylistDetail({ playlistId, onClose, onPlaySequence }) {
         )}
       </div>
       <BackToTop scrollRef={scrollRef}/>
+
+      {/* Songs a refresh could not place confidently. Same screen the import
+          flow uses, unchanged — the playlist already holds the confident
+          matches, so this stays optional exactly as it does there. */}
+      {reviewing && refreshJob && (
+        <YouTubeReviewScreen
+          job={refreshJob}
+          onDone={(updated) => {
+            if (updated) setRefreshJob(updated);
+            setReviewing(false);
+            reloadPlaylist();
+          }}
+          onOpenPlaylist={() => { setReviewing(false); reloadPlaylist(); }}
+        />
+      )}
 
       {/* Members sheet — who has access: the owner + every collaborator, their
           role and when they joined; the owner can remove someone here. */}
