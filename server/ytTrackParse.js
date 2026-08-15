@@ -247,6 +247,34 @@ export function cleanTitle(raw) {
 // into the segment; neither is part of the film's name.
 const MOVIE_LABEL = /\b(?:telugu|tamil|kannada|malayalam|hindi|movie|film|cinema|songs?|jukebox|lyrical|video)\b/gi;
 
+// The same label, but ANCHORED to the end of a string — a suffix, where an
+// uploader actually writes it.
+const FILM_LABEL_SUFFIX =
+  /\b(?:kannada|tamil|telugu|malayalam|hindi|punjabi|marathi|bengali)?\s*movie(?:\s+songs?)?\s*$/i;
+
+/**
+ * Does the head of this title announce itself as a FILM?
+ *
+ * "Durga Shakti Kannada Movie | Om Shakthi Jaya Jaya" is not an ambiguous
+ * title — the uploader said which half is the film. cleanTitle strips that
+ * label as noise, which is right for the query but threw away the only evidence
+ * of which half was the song, and the film name was then searched as if it were
+ * one. MEASURED: two rows went from unmatched/review to CONFIDENTLY WRONG auto,
+ * because the catalog holds real songs named after films (a DJ single called
+ * "Durga Shakti") and the album tell in ytSearch cannot see those.
+ *
+ * Read from the RAW title, before cleanTitle removes the label.
+ *
+ * Anchored deliberately. Unanchored it also fires on "Movie Star", which is a
+ * name rather than a label — the marker only means what we want it to mean when
+ * it TRAILS the head.
+ */
+export function headIsFilmLabelled(rawTitle) {
+  const raw = String(rawTitle ?? '');
+  if (!raw.includes('|')) return false;
+  return FILM_LABEL_SUFFIX.test(raw.split('|')[0].trim());
+}
+
 /**
  * Recover the film name from the SECOND pipe segment.
  *
@@ -427,7 +455,22 @@ export function parseVideoVariants(video) {
   const pipeSwapped = primary.movie && !isGenericTitle(primary.movie)
     ? { ...primary, title: primary.movie, movie: primary.title }
     : null;
-  return pipeSwapped ? [primary, pipeSwapped] : [primary];
+  if (!pipeSwapped) return [primary];
+
+  // …unless the title SAID which half is the film, in which case there is no
+  // ambiguity left to resolve and the song reading leads.
+  //
+  // This is the correction to that first assumption. Emitting both readings
+  // still relies on the catalog to pick, and for "Durga Shakti Kannada Movie"
+  // the catalog picks WRONG: it holds a DJ single genuinely titled "Durga
+  // Shakti", so the film query returns a perfect title match whose album is not
+  // the film — invisible to ytSearch's album tell — and the loop stops before
+  // the real song is ever searched. Both rows landed on confident, wrong autos.
+  //
+  // Leading with the song is also CHEAPER: the right query answers first, so it
+  // costs one search rather than two.
+  if (headIsFilmLabelled(video?.title)) return [pipeSwapped, primary];
+  return [primary, pipeSwapped];
 }
 
 /**
