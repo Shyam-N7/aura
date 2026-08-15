@@ -8,6 +8,7 @@ import {
   cleanTitle,
   extractMovie,
   movieFromPipeSegments,
+  headIsFilmLabelled,
   topicChannelArtist,
   SOURCE,
 } from './ytTrackParse.js';
@@ -576,6 +577,81 @@ describe('defects found by the first LIVE import', () => {
     // Word-boundary only. Nothing here should touch a legitimate title.
     expect(stripTrailingDecoration('Panegyric')).toBe('Panegyric');
     expect(stripTrailingDecoration('Lyric Suite Movement')).toBe('Lyric Suite Movement');
+  });
+});
+
+describe('when the title SAYS which half is the film', () => {
+  // The correction to the block below. Emitting both readings and letting the
+  // catalog pick is right when the direction is genuinely unknown — but
+  // "Durga Shakti Kannada Movie | …" is not unknown, the uploader labelled it.
+  //
+  // Stripping that label as noise (which it is, for the query) threw away the
+  // only evidence of which half was the song. MEASURED on the O Sona re-run:
+  // two rows moved from unmatched/review to CONFIDENTLY WRONG auto — the worse
+  // outcome, because at 80% auto almost nothing reaches a human.
+
+  // The catalog shape that defeats ytSearch's album tell: a single genuinely
+  // NAMED after the film, whose album is something else entirely.
+  const CATALOG = {
+    'durga shakti': [{ id: 'x', title: 'Durga Shakti', artist: 'Dj Aarun', album: 'Navratri Beats', durationSec: 335 }],
+    'om shakthi jaya jaya': [{ id: 'o', title: 'Om Shakthi Jaya Jaya', artist: 'S. Janaki', album: 'Durga Shakti', durationSec: 340 }],
+    'aasai aasaiyai': [{ id: 'a', title: 'Aasai Aasaiyai', artist: 'S.A. Rajkumar', album: 'Hits', durationSec: 344 }],
+    'ye penne': [{ id: 'y', title: 'Ye Penne', artist: 'S.A. Rajkumar', album: 'Aasai Aasaiyai', durationSec: 340 }],
+  };
+  const run = async (title, durationSec) => {
+    const ran = [];
+    const search = async (q) => { ran.push(q); return CATALOG[String(q).toLowerCase().trim()] ?? []; };
+    const rs = parseVideoVariants({ title, channelTitle: '', durationSec, description: '' });
+    const { candidates } = await findCandidates(rs, { search });
+    return { verdict: matchVideo(rs, candidates), ran };
+  };
+
+  it('does not auto-accept a single named after the film', async () => {
+    const { verdict } = await run('Durga Shakti Kannada Movie | Om Shakthi Jaya Jaya Video Song', 350);
+    expect(verdict.best.candidate.title).toBe('Om Shakthi Jaya Jaya');
+    expect(verdict.tier).toBe(TIER.AUTO);
+  });
+
+  it('and the same for the Tamil form', async () => {
+    const { verdict } = await run('Aasai Aasaiyai Tamil Movie | Ye Penne Video Song', 338);
+    expect(verdict.best.candidate.title).toBe('Ye Penne');
+  });
+
+  it('costs ONE search, because the right query now leads', async () => {
+    // Cheaper as well as more accurate — the film query is never sent.
+    const { ran } = await run('Durga Shakti Kannada Movie | Om Shakthi Jaya Jaya Video Song', 350);
+    expect(ran).toEqual(['Om Shakthi Jaya Jaya']);
+  });
+
+  it('reads the marker as a SUFFIX, not anywhere in the head', () => {
+    // Unanchored this also fires on "Movie Star", which is a name rather than a
+    // label. The marker only means what we want when it TRAILS the head.
+    expect(headIsFilmLabelled('Durga Shakti Kannada Movie | Om Shakthi')).toBe(true);
+    expect(headIsFilmLabelled('Pooparika Varugirom Tamil Movie Songs | Thikku')).toBe(true);
+    expect(headIsFilmLabelled('Movie Star | Some Film')).toBe(false);
+    expect(headIsFilmLabelled('Milana | Ninnindale')).toBe(false);
+    expect(headIsFilmLabelled('Kaagadada Doniyalli - Video Song | Kirik Party')).toBe(false);
+  });
+
+  it('needs a pipe — a bare title has no second half to lead with', () => {
+    expect(headIsFilmLabelled('Some Kannada Movie')).toBe(false);
+    expect(headIsFilmLabelled('')).toBe(false);
+    expect(headIsFilmLabelled(null)).toBe(false);
+  });
+
+  it('leaves an UNLABELLED ambiguous title to the catalog, as before', async () => {
+    // No marker, so the direction is still a genuine guess: both readings are
+    // tried in the common SONG | MOVIE order. The fix below must survive.
+    const CAT2 = {
+      'milana': [{ id: 'm', title: 'Milana Milana', artist: 'SPB', album: 'Milana', durationSec: 279 }],
+      'ninnindale': [{ id: 'n', title: 'Ninnindale', artist: 'Sonu Nigam', album: 'Milana', durationSec: 280 }],
+    };
+    const ran = [];
+    const search = async (q) => { ran.push(q); return CAT2[String(q).toLowerCase().trim()] ?? []; };
+    const rs = parseVideoVariants({ title: 'Milana | Ninnindale | Puneeth', channelTitle: '', durationSec: 290 });
+    const { candidates } = await findCandidates(rs, { search });
+    expect(matchVideo(rs, candidates).best.candidate.title).toBe('Ninnindale');
+    expect(ran).toEqual(['Milana', 'Ninnindale']);
   });
 });
 
