@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseVideo,
   parseVideoVariants,
+  languageFromTitle,
   isGenericTitle,
   stripTrailingDecoration,
   parseArtTrackDescription,
@@ -1156,5 +1157,91 @@ describe('artist credit', () => {
 
   it('still reports genuine disagreement as zero', () => {
     expect(artistOverlap(['Nobody'], 'Someone Else')).toBe(0);
+  });
+});
+
+// ── The language the title itself states ────────────────────────────
+//
+// languageFromTitle is what finally makes scoreCandidate's
+// languageMismatchCap reachable — that cap shipped dead, because nothing ever
+// set parsed.language. Capture is marker-only, and every negative case below
+// is a VERIFIED misfire of a looser capture, not a hypothetical.
+describe('language captured from the title, marker-only', () => {
+  it('reads the film-label marker and the bare pipe segment', () => {
+    expect(languageFromTitle('Oh Sona | Vaali Tamil Movie | Ajith | Simran')).toBe('tamil');
+    expect(languageFromTitle('O Sona - Vaali (1999) Tamil Movie Songs')).toBe('tamil');
+    expect(languageFromTitle('O Sona Video Song | Vaali | Ajith | Deva | Tamil')).toBe('tamil');
+  });
+
+  it('never reads a bare mid-title word — "Punjabi Wedding Song" is a Hindi track', () => {
+    expect(languageFromTitle('Punjabi Wedding Song | Hasee Toh Phasee | Parineeti')).toBeNull();
+  });
+
+  it('never reads a parenthetical — "(Tamil)" on Sita Ramam marks a version, and the production candidate is Telugu-first', () => {
+    expect(languageFromTitle('Kurumugil Video Song - Sita Ramam (Tamil) | Vishal')).toBeNull();
+  });
+
+  it('never reads a dub marker', () => {
+    expect(languageFromTitle('Naatu Naatu Hindi Dubbed | RRR')).toBeNull();
+  });
+
+  it('a title arguing with itself yields nothing', () => {
+    expect(languageFromTitle('Some Song | Tamil | Telugu | Kannada')).toBeNull();
+  });
+
+  it('a movie name is not a language', () => {
+    expect(languageFromTitle('O Sona 8K Video Song | Vaalee | Kiccha Sudeepa')).toBeNull();
+  });
+
+  it('rides parseVideo onto BOTH readings of an ambiguous title', () => {
+    const readings = parseVideoVariants({
+      title: 'O Sona - Vaali (1999) Tamil Movie Songs',
+      channelTitle: 'Label', durationSec: 355, description: '',
+    });
+    for (const r of readings) expect(r.language).toBe('tamil');
+  });
+});
+
+describe('the languageMismatchCap, alive at last', () => {
+  const cand = (over) => ({
+    id: 'x', title: 'O Sona', artist: '', album: null,
+    language: null, durationSec: 355, ...over,
+  });
+
+  it('caps a cross-language candidate below auto — review, never silence', () => {
+    const p = parseVideo({
+      title: 'Oh Sona | Vaali Tamil Movie | Ajith', channelTitle: 'L',
+      durationSec: 355, description: '',
+    });
+    const r = matchVideo(p, [cand({ language: 'Bengali', title: 'O Sona O Sona' })]);
+    expect(r.best.caps).toContain('language');
+    expect(r.tier).toBe(TIER.REVIEW);
+  });
+
+  it('a dub is a legitimate near-answer: review, not unmatched', () => {
+    const p = parseVideo({
+      title: 'Song Name | Something Tamil Movie | Cast', channelTitle: 'L',
+      durationSec: 300, description: '',
+    });
+    const r = matchVideo(p, [cand({ title: 'Song Name', language: 'Telugu', durationSec: 300 })]);
+    expect(r.tier).toBe(TIER.REVIEW);
+    expect(r.best.score).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it('an agreeing language never caps', () => {
+    const p = parseVideo({
+      title: 'Oh Sona | Vaali Tamil Movie | Ajith', channelTitle: 'L',
+      durationSec: 355, description: '',
+    });
+    const r = matchVideo(p, [cand({ language: 'Tamil' })]);
+    expect(r.best.caps ?? []).not.toContain('language');
+  });
+});
+
+// MOVIE_LABEL was missing punjabi|marathi|bengali while the NOISE strips had
+// them — so a bare "| Bengali |" pipe segment became a MOVIE name.
+describe('a language segment is not a movie', () => {
+  it('no longer promotes "| Bengali |" to a film title', () => {
+    expect(movieFromPipeSegments('O Sona Video Song | Bengali | Ajith')).toBeNull();
   });
 });

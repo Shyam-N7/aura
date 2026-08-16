@@ -245,7 +245,7 @@ export function cleanTitle(raw) {
 
 // "SIR Telugu Movie" → "SIR". A label writes the language and the word "movie"
 // into the segment; neither is part of the film's name.
-const MOVIE_LABEL = /\b(?:telugu|tamil|kannada|malayalam|hindi|movie|film|cinema|songs?|jukebox|lyrical|video)\b/gi;
+const MOVIE_LABEL = /\b(?:telugu|tamil|kannada|malayalam|hindi|punjabi|marathi|bengali|movie|film|cinema|songs?|jukebox|lyrical|video)\b/gi;
 
 // The same label, but ANCHORED to the end of a string — a suffix, where an
 // uploader actually writes it.
@@ -473,6 +473,43 @@ export function parseVideoVariants(video) {
   return [primary, pipeSwapped];
 }
 
+
+// ── The language the title itself states ────────────────────────────
+//
+// The pipe cut in cleanTitle discards segments 3+ unexamined, and that is
+// usually where the language word lives ("… | Deva | Tamil"). Capturing it
+// makes scoreCandidate's languageMismatchCap — written for the cross-language
+// duplicate, dead since it shipped because nothing ever set parsed.language —
+// finally reachable with a signal from the video itself.
+//
+// Marker-only, deliberately. Verified misfires that a looser capture causes:
+// "Punjabi Wedding Song" is a HINDI track (bare mid-title words lie);
+// "Kurumugil … Sita Ramam (Tamil)" is a measured-AUTO row whose production
+// candidate is Telugu-first (parentheticals mark versions, not identity);
+// "<lang> Dubbed" marks a re-release. So only two shapes count:
+//   1. "<lang> movie" / "<lang> movie songs" — the exact shapes the NOISE
+//      strips already recognise as film labels, and
+//   2. a pipe segment that IS a language name and nothing else.
+// Two different languages captured means the title is arguing with itself —
+// emit null rather than pick a side.
+const LANG_WORDS = ['kannada', 'tamil', 'telugu', 'malayalam', 'hindi', 'punjabi', 'marathi', 'bengali'];
+const LANG_MOVIE_MARKER = new RegExp(`\\b(${LANG_WORDS.join('|')})\\s+movie(?:\\s+songs?)?\\b`, 'gi');
+
+export function languageFromTitle(raw) {
+  const s = String(raw ?? '');
+  const found = new Set();
+  for (const m of s.matchAll(LANG_MOVIE_MARKER)) {
+    found.add(m[1].toLowerCase());
+  }
+  for (const seg of s.split('|').slice(1)) {
+    const bare = seg.trim().toLowerCase();
+    if (LANG_WORDS.includes(bare)) {
+      found.add(bare);
+    }
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+
 /**
  * Full parse of one YouTube video into matchable fields.
  * `video` is { title, channelTitle, description, durationSec }.
@@ -498,6 +535,7 @@ export function parseVideo(video) {
   }
 
   // Tier 2 — title parsing.
+  const language = languageFromTitle(video?.title);
   const cleaned = cleanTitle(video?.title);
   const { movie, rest } = extractMovie(cleaned);
   // An explicit (From "…") wins; the pipe segment is the fallback.
@@ -525,6 +563,7 @@ export function parseVideo(video) {
     movie: film,
     album: null,
     year: null,
+    language,
     versions: versionsIn(video?.title ?? ''),
     durationSec: video?.durationSec ?? null,
   };

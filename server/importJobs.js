@@ -302,9 +302,10 @@ async function fetchPhase(job, fetchOpts) {
     await client.query(
       `UPDATE yt_import_jobs
           SET status='matching', title=$2, windowed=$3, total_count=$4,
-              units_spent = units_spent + $5, updated_at=$6
+              fetched_count=$5, units_spent = units_spent + $6, updated_at=$7
         WHERE id=$1`,
-      [job.id, result.meta?.title ?? null, !!result.windowed, usable.length, result.units ?? 0, ts],
+      [job.id, result.meta?.title ?? null, !!result.windowed, usable.length,
+       result.videos.length, result.units ?? 0, ts],
     );
     await client.query('COMMIT');
   } catch (err) {
@@ -395,7 +396,38 @@ async function resolveItem(job, item, search, userLangs = []) {
   //    (Found by driving the HTTP surface, where a review item came back with
   //    an empty candidates array.)
   const cached = fp ? await lookupCache(readings) : null;
-  const confident = cached && (cached.user_confirmed || cached.score >= THRESHOLDS.auto);
+  let confident = cached && (cached.user_confirmed || cached.score >= THRESHOLDS.auto);
+
+  // The escape hatch for a poisoned row. A wrong AUTO seeds this cache at or
+  // above the auto threshold, and this short-circuit then replays it on every
+  // future import BEFORE search or scoring run — so the language tiebreak in
+  // matchVideo, written for exactly that mistake, is unreachable for exactly
+  // the rows that need it. A wrong auto also never reaches the review screen,
+  // and review acceptance is the only writer that outranks a cached score.
+  //
+  // So: a confident hit that is NOT human-confirmed, whose track's language is
+  // known and OUTSIDE the listener's languages, falls through to a real
+  // search — ONCE per row, ever, recorded in lang_checked_at. Once-ever is
+  // load-bearing, not an optimisation: without it a correct-but-out-of-
+  // affinity playlist (an english list for a tamil-affinity listener) would
+  // pay a full re-search on every refresh forever, and a fall-through that
+  // lands in REVIEW (which writes nothing back) would loop the same review
+  // card at the user for the rest of time. Unknown language or an empty
+  // userLangs means "no opinion" and changes nothing — a fresh account's
+  // first import is the worst possible place to start second-guessing.
+  let fellThroughFrom = null;
+  if (confident && cached && !cached.user_confirmed && cached.lang_checked_at == null) {
+    const lang = String(cached.track_language ?? '').trim().toLowerCase();
+    if (lang && userLangs.length && !userLangs.includes(lang)) {
+      await pool.query(
+        `UPDATE yt_match_cache SET lang_checked_at = $2 WHERE fingerprint = $1`,
+        [cached.fingerprint, Date.now()],
+      );
+      fellThroughFrom = cached.fingerprint;
+      confident = false;
+    }
+  }
+
   if (confident) {
     await writeVerdict(item.id, {
       fingerprint: fp,
@@ -438,6 +470,14 @@ async function resolveItem(job, item, search, userLangs = []) {
   // the review screen, THAT writes the cache entry, with user_confirmed set.
   if (fp && verdict.tier === TIER.AUTO && verdict.best?.candidate?.id) {
     await upsertCache(fp, verdict.best.candidate.id, verdict.best.score, false);
+    // A language fall-through may have HIT a neighbour-bucket or rival-reading
+    // key while the write above lands only on the primary. Without correcting
+    // the row we actually hit, the poisoned entry survives and outranks the
+    // correction on score at the very next lookup — a search paid to fix
+    // nothing.
+    if (fellThroughFrom && fellThroughFrom !== fp) {
+      await upsertCache(fellThroughFrom, verdict.best.candidate.id, verdict.best.score, false);
+    }
   }
 }
 
@@ -471,10 +511,18 @@ async function lookupCache(readings) {
   // match, which is why approximate keys are acceptable at all.
   const keys = [...new Set(readings.flatMap(r => fingerprintKeys(r)))];
   if (!keys.length) return null;
+  // The track's language rides along via a LEFT JOIN — deliberately NOT
+  // getTrackById, whose DB-miss path is a live upstream fetch (the phantom-id
+  // amplification hazard app.js documents on the play-count route). A row
+  // whose track never landed locally simply reads language NULL, which the
+  // gate below treats as unknown.
   const { rows } = await query(
-    `SELECT fingerprint, track_id, score, user_confirmed
-       FROM yt_match_cache WHERE fingerprint = ANY($1)
-      ORDER BY user_confirmed DESC, score DESC NULLS LAST
+    `SELECT c.fingerprint, c.track_id, c.score, c.user_confirmed,
+            c.lang_checked_at, t.language AS track_language
+       FROM yt_match_cache c
+       LEFT JOIN tracks t ON t.id = c.track_id
+      WHERE c.fingerprint = ANY($1)
+      ORDER BY c.user_confirmed DESC, c.score DESC NULLS LAST
       LIMIT 1`,
     [keys],
   );
@@ -577,7 +625,7 @@ async function finishJob(job) {
   );
   const trackIds = autoRows.map(r => r.track_id);
 
-  const { rows: j } = await query(`SELECT title, windowed FROM yt_import_jobs WHERE id=$1`, [job.id]);
+  const { rows: j } = await query(`SELECT title, windowed, fetched_count FROM yt_import_jobs WHERE id=$1`, [job.id]);
   const windowed = !!j[0]?.windowed;
 
   let playlistId = job.playlist_id;
@@ -610,7 +658,12 @@ async function finishJob(job) {
        ON CONFLICT (playlist_id) DO UPDATE SET
          last_item_count = EXCLUDED.last_item_count,
          last_synced_at  = EXCLUDED.last_synced_at`,
-      [playlistId, job.yt_playlist_id, job.kind, auto + review + unmatched, Date.now()],
+      // The RAW fetched count, not auto+review+unmatched: the refresh guard
+      // compares this against YouTube's raw itemCount, and the usable count is
+      // smaller whenever the playlist holds a deleted/private video — which
+      // made every such playlist read as "changed" on every refresh, forever.
+      [playlistId, job.yt_playlist_id, job.kind,
+       j[0]?.fetched_count ?? auto + review + unmatched, Date.now()],
     ).catch((e) => console.warn('[yt-import] link write failed:', e?.message ?? e));
   }
 
