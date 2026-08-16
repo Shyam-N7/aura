@@ -141,7 +141,11 @@ export function YouTubeReviewScreen({ job, onDone, onOpenPlaylist }) {
                   <span className="flex-1 min-w-0 text-left">
                     <span className="aura-yt-cand__title">{c.title}</span>
                     <span className="aura-yt-cand__meta">
-                      {[c.artist, c.album, mmss(c.durationSec), driftLabel(c.durationSec, item.youtube?.durationSec)]
+                      {/* Language first: when this screen is asking about a
+                          same-titled song in two languages, it is the ONLY
+                          thing separating the rows, and it belongs where the
+                          eye lands rather than at the end of a run of dots. */}
+                      {[c.language, c.artist, c.album, mmss(c.durationSec), driftLabel(c.durationSec, item.youtube?.durationSec)]
                         .filter(Boolean).join(' · ')}
                     </span>
                   </span>

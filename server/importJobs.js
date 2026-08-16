@@ -44,6 +44,7 @@ import { matchVideo, fingerprint, fingerprintKeys, TIER, THRESHOLDS } from './yt
 import { findCandidates } from './ytSearch.js';
 import { cacheTracks, getTrackById } from './tracks.js';
 import { createPlaylistFromImport, appendTracksToPlaylist } from './playlists.js';
+import { getUserLanguages } from './context.js';
 
 export const STATUS = {
   QUEUED: 'queued',
@@ -327,6 +328,12 @@ async function fetchPhase(job, fetchOpts) {
 async function matchPhase(job, deadline, search) {
   let done = 0;
 
+  // Resolved ONCE per drain rather than per item: it is two queries, it cannot
+  // change mid-drain, and a 30-track import would otherwise pay for it thirty
+  // times. Never throws — an unknown listener is [], which the matcher reads as
+  // "no opinion" and leaves the ranking exactly as it was.
+  const userLangs = await getUserLanguages(job.user_id).catch(() => []);
+
   for (;;) {
     if (Date.now() >= deadline) {
       // Out of time, not out of work. Release the lease so the very next tick —
@@ -346,7 +353,7 @@ async function matchPhase(job, deadline, search) {
     const item = rows[0];
     if (!item) break;
 
-    await resolveItem(job, item, search);
+    await resolveItem(job, item, search, userLangs);
     done++;
     // Keep updated_at moving so a long but healthy drain is never mistaken for
     // a dead one by claimJob's STUCK_MS check.
@@ -366,7 +373,7 @@ async function countPending(jobId) {
 }
 
 /** One video: cache lookup, else search + score. Writes the verdict. */
-async function resolveItem(job, item, search) {
+async function resolveItem(job, item, search, userLangs = []) {
   const variants = parseVideoVariants({
     title: item.yt_title,
     channelTitle: item.yt_channel,
@@ -408,7 +415,7 @@ async function resolveItem(job, item, search) {
 
   // 2. Catalog.
   const { candidates } = await findCandidates(readings, { search });
-  const verdict = matchVideo(readings, candidates);
+  const verdict = matchVideo(readings, candidates, { userLangs });
 
   // Cache the tracks we are about to reference so the playlist renders without
   // a per-track upstream fetch when the user opens it.
@@ -442,6 +449,12 @@ function summariseCandidates(verdict) {
     album: c.candidate?.album,
     imageUrl: c.candidate?.imageUrl ?? null,
     durationSec: c.candidate?.durationSec ?? null,
+    // Without this, two rows for the same song in different languages render
+    // identically — same title, same (usually unknown) artist, similar length —
+    // and the review screen asks a question it has not given the user enough to
+    // answer. It is also the field the tiebreak in ytMatch reasons about, so
+    // showing it is showing the actual reason this row is here.
+    language: c.candidate?.language ?? null,
     score: c.score,
     breakdown: c.breakdown,
     // The reading that produced this score. "A - B" is song-artist in Indian

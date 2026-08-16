@@ -25,6 +25,51 @@ export async function getLangAffinity(userId) {
   }));
 }
 
+/**
+ * The languages this listener actually listens in, best first.
+ *
+ * 30-day play affinity, then any onboarding seed languages not already in it.
+ * The two answer different questions and neither alone is enough: affinity is
+ * empty for a new account, and a seed list is a stated preference that says
+ * nothing about the last month.
+ *
+ * NOT run through bridges.js `cleanLangs`, and that is the point. That helper
+ * whitelists down to the five languages the bridges server threads on, which
+ * would silently discard exactly the values a cross-language disambiguation
+ * needs to tell apart — a Gujarati or Bhojpuri row would come back as "no
+ * preference" rather than as itself.
+ *
+ * Lowercased here because `tracks.language` is stored raw, straight from the
+ * provider, and is never normalised on write.
+ *
+ * Returns [] for a listener we know nothing about, and every caller must read
+ * that as "no opinion, change nothing" rather than as "prefers nothing" — a new
+ * account's first import is the worst possible place to start guessing.
+ */
+export async function getUserLanguages(userId) {
+  if (!userId) {
+    return [];
+  }
+  const [affinity, seed] = await Promise.all([
+    getLangAffinity(userId).catch(() => []),
+    pool
+      .query(`SELECT seed_languages FROM users WHERE id = $1`, [userId])
+      .then(r => r.rows[0]?.seed_languages ?? [])
+      .catch(() => []),
+  ]);
+
+  const out = [];
+  const push = value => {
+    const l = String(value ?? '').trim().toLowerCase();
+    if (l && !out.includes(l)) {
+      out.push(l);
+    }
+  };
+  affinity.forEach(r => push(r.language));
+  (Array.isArray(seed) ? seed : []).forEach(push);
+  return out;
+}
+
 export async function buildTalkContext(userId, clientContext) {
   const { rows: recentRows } = await pool.query(`
     SELECT t.title, t.artist, MAX(e.ts) AS last_ts
