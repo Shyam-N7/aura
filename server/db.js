@@ -862,6 +862,29 @@ const migrations = [
       );
     `);
   },
+  async function v34_yt_cache_language_check(client) {
+    await client.query(`
+      -- When this row last had its track's language checked against the
+      -- importing user's languages (importJobs.resolveItem). NULL = never.
+      --
+      -- Exists because a wrong AUTO match is otherwise permanent: it seeds
+      -- this cache at >= the auto threshold, every later import
+      -- short-circuits on it BEFORE search or scoring run, review acceptance
+      -- is the only writer that outranks it, and a wrong auto is never
+      -- OFFERED for review. The language re-check is the escape hatch — and
+      -- it must fire once per row, ever, or a correct-but-out-of-affinity
+      -- playlist (an english list for a tamil-affinity listener) would pay a
+      -- full re-search on every refresh, forever.
+      ALTER TABLE yt_match_cache ADD COLUMN lang_checked_at BIGINT;
+
+      -- Raw fetched video count, unavailable entries included. The refresh
+      -- "nothing changed" guard compares YouTube's raw itemCount against
+      -- yt_playlist_links.last_item_count, which finishJob wrote as the count
+      -- of USABLE videos — so a playlist holding one deleted video mismatched
+      -- forever and re-drained on every refresh press.
+      ALTER TABLE yt_import_jobs ADD COLUMN fetched_count INTEGER;
+    `);
+  },
 ];
 
 // Apply any pending migrations against an EXISTING database. Safe for managed/
