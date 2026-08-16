@@ -134,6 +134,14 @@ export const IMPORT_ERRORS = {
     body: 'It will be back shortly.',
     retryable: false,
   },
+  YT_MIGRATION: {
+    // The deployed code is ahead of the database schema — a migration hasn't
+    // run since a deploy. Distinct from YT_INTERNAL because retrying cannot
+    // help and each retry used to burn the daily import cap.
+    title: 'The server needs a database update',
+    body: 'An update shipped but its database step hasn’t run yet. Nothing was lost — imports resume the moment it does.',
+    retryable: false,
+  },
   YT_INTERNAL: {
     title: 'Something went wrong on our side',
     body: 'Nothing was lost — try again.',

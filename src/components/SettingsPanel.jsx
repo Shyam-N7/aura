@@ -19,7 +19,7 @@ import { requestTour } from '../lib/tour';
 import { openShortcutsHelp } from '../lib/shortcutsHelp';
 import { useViewport, isDesktopBreakpoint } from '../hooks/useViewport';
 import { getSpokenConfirm, setSpokenConfirm } from '../lib/carVoice';
-import { getPushPrefs, setPushPrefs, adminPushReach, adminPushSend } from '../api/push';
+import { getPushPrefs, setPushPrefs, adminPushReach, adminPushSend, adminMigrateStatus, adminMigrateApply } from '../api/push';
 import { THEMES } from '../data/themes';
 import './SettingsPanel.css';
 
@@ -107,12 +107,28 @@ export function SettingsPanel({ t, setTweak }) {
   // the server re-checks the allowlist on every admin route regardless.
   const isAdmin = !!user?.admin;
   const [reach, setReach] = useState(null);
+  const [schema, setSchema] = useState(null);
+  const [migrating, setMigrating] = useState(false);
   useEffect(() => {
     if (!isAdmin) return undefined;
     let stop = false;
     adminPushReach().then(r => { if (!stop) setReach(r); }).catch(() => {});
+    adminMigrateStatus().then(m => { if (!stop) setSchema(m); }).catch(() => {});
     return () => { stop = true; };
   }, [isAdmin]);
+  const applyMigrations = async () => {
+    if (migrating) return;
+    setMigrating(true);
+    try {
+      const out = await adminMigrateApply();
+      toast(`database updated to version ${out.version}.`);
+      setSchema(s2 => ({ ...(s2 ?? {}), current: out.version, pending: 0 }));
+    } catch (err) {
+      toast(`migration failed — ${err.message}`);
+    } finally {
+      setMigrating(false);
+    }
+  };
   const [pushForm, setPushForm] = useState({ title: '', body: '', link: '', email: '', toAll: false });
   const [pushBusy, setPushBusy] = useState(false);
   const sendAdminPush = async (e) => {
@@ -127,7 +143,11 @@ export function SettingsPanel({ t, setTweak }) {
         link: pushForm.link.trim() || undefined,
         audience,
       });
-      toast(`sent to ${out.sent} device${out.sent === 1 ? '' : 's'} (${out.users} user${out.users === 1 ? '' : 's'}).`);
+      // A send that failed everywhere used to read "sent to 0 devices" with no
+      // reason — the shape a wrong service account hides in. Name the failure.
+      toast(out.failed
+        ? `sent to ${out.sent}, ${out.failed} failed${out.error ? ` (${out.error})` : ''}.`
+        : `sent to ${out.sent} device${out.sent === 1 ? '' : 's'} (${out.users} user${out.users === 1 ? '' : 's'}).`);
     } catch (err) {
       toast(`couldn't send — ${err.message}`);
     } finally {
@@ -616,6 +636,22 @@ export function SettingsPanel({ t, setTweak }) {
 
       {isAdmin && (
         <>
+          <p className="aura-set__group-label">admin · database</p>
+          <div className="aura-set__group">
+            <p className="aura-set__caption">
+              {schema
+                ? schema.pending > 0
+                  ? `schema is at version ${schema.current} of ${schema.expected} — imports and other features may fail until it updates.`
+                  : `schema is current (version ${schema.current}).`
+                : 'checking schema…'}
+            </p>
+            {schema && schema.pending > 0 && (
+              <button type="button" className="aura-set__push-send" disabled={migrating} onClick={applyMigrations}>
+                {migrating ? 'updating…' : 'apply database updates'}
+              </button>
+            )}
+          </div>
+
           <p className="aura-set__group-label">admin · send a notification</p>
           <div className="aura-set__group">
             <p className="aura-set__caption">

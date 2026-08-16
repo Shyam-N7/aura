@@ -22,6 +22,26 @@ beforeEach(() => {
 afterAll(() => vi.unstubAllEnvs());
 
 describe('sendToUser', () => {
+  it('surfaces non-token failures instead of discarding them', async () => {
+    // The blind spot that hid a mismatched service account for a release:
+    // every send failed, nothing was logged, and the console read
+    // "sent to 0 devices" — indistinguishable from having no devices.
+    vi.stubEnv('FIREBASE_ADMIN_JSON', JSON.stringify({ project_id: 'aura' }));
+    query.mockResolvedValueOnce({ rows: [{ token: 't'.padEnd(20, 't') }] });
+    sendEachForMulticast.mockResolvedValueOnce({
+      successCount: 0,
+      failureCount: 1,
+      responses: [{ success: false, error: { code: 'messaging/mismatched-credential' } }],
+    });
+    const out = await sendToUser('u1', { title: 't', body: 'b' });
+    expect(out.sent).toBe(0);
+    expect(out.failed).toBe(1);
+    expect(out.error).toBe('messaging/mismatched-credential');
+    // A foreign error must never prune the token — only the two dead codes do.
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+
   it('no-ops without credentials — dev and tests never need Firebase', async () => {
     delete process.env.FIREBASE_ADMIN_JSON;
     const out = await sendToUser('u1', { title: 't', body: 'b' });

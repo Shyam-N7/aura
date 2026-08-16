@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { makeRateStore } from './rateLimitStore.js';
-import { pool, query } from './db.js';
+import { pool, query, runMigrations, getSchemaVersion, EXPECTED_SCHEMA_VERSION } from './db.js';
 import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
 import { getFeatured } from './featured.js';
@@ -945,6 +945,36 @@ app.get('/api/admin/push/reach', requireAuth, requireAdmin, async (req, res) => 
   }
 });
 
+// ── Admin migrations ─────────────────────────────────────────────────
+// Schema updates apply out-of-band by design (db.js: "NOT used on the
+// serverless request path"), which historically meant a laptop with
+// DATABASE_URL. When v34 shipped without that step, every import failed as
+// YT_INTERNAL until someone could run a shell. This pair makes the fix a
+// button: GET shows current vs expected, POST applies pending migrations.
+// v34-scale DDL (a couple of ALTER TABLEs) runs fine through the pooled
+// connection; migrate.js's direct-endpoint advice is about long
+// multi-statement DDL, and big migrations should still use it.
+app.get('/api/admin/migrate', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const current = await getSchemaVersion();
+    res.json({ current, expected: EXPECTED_SCHEMA_VERSION, pending: EXPECTED_SCHEMA_VERSION - current });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+app.post('/api/admin/migrate', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const version = await runMigrations();
+    res.json({ ok: true, version });
+  } catch (err) {
+    // Surface the real message: the admin pressing this button is the person
+    // debugging, and "something went wrong" would send them to the logs this
+    // endpoint exists to spare them.
+    res.status(500).json({ error: err?.message ?? 'migration failed' });
+  }
+});
+
 // Compose + send. audience: 'all' (every enrolled user) | 'me' (the admin's
 // own devices — the safe dry-run) | an email (one user). Deliberately rides
 // sendToUser, NOT sendCategory: a human pressing the button IS the cap, and
@@ -989,12 +1019,23 @@ app.post('/api/admin/push/send', requireAuth, requireAdmin, async (req, res) => 
       collapseKey: 'admin',
     };
     let sent = 0;
+    let failed = 0;
+    let firstError = null;
     for (const uid of userIds) {
       const out = await sendToUser(uid, payload);
       sent += out.sent;
+      // Surface failures instead of discarding them: "sent to 0 devices" with
+      // no reason is how a mismatched service account hid for a whole release.
+      failed += out.failed ?? 0;
+      if (!firstError) firstError = out.error ?? (out.reason !== 'no_tokens' ? out.reason : null) ?? null;
       await recordNotification(uid, 'note', payload);
     }
-    res.json({ users: userIds.length, sent });
+    res.json({
+      users: userIds.length,
+      sent,
+      ...(failed ? { failed } : {}),
+      ...(firstError ? { error: firstError } : {}),
+    });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }

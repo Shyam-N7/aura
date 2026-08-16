@@ -18,7 +18,11 @@ aurafm.live  (Vercel)
 | `server/app.js` | The Express app. **No side effects at import** — no DB connect, no migrations, no `listen()`. Exports the app. |
 | `server/index.js` | **Local dev only.** Bootstraps the DB (`initDb`) then `app.listen(8787)`. Run via `npm run dev:all`. |
 | `api/[...path].js` | **Vercel entry.** `export default app` — the whole Express app behind one catch-all function. |
-| `server/migrate.js` | One-off migration runner (`npm run migrate`). Applies schema to an existing DB; never runs `CREATE DATABASE`. |
+| `server/migrate.js` | One-off migration runner (`npm run migrate
+# ALSO required after ANY deploy that adds a migration — code that is ahead of
+# the schema fails at runtime (the v34 incident: every import died until this
+# ran). The admin console (settings → admin · database) can apply pending
+# migrations too, and shows current vs expected version.`). Applies schema to an existing DB; never runs `CREATE DATABASE`. |
 | `vercel.json` | Build = `npm run build`, output = `dist`, SPA fallback for non-`/api` routes. |
 
 Serverless-safety changes already made: migrations split out of the request
@@ -103,6 +107,11 @@ git push -u origin main
                            the catalog's app context (the web context returns an
                            empty station); without these, related-tracks falls
                            back to an artist-seeded search.
+   FIREBASE_ADMIN_JSON   → push notifications. The WHOLE service-account JSON
+                           pasted as one value (Firebase console → project
+                           settings → service accounts → generate key). Unset,
+                           every push is a silent no-op. Sanity check after
+                           deploy: /api/admin/push/reach → "configured": true.
    GEMINI_API_KEY        → AI features (why / talk / journal / DNA / greeting)
    GOOGLE_CLIENT_ID      → Google sign-in (server-side verify)
    RESEND_API_KEY        → real signup/reset emails

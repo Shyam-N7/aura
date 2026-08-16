@@ -157,7 +157,12 @@ async function assertUnderCaps(userId) {
     `SELECT
        COUNT(*) FILTER (WHERE user_id = $1)::int AS mine,
        COUNT(*)::int                             AS total
-     FROM yt_import_jobs WHERE created_at > $2`,
+     FROM yt_import_jobs
+      WHERE created_at > $2
+        -- Migration-drift failures are the deployment's fault, not usage:
+        -- during an outage every hopeful retry created a job, and counting
+        -- them would lock users out for a day after the schema is fixed.
+        AND NOT (status = 'failed' AND error LIKE 'YT_MIGRATION%')`,
     [userId, since],
   );
   const { mine = 0, total = 0 } = rows[0] ?? {};
@@ -257,6 +262,16 @@ export async function drainJob(jobId, { budgetMs = DEFAULT_BUDGET_MS, fetchOpts,
     if (err instanceof YouTubeError) {
       await failJob(jobId, err.code, err.message);
       return { status: STATUS.FAILED, done: 0, remaining: 0, code: err.code, message: err.message };
+    }
+    // Postgres 42703 = undefined column: the deployed code is ahead of the
+    // schema — a migration hasn't run since a deploy. Named, because as
+    // YT_INTERNAL it wears retryable copy ("try again") for a failure no
+    // retry can fix, and every retry burns the user's daily import cap.
+    // Field-reported: v34 landed in code while prod sat at schema 33, and
+    // every import died as "something went wrong on our side".
+    if (err?.code === '42703') {
+      await failJob(jobId, 'YT_MIGRATION', err?.message ?? 'schema out of date');
+      return { status: STATUS.FAILED, done: 0, remaining: 0, code: 'YT_MIGRATION' };
     }
     await failJob(jobId, 'YT_INTERNAL', err?.message ?? 'unknown');
     return { status: STATUS.FAILED, done: 0, remaining: 0, code: 'YT_INTERNAL' };
