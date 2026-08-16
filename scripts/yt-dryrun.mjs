@@ -41,14 +41,24 @@ import { matchVideo, TIER } from '../server/ytMatch.js';
 const argv = process.argv.slice(2);
 const asJson = argv.includes('--json');
 let limit = null;
+let save = null;
+let replay = null;
+let userLangs = [];
 const rest = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--json') continue;
   if (a.startsWith('--limit=')) { limit = Number(a.slice('--limit='.length)); continue; }
   if (a === '--limit') { limit = Number(argv[++i]); continue; }
+  if (a.startsWith('--save=')) { save = a.slice('--save='.length); continue; }
+  if (a === '--save') { save = argv[++i]; continue; }
+  if (a.startsWith('--replay=')) { replay = a.slice('--replay='.length); continue; }
+  if (a === '--replay') { replay = argv[++i]; continue; }
+  if (a.startsWith('--langs=')) { userLangs = a.slice('--langs='.length).split(','); continue; }
+  if (a === '--langs') { userLangs = String(argv[++i] ?? '').split(','); continue; }
   rest.push(a);
 }
+userLangs = userLangs.map(l => l.trim().toLowerCase()).filter(Boolean);
 const url = rest[0];
 if (limit != null && !Number.isFinite(limit)) {
   console.error('--limit needs a number');
@@ -67,12 +77,18 @@ if (url === '\\' || url === '`') {
   process.exit(2);
 }
 
-if (!url) {
+if (!url && !replay) {
   console.error('usage: node scripts/yt-dryrun.mjs "<playlist url>" [--limit N] [--json]');
   console.error('usage: node --env-file=.env.local scripts/yt-dryrun.mjs "<url>" [--limit N] [--json]');
+  console.error('');
+  console.error('  --save <file>    also write the fetched videos AND their candidates to a');
+  console.error('                   fixture file, so the scoring can be re-measured later');
+  console.error('                   without any network or API key.');
+  console.error('  --replay <file>  score a saved fixture instead of fetching. No env needed.');
+  console.error('  --langs a,b      score as a listener whose languages are these.');
   process.exit(2);
 }
-if (!process.env.YOUTUBE_API_KEY) {
+if (!replay && !process.env.YOUTUBE_API_KEY) {
   console.error('YOUTUBE_API_KEY is not set — this script talks to the real YouTube API.');
   console.error('Load the env the server already uses:');
   console.error('  node --env-file=.env.local scripts/yt-dryrun.mjs "<url>"');
@@ -106,49 +122,96 @@ const die = (err, what) => {
   process.exit(1);
 };
 
-let link;
-try {
-  link = parseYouTubeLink(url);
-} catch (err) {
-  die(err, 'link parse');
-}
-console.error(`# ${link.kind} ${link.playlistId} — fetching…`);
+// ── Fixtures ──
+//
+// A scoring change cannot be judged on one song. The tuning history here is a
+// warning about exactly that: an ambiguity guard survived three measured runs
+// before the numbers showed it was blocking correct matches and preventing
+// nothing, and a language tiebreak is the same class of edit.
+//
+// --save captures what a live run FETCHED — every video and the exact candidate
+// list the catalogue returned for it. --replay scores that capture again with
+// no network and no API key, which is what makes a before/after comparison
+// something anyone can run, in CI or on a laptop, months later.
+//
+// The honest limit, stated because it would otherwise be assumed away: replay
+// re-runs the SCORER (parseVideoVariants + matchVideo), not the search. It will
+// not notice a change to query building or to the candidate pool. For those,
+// re-capture.
+let link = null;
+let meta = null;
+let windowed = false;
+let units = 0;
+let usable = [];
+const captured = [];
 
-let fetched;
-try {
-  fetched = await fetchPlaylistForImport(link.playlistId, {
-    apiKey: process.env.YOUTUBE_API_KEY,
-    // Same derivation importJobs.fetchPhase uses. Omitting it does not fall back
-    // to a default — it removes the window entirely.
-    maxItems: limit ?? windowForKind(link.kind),
-  });
-} catch (err) {
-  die(err, 'youtube fetch');
-}
-const { videos, meta, windowed, units } = fetched;
+if (replay) {
+  const { readFileSync } = await import('node:fs');
+  let fixture;
+  try {
+    fixture = JSON.parse(readFileSync(replay, 'utf8'));
+  } catch (err) {
+    console.error(`could not read fixture ${replay}: ${err.message}`);
+    process.exit(2);
+  }
+  meta = { title: fixture.playlist ?? replay };
+  windowed = !!fixture.windowed;
+  usable = (fixture.rows ?? []).map(r => r.video);
+  console.error(`# replaying ${usable.length} rows from ${replay}`
+    + `${userLangs.length ? ` as [${userLangs.join(', ')}]` : ''}\n`);
+  // Candidates come from the capture, keyed by position in the list.
+  captured.push(...(fixture.rows ?? []).map(r => r.candidates ?? []));
+} else {
+  try {
+    link = parseYouTubeLink(url);
+  } catch (err) {
+    die(err, 'link parse');
+  }
+  console.error(`# ${link.kind} ${link.playlistId} — fetching…`);
 
-// Same filter as fetchPhase: an unavailable video has no title to match on.
-const usable = videos.filter(v => !v.unavailable && v.title);
-console.error(`# "${meta?.title ?? '?'}" — ${usable.length} usable of ${videos.length}`
-  + `${windowed ? ' (windowed)' : ''}, ${units} YouTube units\n`);
+  let fetched;
+  try {
+    fetched = await fetchPlaylistForImport(link.playlistId, {
+      apiKey: process.env.YOUTUBE_API_KEY,
+      // Same derivation importJobs.fetchPhase uses. Omitting it does not fall back
+      // to a default — it removes the window entirely.
+      maxItems: limit ?? windowForKind(link.kind),
+    });
+  } catch (err) {
+    die(err, 'youtube fetch');
+  }
+  ({ meta, windowed, units } = fetched);
+  // Same filter as fetchPhase: an unavailable video has no title to match on.
+  usable = fetched.videos.filter(v => !v.unavailable && v.title);
+  console.error(`# "${meta?.title ?? '?'}" — ${usable.length} usable of ${fetched.videos.length}`
+    + `${windowed ? ' (windowed)' : ''}, ${units} YouTube units\n`);
+}
 
 const rows = [];
 let searches = 0;
 
-for (const v of usable) {
+for (const [i, v] of usable.entries()) {
   const readings = parseVideoVariants({
     title: v.title, channelTitle: v.channelTitle, durationSec: v.durationSec, description: '',
   });
-  // Wrap the catalogue call only to count it — the function itself is the
-  // server's, unmodified.
-  const { candidates } = await findCandidates(readings, {
-    search: async (...a) => {
-      searches++;
-      const { searchSongs } = await import('../server/catalog.js');
-      return searchSongs(...a);
-    },
-  });
-  const verdict = matchVideo(readings, candidates);
+  let candidates;
+  if (replay) {
+    candidates = captured[i] ?? [];
+  } else {
+    // Wrap the catalogue call only to count it — the function itself is the
+    // server's, unmodified.
+    ({ candidates } = await findCandidates(readings, {
+      search: async (...a) => {
+        searches++;
+        const { searchSongs } = await import('../server/catalog.js');
+        return searchSongs(...a);
+      },
+    }));
+    if (save) {
+      captured.push(candidates);
+    }
+  }
+  const verdict = matchVideo(readings, candidates, { userLangs });
   rows.push({
     ytTitle: v.title,
     // The WINNING reading, not readings[0].
@@ -191,9 +254,27 @@ const by = t => rows.filter(r => r.tier === t).length;
 const auto = by(TIER.AUTO), review = by(TIER.REVIEW), unmatched = by(TIER.UNMATCHED);
 const zero = rows.filter(r => r.candidates === 0).length;
 
+if (save && !replay) {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(save, JSON.stringify({
+    playlist: meta?.title ?? null,
+    kind: link?.kind ?? null,
+    windowed,
+    // The videos and the candidate lists exactly as fetched. Scores and tiers
+    // are deliberately NOT stored: they are the output under test, and a
+    // fixture that carries them invites comparing a run against a stale
+    // expectation rather than against the other run.
+    rows: usable.map((v, i) => ({
+      video: { title: v.title, channelTitle: v.channelTitle, durationSec: v.durationSec ?? null },
+      candidates: captured[i] ?? [],
+    })),
+  }, null, 2));
+  console.error(`# saved ${usable.length} rows to ${save}`);
+}
+
 if (asJson) {
   console.log(JSON.stringify({
-    playlist: meta?.title, kind: link.kind, windowed,
+    playlist: meta?.title, kind: link?.kind ?? null, windowed,
     total: rows.length, auto, review, unmatched, zeroCandidate: zero,
     youtubeUnits: units, catalogSearches: searches, rows,
   }, null, 2));

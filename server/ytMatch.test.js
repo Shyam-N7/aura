@@ -266,6 +266,95 @@ describe('scoring', () => {
     expect(r.tier).not.toBe(TIER.AUTO);
   });
 
+  // ── The cross-language tie ──
+  //
+  // Reported from real use: "O Sona" exists in several Indian languages. Every
+  // one scores title 1.000 against the same YouTube title, the artist is
+  // unknown and drops out of the weighting, duration agrees for all of them —
+  // so the winner was decided by the provider's relevance order alone, and a
+  // Kannada listener got a Bhojpuri recording, AUTO-accepted, with no review
+  // card to catch it.
+  describe('a tie across languages', () => {
+    const oSona = () => parseVideo({ title: 'O Sona', channelTitle: 'Label', durationSec: 240 });
+    const rivals = [
+      song({ id: 'bhojpuri', title: 'O Sona', language: 'Bhojpuri', durationSec: 240 }),
+      song({ id: 'kannada', title: 'O Sona', language: 'Kannada', durationSec: 240 }),
+    ];
+
+    it('is broken by the listener, not by the catalog provider', () => {
+      const r = matchVideo(oSona(), rivals, { userLangs: ['kannada'] });
+      expect(r.best.candidate.id).toBe('kannada');
+      // Settled, so it is still allowed to auto — the point is to be RIGHT
+      // silently, not to make every ambiguous row a decision for the user.
+      expect(r.tier).toBe(TIER.AUTO);
+    });
+
+    it('goes to review when the listener cannot settle it either', () => {
+      // Neither language is theirs. We genuinely cannot tell, and a coin flip
+      // dressed as confidence is the exact failure being fixed.
+      const r = matchVideo(oSona(), rivals, { userLangs: ['tamil'] });
+      expect(r.best.caps).toContain('language');
+      expect(r.tier).toBe(TIER.REVIEW);
+      // The alternatives ride along, so the review card is answerable.
+      expect(r.candidates.length).toBeGreaterThan(1);
+    });
+
+    it('changes nothing for a listener we know nothing about', () => {
+      // A new account, no history and no seed languages. Today's behaviour
+      // exactly — the provider's order — because a first import is the worst
+      // possible place to start guessing.
+      const r = matchVideo(oSona(), rivals, { userLangs: [] });
+      expect(r.best.candidate.id).toBe('bhojpuri');
+      expect(r.tier).toBe(TIER.AUTO);
+    });
+
+    it('leaves a one-language tie to catalog order, as before', () => {
+      // The guard that was tried and removed would have fired here. This one
+      // does not: the tie is real, but nothing about language separates it.
+      const r = matchVideo(
+        parseVideo({ title: 'Uyire', channelTitle: 'Label', durationSec: 240 }),
+        [
+          song({ id: 'first', title: 'Uyire', language: 'Tamil', durationSec: 240 }),
+          song({ id: 'second', title: 'Uyire', language: 'Tamil', durationSec: 252 }),
+        ],
+        { userLangs: ['kannada'] },
+      );
+      expect(r.best.candidate.id).toBe('first');
+      expect(r.tier).toBe(TIER.AUTO);
+    });
+
+    it('never treats a missing language as a disagreement', () => {
+      // `language` is sparse — the codebase is consistent that blanks are
+      // catalog gaps and pass every language filter. This must not be the one
+      // place that reads absence as contradiction.
+      const r = matchVideo(
+        oSona(),
+        [
+          song({ id: 'blank', title: 'O Sona', language: null, durationSec: 240 }),
+          song({ id: 'also-blank', title: 'O Sona', durationSec: 240 }),
+        ],
+        { userLangs: ['kannada'] },
+      );
+      expect(r.best.caps ?? []).not.toContain('language');
+      expect(r.tier).toBe(TIER.AUTO);
+    });
+
+    it('does not reorder a candidate that genuinely scored higher', () => {
+      // The failure app.js warns about — "ranking songs for a song query would
+      // promote a same-language near-match over the exact hit". The exact hit
+      // outscores the near-match, so it is never inside the tie band.
+      const r = matchVideo(
+        parseVideo({ title: 'O Sona', channelTitle: 'Label', durationSec: 240 }),
+        [
+          song({ id: 'exact', title: 'O Sona', language: 'Bhojpuri', durationSec: 240 }),
+          song({ id: 'near', title: 'O Sona Re Piya', language: 'Kannada', durationSec: 240 }),
+        ],
+        { userLangs: ['kannada'] },
+      );
+      expect(r.best.candidate.id).toBe('exact');
+    });
+  });
+
   it('tolerates a music video running long, but not an Art Track', () => {
     const mv = parseVideo({
       title: 'Naatu Naatu - RRR',

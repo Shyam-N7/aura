@@ -67,6 +67,74 @@ describe('a mix, which has no end', () => {
   });
 });
 
+describe('while it works', () => {
+  const item = (id, title, tier) => ({
+    id, position: Number(id),
+    youtube: { title, channel: 'c', durationSec: 200 },
+    tier: tier ?? null,
+    state: tier && tier !== 'review' ? 'done' : 'pending',
+  });
+
+  const start = async (job) => {
+    startImport.mockResolvedValue(job);
+    render(<YouTubeImportScreen onClose={vi.fn()}/>);
+    paste();
+    await waitFor(() => screen.getByRole('button', { name: 'Import' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+  };
+
+  it('says starting while queued, when there is nothing yet to list', async () => {
+    // fetchPhase writes every item row in ONE transaction at the end of the
+    // fetch, so for this stretch the stage line is all there is.
+    await start({ id: 'yti_1', status: 'queued', counts: {}, items: [] });
+    await waitFor(() => expect(screen.getByText('Starting…')).toBeInTheDocument());
+    expect(screen.queryByText('Matching…')).not.toBeInTheDocument();
+  });
+
+  it('changes its words for the last few, off the real remaining count', async () => {
+    await start({
+      id: 'yti_1', status: 'matching',
+      counts: { total: 30, matching: 2 }, items: [],
+    });
+    await waitFor(() =>
+      expect(screen.getByText('Almost there — 28 of 30')).toBeInTheDocument());
+  });
+
+  it('names the song being matched and what became of the rest', async () => {
+    await start({
+      id: 'yti_1', status: 'matching',
+      counts: { total: 6, matching: 3 },
+      items: [
+        item('1', 'first song', 'auto'),
+        item('2', 'second song', 'review'),
+        item('3', 'third song', 'unmatched'),
+        item('4', 'fourth song'),
+        item('5', 'fifth song'),
+        item('6', 'sixth song'),
+      ],
+    });
+    // The frontier is the first item with no tier. The drain claims items with
+    // ORDER BY position ASC LIMIT 1, so that is the server's real cursor.
+    await waitFor(() => expect(screen.getByText('fourth song')).toBeInTheDocument());
+    expect(screen.getByText('Matching…')).toBeInTheDocument();
+    expect(screen.getByText('Added')).toBeInTheDocument();
+    expect(screen.getByText('Needs a check')).toBeInTheDocument();
+    expect(screen.getByText('Not in our catalogue')).toBeInTheDocument();
+  });
+
+  it('windows the list around the work instead of listing everything', async () => {
+    const items = Array.from({ length: 20 }, (_, i) =>
+      item(String(i + 1), `song ${i + 1}`, i < 10 ? 'auto' : null));
+    await start({
+      id: 'yti_1', status: 'matching', counts: { total: 20, matching: 10 }, items,
+    });
+    await waitFor(() => expect(screen.getByText('song 11')).toBeInTheDocument());
+    // Neither end of a 20-song import is on screen at once.
+    expect(screen.queryByText('song 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('song 20')).not.toBeInTheDocument();
+  });
+});
+
 describe('finishing', () => {
   it('reports the counts and offers review without apologising for it', async () => {
     render(<YouTubeImportScreen onClose={vi.fn()}/>);

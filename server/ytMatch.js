@@ -287,6 +287,17 @@ export function scoreCandidate(parsed, candidate) {
 
   // Language disagreement: the cross-language duplicate is the signature false
   // positive here, so it can reach review but never auto.
+  //
+  // NOTE: this branch is currently UNREACHABLE and is kept as the hook it was
+  // written to be. `parsed.language` is never set — parseVideo returns no such
+  // key on either of its two paths, and parseVideoVariants only spreads the
+  // primary — so `ytLang` is always ''. It stays because if a future parser
+  // ever does derive a language from the video, this is where it belongs.
+  //
+  // The reachable half of the same idea lives in matchVideo below, which
+  // compares candidate languages against each other and against the LISTENER's,
+  // because that is a signal we actually have. If you make this fire, check
+  // that the two do not double-penalise.
   const ytLang = (parsed.language ?? '').toLowerCase();
   const candLang = (candidate.language ?? '').toLowerCase();
   if (ytLang && candLang && ytLang !== candLang) {
@@ -315,7 +326,101 @@ export function scoreCandidate(parsed, candidate) {
  * cross-language false positive JioSaavn is full of, so the score alone is not
  * sufficient evidence.
  */
-export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
+// How close two candidates have to be before we call it a tie rather than a
+// win. Deliberately tight. It has to be wide enough to catch the case this
+// exists for — several rows scoring title 1.000 on the same name — and narrow
+// enough that a candidate scoring genuinely higher is never reordered, which is
+// what keeps it clear of the failure app.js warns about: "ranking songs for a
+// song query would promote a same-language near-match over the exact hit."
+const LANGUAGE_TIEBREAK_EPSILON = 0.02;
+
+/** Distinct KNOWN languages in a set of scored rows. Nulls are not a language. */
+function knownLanguages(rows) {
+  return new Set(
+    rows
+      .map(r => String(r.candidate?.language ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Break a cross-language tie using the listener's own languages.
+ *
+ * The problem this solves, measured on a real import: "O Sona" exists in
+ * several Indian languages. Every one of them scores title 1.000 against the
+ * same YouTube title, the artist is usually unknown and drops out of the
+ * weighting entirely, and duration agrees for all of them — so the winner was
+ * decided by nothing more than the catalog provider's relevance order, and the
+ * user got a Bhojpuri recording of a Kannada song, auto-accepted, with no
+ * review card to catch it.
+ *
+ * Two rules, both confined to rows that scoring could not separate:
+ *
+ *   1. If the tie spans languages and one of them is the listener's, that one
+ *      wins. Provider relevance is a reasonable tiebreak in the absence of any
+ *      other signal; it is a poor one when we have an actual signal about this
+ *      person.
+ *   2. If the tie spans languages and NONE of them is the listener's, we
+ *      genuinely cannot tell — so cap the score, which drops it under the auto
+ *      threshold and sends it to review with the alternatives attached.
+ *
+ * Note what this deliberately is NOT: a general ambiguity guard. One of those
+ * was tried here and removed on evidence (see the comment further down — three
+ * measured runs, blocked correct matches every time, never once prevented a
+ * wrong one). This fires only when the tie is ACROSS LANGUAGES, which is the
+ * one shape that comment identifies as the signature false positive, and never
+ * when the listener's own preferences settle it.
+ *
+ * `userLangs` empty — a new account with no history and no seed languages —
+ * means no opinion, and this returns the ranking untouched.
+ */
+function applyLanguageTiebreak(unique, userLangs) {
+  // No opinion about this listener — a new account with no history and no seed
+  // languages. Return the ranking untouched. This is NOT the same as "prefers
+  // nothing": capping here would send every cross-language tie to review for
+  // exactly the users who have the least patience for a decision screen, and a
+  // first import is the worst possible place to start second-guessing.
+  if (!userLangs?.length || !unique.length || !unique[0]) {
+    return unique;
+  }
+  const top = unique[0].score;
+  const bandSize = unique.filter(r => r.score >= top - LANGUAGE_TIEBREAK_EPSILON).length;
+  if (bandSize < 2) {
+    return unique;
+  }
+  const band = unique.slice(0, bandSize);
+  if (knownLanguages(band).size < 2) {
+    // One language (or none known) — nothing for this to arbitrate.
+    return unique;
+  }
+
+  const rank = r => {
+    const l = String(r.candidate?.language ?? '').trim().toLowerCase();
+    const i = l ? userLangs.indexOf(l) : -1;
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  // Stable: rows the listener has no opinion about keep the provider's order
+  // among themselves, which is the tiebreak this replaces only where it can.
+  const reordered = band
+    .map((r, i) => ({ r, i, k: rank(r) }))
+    .sort((a, b) => a.k - b.k || a.i - b.i)
+    .map(x => x.r);
+
+  const out = [...reordered, ...unique.slice(bandSize)];
+
+  if (rank(out[0]) === Number.MAX_SAFE_INTEGER) {
+    // Rule 2: a cross-language tie the listener's languages cannot settle. Send
+    // it to review rather than flipping a coin and calling it confidence.
+    out[0] = {
+      ...out[0],
+      score: Math.min(out[0].score, THRESHOLDS.languageMismatchCap),
+      caps: [...(out[0].caps ?? []), 'language'],
+    };
+  }
+  return out;
+}
+
+export function matchVideo(parsed, candidates, { autoThreshold, userLangs = [] } = {}) {
   const auto = autoThreshold ?? THRESHOLDS.auto;
 
   // `parsed` may be a single reading or the ambiguous pair from
@@ -340,13 +445,17 @@ export function matchVideo(parsed, candidates, { autoThreshold } = {}) {
   // otherwise the review screen offers "pick one of three" and shows the same
   // track twice, which is worse than offering two.
   const seen = new Set();
-  const unique = scored.filter(r => {
+  const deduped = scored.filter(r => {
     const id = r.candidate?.id;
     if (id == null) return true;
     if (seen.has(id)) return false;
     seen.add(id);
     return true;
   });
+
+  // Only where scoring genuinely could not separate them. Everything above is
+  // untouched, so a candidate that actually won still wins.
+  const unique = applyLanguageTiebreak(deduped, userLangs);
 
   const best = unique[0];
   if (!best || best.score < THRESHOLDS.review) {
