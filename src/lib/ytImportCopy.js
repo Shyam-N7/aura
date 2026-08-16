@@ -219,6 +219,43 @@ export const COPY = {
       review: 'Needs a check',
       missing: 'Not in our catalogue',
     },
+    // ── Keys mirrored from the native pack (unused here today) ──
+    //
+    // Native's progress screen grew a rotating under-line, an elapsed counter
+    // and a match-reveal card. The keys land here too so the twin files stay
+    // diffable and the web can adopt any of it without a second negotiation.
+    //
+    // The rotating words are advanced by the POLL, never by a clock — the poll
+    // is the server's worker, so an advance is evidence of a completed work
+    // slice. Every string in a pool must be true of the WHOLE phase, which is
+    // what makes which-one-is-showing carry no information: the countable
+    // claim stays on the stage line above, driven by real counts.
+    words: {
+      queued: ['Lining this up', 'About to start reading'],
+      fetching: [
+        'Asking YouTube for the list',
+        'Reading the tracklist',
+        'YouTube sends these a page at a time',
+        'Writing them all down at once',
+      ],
+      matching: [
+        'Looking this one up',
+        'Searching our catalogue',
+        'Reading the title',
+        'Comparing what came back',
+        'Checking the length',
+      ],
+      closing: [
+        'Nearly through the list',
+        'Finishing the last few',
+        'Putting the playlist together',
+      ],
+    },
+    elapsedLabel: 'Time so far',
+    // The match reveal card: what the last song BECAME — the winning catalog
+    // track over the messy YouTube title it arrived as.
+    found: 'Found',
+    was: (t) => `Was: ${t}`,
   },
 
   // The result summary. Ordered auto / review / missing, because that is
