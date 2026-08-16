@@ -134,6 +134,63 @@
   padding-top: 10px;
 }
 
+/* ── The live list ──
+   A sliding window of songs centred on the one being matched, so the action
+   stays on screen without the list scrolling or the page jumping. */
+.aura-yt-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 4px 0;
+}
+.aura-yt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  /* Rows change state under the eye as the drain advances; without this the
+     dim-to-lit transition is a hard flip. */
+  transition: opacity 260ms ease, color 260ms ease;
+}
+/* Songs the drain has not reached yet, dimmed so the eye lands on the one being
+   worked rather than on the queue behind it. */
+.aura-yt-row--waiting { opacity: 0.45; }
+.aura-yt-row__title {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-ink-soft);
+  /* One line. YouTube titles carry a full cast list and would otherwise wrap to
+     three lines and shove the window around on every poll. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aura-yt-row--now .aura-yt-row__title { color: var(--color-ink); }
+.aura-yt-row--waiting .aura-yt-row__title { color: var(--color-ink-faint); }
+.aura-yt-row__status {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+}
+.aura-yt-row--now .aura-yt-row__status {
+  color: var(--color-accent);
+  animation: aura-yt-pulse 1.6s ease-in-out infinite;
+}
+@keyframes aura-yt-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+/* The pulse is the only motion here and it is decorative — the row is already
+   legible without it, so it goes away entirely rather than being slowed. */
+@media (prefers-reduced-motion: reduce) {
+  .aura-yt-row { transition: none; }
+  .aura-yt-row--now .aura-yt-row__status { animation: none; }
+  .aura-yt-progress__fill { transition: none; }
+}
+
 /* ── Summary ── */
 .aura-yt-summary {
   border-radius: 12px;

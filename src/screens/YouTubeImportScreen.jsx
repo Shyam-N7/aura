@@ -225,11 +225,69 @@ function ConfirmState({ preview, starting, linkError, onBack, onStart }) {
   );
 }
 
+// How many songs the live list shows at once, and how many sit BEHIND the one
+// being matched. Deliberately small: this is a window that follows the work,
+// not the whole tracklist. Rendering all N rows looks right for ten seconds and
+// then the frontier scrolls under the fold and the screen goes static again —
+// which is the problem this exists to fix.
+const WINDOW_ROWS = 8;
+const WINDOW_BEHIND = 3;
+
+// The song the server is on right now.
+//
+// Not an estimate. matchPhase claims items with ORDER BY position ASC LIMIT 1,
+// so the queue drains strictly in order: everything above the first tier-less
+// item is finished, everything below is waiting. That is a fact about the
+// server's cursor, and the only reason it is honest to put a title on screen
+// and say we are working on it.
+function frontierIndex(items) {
+  const i = items.findIndex(it => !it.tier);
+  return i === -1 ? items.length : i;
+}
+
+const ROW_STATUS = {
+  auto: COPY.progress.row.matched,
+  review: COPY.progress.row.review,
+  unmatched: COPY.progress.row.missing,
+};
+
+function ImportRow({ item, isFrontier, waiting }) {
+  const status = isFrontier ? COPY.progress.row.working : ROW_STATUS[item.tier];
+  const cls = [
+    'aura-yt-row',
+    waiting && 'aura-yt-row--waiting',
+    isFrontier && 'aura-yt-row--now',
+  ].filter(Boolean).join(' ');
+  return (
+    <div className={cls}>
+      {/* YouTube's own name for it, warts and all. Swapping in the catalog's
+          cleaner title once a row resolves would make rows appear to rewrite
+          themselves mid-import, which reads as a glitch. */}
+      <span className="aura-yt-row__title">{item.youtube?.title ?? ''}</span>
+      {status && <span className="aura-yt-row__status">{status}</span>}
+    </div>
+  );
+}
+
 function ProgressState({ job, pollError }) {
   const { done, total, pct } = progressOf(job);
-  const label = job.status === 'fetching' || total === 0
+  const items = job.items ?? [];
+
+  // Three stages, each read off real state. Nothing advances on a timer, so a
+  // drain that stalls freezes the words and the bar together — which is the
+  // truth, and the whole reason this is not a decorative loader.
+  const label = job.status === 'queued'
+    ? COPY.progress.starting
+    : job.status === 'fetching' || total === 0
     ? COPY.progress.fetching
+    : (job.counts?.matching ?? 0) <= 3 || pct >= 90
+    ? COPY.progress.almostThere(done, total)
     : COPY.progress.matching(done, total);
+
+  const at = frontierIndex(items);
+  const start = Math.max(0, Math.min(at - WINDOW_BEHIND, items.length - WINDOW_ROWS));
+  const shown = items.slice(start, start + WINDOW_ROWS);
+
   return (
     <>
       <div className="aura-yt-progress">
@@ -238,6 +296,21 @@ function ProgressState({ job, pollError }) {
         </div>
         <div className="aura-yt-progress__label">{label}</div>
       </div>
+
+      {/* Empty until the fetch phase commits — it writes every item row in one
+          transaction — so this simply isn't there for the first stage. */}
+      {shown.length > 0 && (
+        <div className="aura-yt-rows">
+          {shown.map((item, i) => (
+            <ImportRow
+              key={item.id ?? start + i}
+              item={item}
+              isFrontier={start + i === at}
+              waiting={start + i > at}
+            />
+          ))}
+        </div>
+      )}
       {/* True, and worth saying: the drain resumes on the next poll and the
           daily cron finishes whatever a closed tab left behind. Without this
           line people sit and watch. */}

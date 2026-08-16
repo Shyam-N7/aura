@@ -190,15 +190,35 @@ export const COPY = {
   },
 
   progress: {
+    // The queued moment. There are no items yet — fetchPhase writes them all in
+    // one transaction at the END of the fetch — so for this stretch the stage
+    // line is genuinely the only thing there is to show.
+    starting: 'Starting…',
     fetching: 'Reading the playlist…',
     // Progress must be countable. "Matching 12 of 30" is the only honest
     // progress indicator here, since per-song time varies by an order of
     // magnitude between a cache hit and a cold search.
     matching: (done, total) => `Finding songs — ${done} of ${total}`,
+    // Same count, different words, for the last few. Earned rather than
+    // decorative: it is driven by the real remaining count, so a drain that
+    // stalls at 28 of 30 sits on this line instead of easing toward a finish
+    // that is not happening.
+    almostThere: (done, total) => `Almost there — ${done} of ${total}`,
     building: 'Building your playlist…',
     // Leaving is safe: the drain resumes on the next poll, and the cron picks
     // up whatever a closed app left behind. Say so, or users will sit and wait.
     safeToLeave: 'You can leave this screen — we’ll keep going.',
+    // Per-song status in the live list. The drain resolves items strictly in
+    // position order (matchPhase: ORDER BY position ASC LIMIT 1), so "the one
+    // being worked on" is the first item with no tier yet — a fact about the
+    // server's cursor, not a guess dressed up as one. That is what makes it
+    // honest to name the song on screen.
+    row: {
+      working: 'Matching…',
+      matched: 'Added',
+      review: 'Needs a check',
+      missing: 'Not in our catalogue',
+    },
   },
 
   // The result summary. Ordered auto / review / missing, because that is
