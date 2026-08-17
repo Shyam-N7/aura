@@ -221,6 +221,11 @@ export const COPY = {
     // being worked on" is the first item with no tier yet — a fact about the
     // server's cursor, not a guess dressed up as one. That is what makes it
     // honest to name the song on screen.
+    // Labels under the native journey scene's two masses (mirrored key).
+    scene: {
+      toGo: (n) => `${n} to go`,
+      added: (n) => `${n} added`,
+    },
     row: {
       working: 'Matching…',
       matched: 'Added',
