@@ -220,6 +220,8 @@ router.post('/:jobId/items/:itemId', requireAuth, requireEnabled, async (req, re
 // Marks the job failed rather than deleting it: the playlist it may already
 // have created stays (the user asked to stop importing, not to lose what
 // arrived), and the row is cleaned up by the retention prune like any other.
+// Since streaming, "may already have created" is the COMMON case, not the
+// edge — the cancel copy tells the user their songs stay.
 // Only a job still in flight can be cancelled — cancelling a finished import
 // would be a confusing way to spell "delete this playlist".
 router.delete('/:jobId', requireAuth, requireEnabled, async (req, res) => {
@@ -247,7 +249,7 @@ router.delete('/:jobId', requireAuth, requireEnabled, async (req, res) => {
  * works. `matching` is the live progress counter — how many videos are still
  * unresolved — which is the only number a progress bar needs.
  */
-function shape({ job, items, matching }, extra = {}) {
+function shape({ job, items, matching, tiers }, extra = {}) {
   return {
     ...extra,
     id: job.id,
@@ -257,12 +259,18 @@ function shape({ job, items, matching }, extra = {}) {
     // True when we took the first N of an endless mix. The copy that hangs off
     // this is the honest "snapshot, not a sync" line.
     windowed: job.windowed,
+    // Non-null while status is still 'matching' means the playlist exists and
+    // is GROWING — the client's cue to offer/open it and stream the rest in.
     playlistId: job.playlist_id,
     counts: {
       total: job.total_count,
-      auto: job.auto_count,
-      review: job.review_count,
-      unmatched: job.unmatched_count,
+      // Persisted counters win at terminal (identical values, and they keep
+      // the long-standing dupes quirk where auto can exceed playlist length);
+      // during 'matching' they are NULL and the live tier counts stand in —
+      // the streaming client gates its handoff on auto.
+      auto: job.auto_count ?? tiers?.auto ?? 0,
+      review: job.review_count ?? tiers?.review ?? 0,
+      unmatched: job.unmatched_count ?? tiers?.unmatched ?? 0,
       matching,
     },
     error: job.error ? String(job.error).split(':')[0] : null,

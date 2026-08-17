@@ -291,9 +291,10 @@ describe('radio is infinite, so it gets a window not a ceiling', () => {
     const r = await fetchPlaylistItems('RDxxxx', { ...opts(f), maxItems: RADIO_WINDOW });
     expect(r.items).toHaveLength(RADIO_WINDOW);
     expect(r.windowed).toBe(true);
-    // The cost point: one page, not twenty. A dry run burned ~21 units before
-    // this existed.
-    expect(r.units).toBe(1);
+    // The cost point: ceil(window/50) pages, not a walk toward the cap. A dry
+    // run burned ~21 units before the window existed; pinned to the constant
+    // so resizing the window never silently changes what this asserts.
+    expect(r.units).toBe(Math.ceil(RADIO_WINDOW / 50));
   });
 
   it('still refuses a genuinely oversized FINITE playlist', async () => {

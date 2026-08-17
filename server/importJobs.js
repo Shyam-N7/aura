@@ -14,6 +14,10 @@
 //                         │                        │
 //                         └────────▶ failed ◀──────┘   (terminal)
 //
+// Since the streaming round, the playlist can exist from mid-'matching'
+// onward (see ensurePlaylist/streamCheckpoint by the wave loop) and grows as
+// waves land — 'ready' still means every item is resolved.
+//
 // 'ready' means the playlist EXISTS and holds the auto-matched tracks. Review is
 // what moves 'ready' to 'complete', and a user who never returns leaves a
 // perfectly good playlist behind — the deliberate product choice, so nobody has
@@ -44,7 +48,7 @@ import { matchVideo, fingerprint, fingerprintKeys, TIER, THRESHOLDS } from './yt
 import { findCandidates } from './ytSearch.js';
 import { cacheTracks, getTrackById } from './tracks.js';
 import { searchSongs } from './catalog.js';
-import { createPlaylistFromImport, appendTracksToPlaylist } from './playlists.js';
+import { createPlaylistFromImport, appendTracksToPlaylist, deletePlaylist } from './playlists.js';
 import { getUserLanguages } from './context.js';
 
 export const STATUS = {
@@ -362,6 +366,125 @@ async function fetchPhase(job, fetchOpts) {
 // interleave) or the upstream.
 const WAVE = 4;
 
+// ── The stream ──────────────────────────────────────────────────────
+//
+// The playlist used to exist only when the WHOLE job finished — a 120-song
+// mix meant watching a progress bar to the end before hearing anything. Now
+// the playlist is created as soon as the first EARLY_CREATE_MIN items have
+// resolved, and grows as waves land, so the client can open it immediately
+// and stream the rest in ("token streaming, but for songs" — the owner's
+// framing). finishJob remains the correctness backstop: every checkpoint here
+// is idempotent and OPTIONAL, and a checkpoint that fails is only a delay.
+//
+// EARLY_CREATE_MIN counts RESOLVED items (any tier), so a review-heavy
+// playlist still opens on time; 16 = four waves. Imports smaller than the
+// threshold never create early — they finish in one breath anyway, and
+// today's behaviour is exactly right for them. APPEND_EVERY_WAVES=2 makes
+// ~8-song chunks: small enough to read as a stream on the client, big enough
+// that the append overhead stays a rounding error.
+const EARLY_CREATE_MIN = 16;
+const APPEND_EVERY_WAVES = 2;
+
+/**
+ * The one place a job's playlist is created (also used by finishJob).
+ *
+ * Reads title/windowed FRESH from the row — the claim-time snapshot predates
+ * the fetch phase's title write on the very drain that fetched. The persist is
+ * conditional (WHERE playlist_id IS NULL): if a competing writer won, our
+ * fresh playlist is deleted and the winner adopted. The residual crash window
+ * — dying between createPlaylistFromImport's COMMIT and the persist — is two
+ * adjacent statements, and the claim lease keeps any re-entrant drain out for
+ * STUCK_MS anyway; finishJob has carried the identical window since v32.
+ */
+async function ensurePlaylist(job) {
+  if (job.playlist_id) return { id: job.playlist_id, createdNow: false };
+
+  const { rows: j } = await query(
+    `SELECT title, windowed, playlist_id FROM yt_import_jobs WHERE id=$1`,
+    [job.id],
+  );
+  if (j[0]?.playlist_id) {
+    job.playlist_id = j[0].playlist_id;
+    return { id: job.playlist_id, createdNow: false };
+  }
+  const windowed = !!j[0]?.windowed;
+
+  const { rows: autoRows } = await query(
+    `SELECT track_id FROM yt_import_items
+      WHERE job_id=$1 AND tier='auto' AND track_id IS NOT NULL
+      ORDER BY position ASC`,
+    [job.id],
+  );
+  const trackIds = autoRows.map(r => r.track_id);
+
+  // No rename at finish: a mix created before its first auto match wears the
+  // parsed-YouTube-title fallback forever. Renaming a playlist the user is
+  // already looking at would be worse than a slightly plainer name — and by
+  // sixteen resolved items a seed almost always exists.
+  const created = await createPlaylistFromImport(job.user_id, {
+    name: await playlistNameFor({ title: j[0]?.title, windowed, seedTrackId: trackIds[0] }),
+    description: windowed
+      ? 'Imported from a YouTube mix — a snapshot of the first tracks, not a live sync.'
+      : 'Imported from YouTube.',
+    trackIds,
+  });
+
+  const { rowCount } = await pool.query(
+    `UPDATE yt_import_jobs SET playlist_id=$2, updated_at=$3
+      WHERE id=$1 AND playlist_id IS NULL`,
+    [job.id, created.id, Date.now()],
+  );
+  if (rowCount === 0) {
+    // Lost the persist race — adopt the winner, remove our orphan.
+    await deletePlaylist(job.user_id, created.id).catch(() => {});
+    const { rows: again } = await query(
+      `SELECT playlist_id FROM yt_import_jobs WHERE id=$1`, [job.id],
+    );
+    job.playlist_id = again[0]?.playlist_id ?? null;
+    return { id: job.playlist_id, createdNow: false };
+  }
+  job.playlist_id = created.id;
+  return { id: created.id, createdNow: true };
+}
+
+/**
+ * Make the work so far visible: create the playlist once enough items have
+ * resolved, and append the current auto set. Idempotent by construction —
+ * the append re-sends the FULL auto set and playlist_tracks' primary key
+ * absorbs everything already present, so a missed or repeated checkpoint is
+ * self-healing. (Playlist positions go sparse under repeated full-set
+ * appends; position holes are sanctioned — see playlists.js on holes.)
+ *
+ * Never throws: streaming is progressive enhancement, finishJob is the
+ * correctness backstop, and failing a job over a cosmetic append would burn
+ * the user's daily import cap for nothing.
+ */
+async function streamCheckpoint(job) {
+  try {
+    if (!job.playlist_id) {
+      const { rows } = await query(
+        `SELECT COUNT(*) FILTER (WHERE tier IS NOT NULL)::int AS resolved
+           FROM yt_import_items WHERE job_id=$1`,
+        [job.id],
+      );
+      if ((rows[0]?.resolved ?? 0) < EARLY_CREATE_MIN) return;
+    }
+    const { createdNow } = await ensurePlaylist(job);
+    if (createdNow || !job.playlist_id) return;
+    const { rows: autoRows } = await query(
+      `SELECT track_id FROM yt_import_items
+        WHERE job_id=$1 AND tier='auto' AND track_id IS NOT NULL
+        ORDER BY position ASC`,
+      [job.id],
+    );
+    if (autoRows.length) {
+      await appendTracksToPlaylist(job.user_id, job.playlist_id, autoRows.map(r => r.track_id));
+    }
+  } catch (err) {
+    console.warn('[yt-import] stream checkpoint failed:', err?.message ?? err);
+  }
+}
+
 async function matchPhase(job, deadline, search) {
   let done = 0;
 
@@ -376,10 +499,14 @@ async function matchPhase(job, deadline, search) {
   // races (vitest's mock interception, notably) for zero benefit here.
   const searchFn = search ?? searchSongs;
 
+  let waves = 0;
   for (;;) {
     if (Date.now() >= deadline) {
-      // Out of time, not out of work. Release the lease so the very next tick —
-      // the client's next poll — resumes instead of waiting out the lease.
+      // Out of time, not out of work. Checkpoint BEFORE releasing, so this
+      // drain's songs are in the playlist before the chase-poll's refetch
+      // reads it; then release the lease so the very next tick — the client's
+      // next poll — resumes instead of waiting out the lease.
+      await streamCheckpoint(job);
       await releaseJob(job.id);
       const remaining = await countPending(job.id);
       return { status: STATUS.MATCHING, done, remaining, budgetExhausted: true };
@@ -408,6 +535,9 @@ async function matchPhase(job, deadline, search) {
     // a dead one by claimJob's STUCK_MS check (once per wave ≈ the old every-
     // 5th-item cadence).
     await touch(job.id);
+    if (++waves % APPEND_EVERY_WAVES === 0) {
+      await streamCheckpoint(job);
+    }
   }
 
   const summary = await finishJob(job);
@@ -677,21 +807,12 @@ async function finishJob(job) {
   const { rows: j } = await query(`SELECT title, windowed, fetched_count FROM yt_import_jobs WHERE id=$1`, [job.id]);
   const windowed = !!j[0]?.windowed;
 
-  let playlistId = job.playlist_id;
-  if (!playlistId) {
-    const created = await createPlaylistFromImport(job.user_id, {
-      name: await playlistNameFor({ title: j[0]?.title, windowed, seedTrackId: trackIds[0] }),
-      description: windowed
-        ? 'Imported from a YouTube mix — a snapshot of the first tracks, not a live sync.'
-        : 'Imported from YouTube.',
-      trackIds,
-    });
-    playlistId = created.id;
-  } else if (trackIds.length) {
-    // Either a REFRESH writing into the playlist it already owns, or re-entry
-    // after a crash between playlist creation and the counts update. Both are
-    // the same operation, and it is idempotent: appendTracksToPlaylist absorbs
-    // tracks already present.
+  // One converged path: a small import creates here (below the early-create
+  // threshold nothing streamed), a streamed import already has its playlist,
+  // and a REFRESH arrived with one — the last two both take the append, which
+  // is idempotent (playlist_tracks' PK absorbs tracks already present).
+  const { id: playlistId, createdNow } = await ensurePlaylist(job);
+  if (!createdNow && trackIds.length) {
     await appendTracksToPlaylist(job.user_id, playlistId, trackIds);
   }
 
@@ -920,6 +1041,19 @@ export async function processImportQueue({ batch = 5, budgetMs = 20_000 } = {}) 
  */
 export async function pruneExpired() {
   const cutoff = Date.now() - RETENTION_MS;
+  // A job still 'matching' after the retention window is never finishing —
+  // and since the playlist can now exist from mid-drain, leaving the job live
+  // would strand a real playlist against a job whose items are about to be
+  // deleted, unreconcilable forever. Terminal-ize it as the cancel semantic:
+  // the playlist keeps what arrived, and YT_EXPIRED names why it stopped.
+  // The code rides as its own literal (not baked into the SQL string) so the
+  // copy-contract scanner (src/lib/ytImportCopy.test.js) sees a code this
+  // server emits and both clients are forced to carry words for it.
+  await pool.query(
+    `UPDATE yt_import_jobs SET status='failed', error=$3 || ': never finished', updated_at=$2
+      WHERE created_at < $1 AND status IN ('queued','fetching','matching')`,
+    [cutoff, Date.now(), 'YT_EXPIRED'],
+  ).catch(() => {});
   const { rowCount } = await pool.query(
     `DELETE FROM yt_import_items
       WHERE job_id IN (SELECT id FROM yt_import_jobs WHERE created_at < $1)`,
@@ -956,10 +1090,24 @@ export async function getJob(userId, jobId) {
        FROM yt_import_items WHERE job_id=$1 ORDER BY position ASC`,
     [jobId],
   );
+  // Tier counts live, not only at finish: auto_count & co are written by
+  // finishJob, so during 'matching' they are NULL — and the streaming client
+  // gates its handoff on counts.auto. Same query, three more FILTERs.
   const { rows: prog } = await query(
-    `SELECT COUNT(*) FILTER (WHERE tier IS NULL AND state='pending')::int AS unresolved
+    `SELECT COUNT(*) FILTER (WHERE tier IS NULL AND state='pending')::int AS unresolved,
+            COUNT(*) FILTER (WHERE tier='auto')::int      AS auto,
+            COUNT(*) FILTER (WHERE tier='review')::int    AS review,
+            COUNT(*) FILTER (WHERE tier='unmatched')::int AS unmatched
        FROM yt_import_items WHERE job_id=$1`,
     [jobId],
   );
-  return { job, items, matching: prog[0]?.unresolved ?? 0 };
+  return {
+    job, items,
+    matching: prog[0]?.unresolved ?? 0,
+    tiers: {
+      auto: prog[0]?.auto ?? 0,
+      review: prog[0]?.review ?? 0,
+      unmatched: prog[0]?.unmatched ?? 0,
+    },
+  };
 }
