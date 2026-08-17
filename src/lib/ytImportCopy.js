@@ -142,6 +142,14 @@ export const IMPORT_ERRORS = {
     body: 'An update shipped but its database step hasn’t run yet. Nothing was lost — imports resume the moment it does.',
     retryable: false,
   },
+  YT_EXPIRED: {
+    // The retention prune terminal-ized a job that sat unfinished past the
+    // 30-day window (importJobs.pruneExpired). The playlist keeps what
+    // arrived — this is the cancel semantic applied by time.
+    title: 'That import never finished',
+    body: 'It sat too long, so we stopped it. Everything already added is still in your playlist.',
+    retryable: false,
+  },
   YT_INTERNAL: {
     title: 'Something went wrong on our side',
     body: 'Nothing was lost — try again.',
@@ -226,6 +234,12 @@ export const COPY = {
       toGo: (n) => `${n} to go`,
       added: (n) => `${n} added`,
     },
+    // Streaming handoff (mirrored from native; unused here until the web
+    // progress body ports the open-early flow).
+    openNow: 'Open it now',
+    openNowHint: 'The rest will keep arriving',
+    autoOpen: 'Opening in a moment — click to stay',
+    cancelKeeps: 'Songs already added will stay in your playlist.',
     row: {
       working: 'Matching…',
       matched: 'Added',
@@ -273,6 +287,14 @@ export const COPY = {
 
   // The result summary. Ordered auto / review / missing, because that is
   // descending order of "already done for you".
+  // The playlist-screen streaming tail (mirrored from native; unused here
+  // until web's PlaylistDetail ports the footer).
+  streaming: {
+    footer: (n, total) => `Adding the rest — ${n} of ${total}`,
+    settled: (n) => `All ${n} in`,
+    paused: 'Paused — click to keep going',
+    review: (n) => `${n} to check — whenever you like`,
+  },
   done: {
     ready: (auto) => `${auto} ${auto === 1 ? 'song' : 'songs'} added`,
     // ~35% of an import lands here. It is a normal part of the flow, so the

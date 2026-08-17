@@ -44,20 +44,24 @@ export const LARGE_ITEMS = 500;
  * the source, not an error — stop paginating and return what we have. This also
  * takes an RD import from ~21 quota units (walking to 1000) down to 3.
  *
- * Why 30 and not 50 (the first guess):
- *  - JioSaavn load is the binding constraint, not YouTube quota. 50 tracks is
- *    ~65 catalog searches per import, 30 is ~40. Quota is identical either way
- *    (both fit one page), so the saving is entirely on the constrained side.
- *  - Review burden scales linearly. At the measured ~60% auto rate, 50 tracks
- *    leaves ~20 confirmations; 30 leaves ~12 — a quick check rather than a job.
- *  - Relevance decays with depth. Radio starts at the seed and wanders: the
- *    measured mixes ran Kannada film music at the top and Peppa Pig, Turkish
- *    pop and Sinhala hymns further down. A tighter window is a better playlist,
- *    not merely a cheaper one.
- * 30 over 25 because ~60% auto minus the catalog misses still leaves ~18 usable
- * tracks, which reads as a playlist; 25 can fall under 15, which does not.
+ * Why 120 (owner's call, raised from 30 in the streaming round):
+ *  - The two constraints that argued for 30 are gone. Wait time: the playlist
+ *    now exists after ~16 resolved items and streams the rest in behind the
+ *    user (importJobs.js: ensurePlaylist/streamCheckpoint), so window size no
+ *    longer gates when listening starts. Review burden: review is an optional
+ *    chip after 'ready', not a gate before hearing anything.
+ *  - The binding cost is still catalog searches: ~160 cold per 120-track mix
+ *    (≤2/track), amortized across users by yt_match_cache and bounded by
+ *    YT_IMPORT_USER_DAILY=10. Quota stays trivial: ceil(120/50)=3 item pages
+ *    ≈ 5 units.
+ *  - Relevance still decays with depth (the measured mixes wandered from
+ *    Kannada film music to Peppa Pig by the tail) — but with streaming, depth
+ *    is the USER's scroll decision, not ours to make for them. 120 is where
+ *    "generous mix" ends and "infinite dredge" begins.
+ * Real playlists are unaffected: they get MAX_ITEMS, the abuse ceiling, and
+ * import whole.
  */
-export const RADIO_WINDOW = 30;
+export const RADIO_WINDOW = 120;
 
 /**
  * How many items to take, given what kind of thing this is.

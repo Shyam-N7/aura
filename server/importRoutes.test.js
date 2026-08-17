@@ -107,7 +107,7 @@ describe('preview — costs nothing, answers everything', () => {
       .send({ url: 'https://www.youtube.com/watch?v=abcdefghijk&list=RDabcdefghijk' });
     // A radio mix has no end — the client must say "the first 30", not imply it
     // imported the lot.
-    expect(mix.body).toMatchObject({ importable: true, windowed: true, windowSize: 30 });
+    expect(mix.body).toMatchObject({ importable: true, windowed: true, windowSize: 120 });
   });
 
   it('does not call the job engine at all', async () => {
@@ -195,6 +195,30 @@ describe('create and poll', () => {
     getJob.mockResolvedValue(jobView({ status: 'complete' }));
     res = await request().get('/api/import/youtube/yti_abc123');
     expect(res.body.workRemaining).toBe(false);
+  });
+
+  it('serves live tier counts while matching, persisted ones at terminal', async () => {
+    // During 'matching' the persisted counters are NULL (finishJob writes
+    // them) — the live tiers from getJob stand in, so the streaming client
+    // can gate its handoff on counts.auto mid-import.
+    probeStatus('matching');
+    getJob.mockResolvedValue({
+      ...jobView({ status: 'matching', auto_count: null, review_count: null, unmatched_count: null }),
+      tiers: { auto: 12, review: 3, unmatched: 1 },
+    });
+    let res = await request().get('/api/import/youtube/yti_abc123');
+    expect(res.body.counts.auto).toBe(12);
+    expect(res.body.counts.review).toBe(3);
+
+    // At terminal the persisted values win (identical in practice, and they
+    // keep the long-standing dupes quirk).
+    probeStatus('complete');
+    getJob.mockResolvedValue({
+      ...jobView({ status: 'complete', auto_count: 9 }),
+      tiers: { auto: 12, review: 0, unmatched: 0 },
+    });
+    res = await request().get('/api/import/youtube/yti_abc123');
+    expect(res.body.counts.auto).toBe(9);
   });
 
   it('404s with a named code when the job does not exist for this user', async () => {
