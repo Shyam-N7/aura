@@ -201,6 +201,13 @@ export const COPY = {
     // a later fetch — measured, twice — so "snapshot" is the literal truth and
     // the UI must not imply a sync it cannot deliver.
     mix: (n) => `Mixes don’t have an end, so we’ll take the first ${n} songs. This is a snapshot, not a live sync — the mix will change on YouTube, and your playlist won’t.`,
+    // The research verdict, turned into guidance: a mix is generated per
+    // request from the seed PLUS the requester's identity, so what we import
+    // can never be the exact list the user's signed-in browser shows. The one
+    // official path to what-you-see fidelity is YT Music's save-the-queue
+    // flow — teach it instead of pretending.
+    exactMixTitle: 'Want exactly your mix?',
+    exactMixBody: 'YouTube builds mixes differently for every viewer, so an import can never match yours song-for-song. To capture exactly what you see: play the mix in the YouTube Music app, open Up Next, tap Save, make it a new playlist — then paste that playlist\u2019s link here.',
     action: 'Import',
     cancel: 'Cancel',
   },
@@ -294,6 +301,8 @@ export const COPY = {
     settled: (n) => `All ${n} in`,
     paused: 'Paused — click to keep going',
     review: (n) => `${n} to check — whenever you like`,
+    // The owned-mix answer's payoff CTA (mirrored; native surfaces it first).
+    radio: 'Keep it going — AURA radio from this mix',
   },
   done: {
     ready: (auto) => `${auto} ${auto === 1 ? 'song' : 'songs'} added`,

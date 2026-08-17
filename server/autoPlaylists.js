@@ -154,7 +154,7 @@ const MIXES = {
 };
 const MIX_ORDER = Object.keys(MIXES);
 
-async function loadEdition(userId, mixKey, editionKey) {
+export async function loadEdition(userId, mixKey, editionKey) {
   const { rows } = await pool.query(
     `SELECT payload, edition_key, generated_at FROM mix_editions
      WHERE user_id = $1 AND mix_key = $2 AND edition_key = $3`,
@@ -217,7 +217,7 @@ async function buildNewToYouEdition(userId, tz, suppressed, prev) {
   return { tracks, meta: { ...(fresh?.meta ?? {}), tz, carriedOver: carryover.length } };
 }
 
-async function storeEdition(userId, mixKey, editionKey, payload) {
+export async function storeEdition(userId, mixKey, editionKey, payload) {
   await pool.query(
     `INSERT INTO mix_editions (user_id, mix_key, edition_key, payload, generated_at)
      VALUES ($1, $2, $3, $4, $5)
@@ -281,7 +281,7 @@ async function resolveMix(userId, mixKey, tz, suppressed) {
 // the edition's UNLESS a reorderSeed is given (weekly mixes): then the frozen
 // SET is re-ordered deterministically per local day, so it feels different
 // between boundaries without its membership changing.
-async function hydrate(payloadTracks, suppressed, reorderSeed = null) {
+export async function hydrate(payloadTracks, suppressed, reorderSeed = null) {
   const ids = payloadTracks.map(t => t.trackId).filter(id => !suppressed.has(id));
   if (!ids.length) return [];
   const { rows } = await pool.query(
@@ -317,7 +317,7 @@ function reorderByDay(tracks, seed) {
   return shuffled;
 }
 
-function descriptor(mixKey, name, description, tracks, extra = {}) {
+export function descriptor(mixKey, name, description, tracks, extra = {}) {
   return {
     id: `auto:${mixKey}`,
     kind: 'auto',
