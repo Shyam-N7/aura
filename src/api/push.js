@@ -36,3 +36,21 @@ export async function adminPushSend({ title, body, link, image, audience }) {
   if (!res.ok) throw new Error(data.error ?? 'send failed');
   return data;
 }
+
+// Admin schema console: current vs expected migration version, and the button
+// that applies pending ones. Exists because migrations run out-of-band by
+// design, and "out-of-band" used to mean a laptop with DATABASE_URL — when
+// v34 shipped without that step, imports failed for everyone until a shell
+// could be found.
+export async function adminMigrateStatus() {
+  const res = await fetchAuthed('/api/admin/migrate');
+  if (!res.ok) throw new Error(`migrate status failed (${res.status})`);
+  return res.json();
+}
+
+export async function adminMigrateApply() {
+  const res = await fetchAuthed('/api/admin/migrate', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'migration failed');
+  return data;
+}

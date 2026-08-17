@@ -104,6 +104,14 @@ export const LYRICS_WEBHOOK_SECRET   = optional('LYRICS_WEBHOOK_SECRET'); // sha
 // so no secret travels in the callback URL (which Replicate logs). See replicateWebhook.js.
 export const REPLICATE_WEBHOOK_SIGNING_SECRET = optional('REPLICATE_WEBHOOK_SIGNING_SECRET');
 export const CRON_SECRET             = optional('CRON_SECRET');           // Vercel Cron bearer token authorizing /api/lyrics-jobs/process
+// The whole Firebase service-account JSON as ONE string (JSON.parse restores
+// the private key's \n correctly — pasting the key alone does not). This is
+// push's on/off switch: unset, every send is a silent no-op, same pattern as
+// YOUTUBE_API_KEY below. push.js reads it LAZILY from process.env (tests
+// stub it per-case); this entry is the registry row so a deploy/env
+// review can see it exists — it previously lived only in push.js and never
+// made DEPLOY.md, which is how an env var gets lost in a migration.
+export const FIREBASE_ADMIN_JSON     = optional('FIREBASE_ADMIN_JSON');
 export const LYRICS_GEN_DAILY_CAP    = optionalInt('LYRICS_GEN_DAILY_CAP', 500); // max generation jobs dispatched per day (spend guard)
 
 // ── YouTube playlist import (opt-in) ──

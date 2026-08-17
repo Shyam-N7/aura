@@ -887,6 +887,22 @@ const migrations = [
   },
 ];
 
+// What the CODE expects the schema to be. The admin console compares this to
+// the meta row so "apply database updates" can show as pending vs current —
+// the gap between the two is exactly the failure that took imports down when
+// v34 shipped in code while prod sat at 33.
+export const EXPECTED_SCHEMA_VERSION = migrations.length;
+
+export async function getSchemaVersion() {
+  try {
+    const { rows } = await pool.query(`SELECT value FROM meta WHERE key = 'schema_version'`);
+    return rows.length ? Number(rows[0].value) : 0;
+  } catch {
+    // No meta table yet — a pre-bootstrap database reads as version 0.
+    return 0;
+  }
+}
+
 // Apply any pending migrations against an EXISTING database. Safe for managed/
 // serverless Postgres (e.g. Neon) — it never creates the database. The local
 // dev bootstrap (initDb) handles creation; production applies migrations once

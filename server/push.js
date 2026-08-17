@@ -9,6 +9,11 @@ import { query } from './db.js';
 
 let messagingP = null;
 
+// Read lazily from process.env, NOT via config.js: config's required() vars
+// would drag the whole catalog env into this module's import graph (breaking
+// isolated tests), and lazy reads are what let tests stub the var per-case.
+// The variable is REGISTERED in config.js for deploy/env review — that entry
+// is documentation; this is the read.
 function credentials() {
   const raw = process.env.FIREBASE_ADMIN_JSON;
   if (!raw) return null;
@@ -29,7 +34,14 @@ async function messaging() {
       const { getMessaging } = await import('firebase-admin/messaging');
       if (!getApps().length) initializeApp({ credential: cert(creds) });
       return getMessaging();
-    })();
+    })().catch(err => {
+      // Do NOT leave the rejection cached: this promise lives for the warm
+      // lambda's lifetime, so one transient cold-start failure would otherwise
+      // disable push on this instance until it recycles, reported misleadingly
+      // as no_credentials. Same bug class as the yt_match_cache poisoning.
+      messagingP = null;
+      throw err;
+    });
   }
   return messagingP;
 }
@@ -46,11 +58,16 @@ const DEAD_CODES = new Set([
 // routes it like a share link; `collapseKey` lets a newer send of the same
 // kind replace an undelivered older one.
 export async function sendToUser(userId, { title, body, image, link, collapseKey } = {}) {
+  let initFailed = false;
   const m = await messaging().catch(err => {
     console.warn('[push] admin init failed:', err?.message ?? err);
+    initFailed = true;
     return null;
   });
-  if (!m) return { sent: 0, reason: 'no_credentials' };
+  // Two different absences, two different fixes: no_credentials means the env
+  // var is unset; init_failed means it is set and something else broke. The
+  // admin console needs to tell them apart or both read as "sent to 0 devices".
+  if (!m) return { sent: 0, reason: initFailed ? 'init_failed' : 'no_credentials' };
 
   const { rows } = await query(
     'SELECT token FROM push_tokens WHERE user_id = $1',
@@ -84,14 +101,31 @@ export async function sendToUser(userId, { title, body, image, link, collapseKey
   });
 
   const dead = [];
+  const failed = [];
   res.responses.forEach((r, i) => {
-    if (!r.success && DEAD_CODES.has(r.error?.code)) dead.push(tokens[i]);
+    if (r.success) return;
+    if (DEAD_CODES.has(r.error?.code)) {
+      dead.push(tokens[i]);
+    } else {
+      // Every OTHER failure used to be discarded here, which made a mismatched
+      // service account indistinguishable from having no devices: HTTP 200,
+      // "sent to 0", zero log lines. Keep the first code — one is enough to
+      // name the problem, and mismatched-credential is the classic.
+      failed.push(r.error?.code ?? 'unknown');
+    }
   });
   if (dead.length) {
     await query('DELETE FROM push_tokens WHERE token = ANY($1::text[])', [dead])
       .catch(() => {});
   }
-  return { sent: res.successCount };
+  if (failed.length) {
+    console.warn(`[push] ${failed.length} send(s) failed: ${failed[0]}`);
+  }
+  return {
+    sent: res.successCount,
+    ...(res.failureCount ? { failed: res.failureCount } : {}),
+    ...(failed.length ? { error: failed[0] } : {}),
+  };
 }
 
 // ── Category sends: prefs + quiet hours + frequency caps ─────────────

@@ -32,7 +32,7 @@ vi.mock('./youtubeFetch.js', async (importOriginal) => ({
 }));
 
 import { pool, query } from './db.js';
-import { enqueueImport, youtubeImportEnabled, pruneExpired, processImportQueue } from './importJobs.js';
+import { enqueueImport, youtubeImportEnabled, pruneExpired, processImportQueue, drainJob } from './importJobs.js';
 
 // enqueueImport makes exactly two reads, in order: the cap check, then the
 // "is one already running" lookup. The happy default is "under the caps, none
@@ -103,6 +103,39 @@ describe('enqueueImport — refusals that cost nothing', () => {
     await expect(enqueueImport('u1', 'https://www.youtube.com/playlist?list=PLabc123')).resolves.toBeTruthy();
     happyReads();
     await expect(enqueueImport('u1', 'https://www.youtube.com/playlist?list=OLAK5uyxyz')).resolves.toBeTruthy();
+  });
+});
+
+describe('schema drift', () => {
+  it('names a missing-column failure instead of calling it internal', async () => {
+    // Field incident: v34 shipped in code while prod sat at schema 33, and
+    // every import died as YT_INTERNAL — whose copy says "try again", for a
+    // failure no retry can fix, with each retry burning the daily cap.
+    // Postgres 42703 (undefined column) IS the migration-drift signature.
+    query.mockReset();
+    const drift = Object.assign(new Error('column c.lang_checked_at does not exist'), { code: '42703' });
+    // claimJob's UPDATE returns a claimed job; the next read throws the drift.
+    pool.query.mockResolvedValue({
+      rows: [{ id: 'yti_d', user_id: 'u1', yt_playlist_id: 'PL1', kind: 'playlist', status: 'matching' }],
+      rowCount: 1,
+    });
+    query.mockRejectedValue(drift);
+    const out = await drainJob('yti_d');
+    expect(out.code).toBe('YT_MIGRATION');
+    // failJob recorded the named code, not YT_INTERNAL.
+    const fail = pool.query.mock.calls.find(c => String(c[0]).includes("status='failed'"));
+    expect(fail[1][1]).toMatch(/^YT_MIGRATION:/);
+  });
+
+  it('does not count migration-drift failures toward the caps', async () => {
+    // Every hopeful retry during an outage created a job; charging those to
+    // the 10/day cap would lock users out for a day after the fix. The
+    // exclusion lives in the cap query itself — pin it there.
+    happyReads();
+    pool.query.mockResolvedValue({ rows: [], rowCount: 1 });
+    await enqueueImport('u1', 'https://www.youtube.com/playlist?list=PLabc123');
+    const capSql = String(query.mock.calls[0][0]);
+    expect(capSql).toContain("error LIKE 'YT_MIGRATION%'");
   });
 });
 
