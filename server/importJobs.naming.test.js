@@ -16,6 +16,10 @@ vi.mock('./config.js', () => ({
 
 // Mocked outright rather than partially: the real tracks.js imports catalog.js,
 // which reads a dozen CATALOG_* env vars at module scope.
+// importJobs now imports searchSongs statically (injected once per drain
+// instead of a per-item dynamic import) — keep the real catalog out of this
+// suite's module graph.
+vi.mock('./catalog.js', () => ({ searchSongs: vi.fn() }));
 vi.mock('./tracks.js', () => ({ getTrackById: vi.fn(), cacheTracks: vi.fn() }));
 
 import { getTrackById } from './tracks.js';

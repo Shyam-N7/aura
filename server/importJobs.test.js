@@ -224,3 +224,99 @@ describe('with the key set', () => {
     expect(sql).toMatch(/status IN \('queued','fetching','matching'\)/);
   });
 });
+
+
+describe('the match drain runs in waves', () => {
+  // The scripted database below is keyed on SQL text, not call order: waves
+  // interleave their queries concurrently, so order-scripted mocks would pin
+  // the exact interleaving — the one thing this suite must NOT care about.
+  function scriptDb({ items }) {
+    const waves = [...items];
+    // beforeEach queues happyReads()' one-shot responses; they'd fire ahead
+    // of the implementations below and feed the drain a bogus first row.
+    query.mockReset();
+    pool.query.mockReset();
+    pool.query.mockImplementation(sql => {
+      if (/RETURNING id, user_id/.test(sql)) {
+        // claimJob — status matching, so the drain goes straight to the match
+        // phase and the fetch phase (tested elsewhere) stays out of the way.
+        return Promise.resolve({
+          rows: [{ id: 'yti_x', user_id: 'u1', yt_playlist_id: 'PLx', kind: 'PL', status: 'matching', title: 'T', windowed: false, playlist_id: null }],
+          rowCount: 1,
+        });
+      }
+      return Promise.resolve({ rows: [], rowCount: 1 });
+    });
+    query.mockImplementation(sql => {
+      if (/FROM yt_import_items/.test(sql) && /LIMIT/.test(sql)) {
+        return Promise.resolve({ rows: waves.shift() ?? [], rowCount: 0 });
+      }
+      if (/GROUP BY tier/.test(sql)) return Promise.resolve({ rows: [], rowCount: 0 });
+      if (/SELECT title, windowed/.test(sql)) {
+        return Promise.resolve({ rows: [{ title: 'T', windowed: false, fetched_count: 6 }], rowCount: 1 });
+      }
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    });
+  }
+  const item = n => ({ id: n, position: n, video_id: `v${n}`, yt_title: `Song ${n}`, yt_channel: 'Ch', yt_duration: 200 });
+
+  it('overlaps the upstream searches within a wave instead of adding them', async () => {
+    const { searchSongs } = await import('./catalog.js');
+    const { createPlaylistFromImport } = await import('./playlists.js');
+    createPlaylistFromImport.mockResolvedValue({ id: 'pl_new' });
+    scriptDb({ items: [[item(0), item(1), item(2), item(3)], [item(4), item(5)]] });
+
+    // The proof of concurrency: how many searches were in flight AT ONCE.
+    // A serial drain never exceeds 1 no matter how fast it is.
+    let inFlight = 0;
+    let peak = 0;
+    searchSongs.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise(r => setTimeout(r, 15));
+      inFlight -= 1;
+      return [];
+    });
+
+    const out = await drainJob('yti_x', { budgetMs: 10_000 });
+    // >= 6, not === 6: an item whose first query answers weakly legitimately
+    // runs its second (MAX_SEARCHES_PER_ITEM) — per-item query count is
+    // ytSearch's own suite's concern, not this one's.
+    expect(searchSongs.mock.calls.length).toBeGreaterThanOrEqual(6);
+    expect(peak).toBeGreaterThanOrEqual(3);
+    expect(out.done).toBe(6);
+    expect(out.remaining).toBe(0);
+  });
+
+  it('one item throwing still fails the whole job, after its wave-mates settle', async () => {
+    // A SEARCH failure is deliberately swallowed by ytSearch (degraded item,
+    // not dead job) — the seam that genuinely throws is the database, so the
+    // verdict write for one item is what fails here.
+    const { searchSongs } = await import('./catalog.js');
+    scriptDb({ items: [[item(0), item(1), item(2), item(3)]] });
+    const verdicts = [];
+    pool.query.mockImplementation((sql, params) => {
+      if (/RETURNING id, user_id/.test(sql)) {
+        return Promise.resolve({
+          rows: [{ id: 'yti_x', user_id: 'u1', yt_playlist_id: 'PLx', kind: 'PL', status: 'matching', title: 'T', windowed: false, playlist_id: null }],
+          rowCount: 1,
+        });
+      }
+      if (/UPDATE yt_import_items/.test(sql) && /SET fingerprint/.test(sql)) {
+        if (params[0] === 1) return Promise.reject(new Error('db fell over'));
+        verdicts.push(params[0]);
+      }
+      return Promise.resolve({ rows: [], rowCount: 1 });
+    });
+    searchSongs.mockImplementation(async () => {
+      await new Promise(r => setTimeout(r, 10));
+      return [];
+    });
+    const out = await drainJob('yti_x', { budgetMs: 10_000 });
+    // The contract predates the waves: a throw fails the job (drainJob's
+    // catch is where 42703 becomes YT_MIGRATION) — but only after the other
+    // in-flight items finished, so no write was abandoned mid-flight.
+    expect(out.status).toBe('failed');
+    expect(verdicts.sort()).toEqual([0, 2, 3]);
+  });
+});

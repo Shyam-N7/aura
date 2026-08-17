@@ -31,6 +31,13 @@ vi.mock('./importJobs.js', () => ({
 vi.mock('./db.js', () => ({ pool: { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }) } }));
 
 import router from './importRoutes.js';
+import { pool } from './db.js';
+
+// The poll route's liveness probe reads the job's status straight from the
+// pool (one column, before deciding whether to drain). Point it at a status
+// for the duration of a test.
+const probeStatus = status =>
+  pool.query.mockResolvedValue({ rows: status ? [{ status }] : [], rowCount: 1 });
 import {
   enqueueImport, getJob, resolveReviewItem, drainJob, listLinks, refreshPlaylist,
 } from './importJobs.js';
@@ -154,13 +161,47 @@ describe('create and poll', () => {
   });
 
   it('drives a drain while the job is live, and not once it is terminal', async () => {
+    probeStatus('matching');
     getJob.mockResolvedValue(jobView({ status: 'matching' }));
     await request().get('/api/import/youtube/yti_abc123');
     expect(drainJob).toHaveBeenCalledTimes(1);
+    // The full three-query view is built exactly once per poll — the old
+    // shape ran it before AND after the drain, six round trips of overhead.
+    expect(getJob).toHaveBeenCalledTimes(1);
 
     vi.clearAllMocks();
+    probeStatus('complete');
     getJob.mockResolvedValue(jobView({ status: 'complete' }));
     await request().get('/api/import/youtube/yti_abc123');
+    expect(drainJob).not.toHaveBeenCalled();
+  });
+
+  it('asks to be chased only when its own drain ran out of budget mid-work', async () => {
+    // Budget exhausted with items pending → the server wants the next poll now.
+    probeStatus('matching');
+    drainJob.mockResolvedValue({ status: 'matching', budgetExhausted: true, remaining: 7 });
+    getJob.mockResolvedValue(jobView({ status: 'matching' }));
+    let res = await request().get('/api/import/youtube/yti_abc123');
+    expect(res.body.workRemaining).toBe(true);
+
+    // A drain that lost the claim to another worker must NOT invite a chase —
+    // a second client would spin-poll a lease it can never win.
+    drainJob.mockResolvedValue({ status: 'matching', done: 0, remaining: 0, claimed: false });
+    res = await request().get('/api/import/youtube/yti_abc123');
+    expect(res.body.workRemaining).toBe(false);
+
+    // Terminal never chases.
+    probeStatus('complete');
+    getJob.mockResolvedValue(jobView({ status: 'complete' }));
+    res = await request().get('/api/import/youtube/yti_abc123');
+    expect(res.body.workRemaining).toBe(false);
+  });
+
+  it('404s with a named code when the job does not exist for this user', async () => {
+    probeStatus(null);
+    const res = await request().get('/api/import/youtube/yti_nope1');
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('YT_NOT_FOUND');
     expect(drainJob).not.toHaveBeenCalled();
   });
 });

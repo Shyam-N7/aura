@@ -43,6 +43,7 @@ import { parseVideoVariants, parseVideo } from './ytTrackParse.js';
 import { matchVideo, fingerprint, fingerprintKeys, TIER, THRESHOLDS } from './ytMatch.js';
 import { findCandidates } from './ytSearch.js';
 import { cacheTracks, getTrackById } from './tracks.js';
+import { searchSongs } from './catalog.js';
 import { createPlaylistFromImport, appendTracksToPlaylist } from './playlists.js';
 import { getUserLanguages } from './context.js';
 
@@ -306,12 +307,21 @@ async function fetchPhase(job, fetchOpts) {
     // Re-entrant by construction: a fetch phase that ran before dying leaves
     // rows behind, and ON CONFLICT keeps this idempotent rather than doubling
     // the playlist. (job_id, position) is the natural key for exactly this.
-    for (const v of usable) {
+    // One multi-row INSERT: per-row statements billed one network round trip
+    // per video — 30 of them for a 30-track playlist — inside a transaction
+    // that holds one of the pool's two connections the whole time.
+    if (usable.length) {
+      const params = [];
+      const values = usable.map(v => {
+        const base = params.length;
+        params.push(job.id, v.position, v.videoId, v.title, v.channelTitle, v.durationSec);
+        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},'pending')`;
+      });
       await client.query(
         `INSERT INTO yt_import_items (job_id, position, video_id, yt_title, yt_channel, yt_duration, state)
-         VALUES ($1,$2,$3,$4,$5,$6,'pending')
+         VALUES ${values.join(',')}
          ON CONFLICT (job_id, position) DO NOTHING`,
-        [job.id, v.position, v.videoId, v.title, v.channelTitle, v.durationSec],
+        params,
       );
     }
     await client.query(
@@ -341,6 +351,17 @@ async function fetchPhase(job, fetchOpts) {
 }
 
 /** Catalog side: resolve pending items until the budget runs out. */
+// Items are resolved in WAVES of a few at a time, not one by one. The cost of
+// a cache-miss item is dominated by 1-2 upstream catalog searches — network
+// latency, not CPU — and items are independent by construction (per-item
+// verdict rows, a pure scorer, idempotent ON CONFLICT cache upserts). Running
+// them strictly serially meant every upstream round trip ADDED instead of
+// overlapping, which is why a 30-track import that takes seconds against
+// loopback took minutes in production. Four keeps the overlap where the time
+// is (HTTP) without swamping the pool (max: 2 — DB hops within a wave just
+// interleave) or the upstream.
+const WAVE = 4;
+
 async function matchPhase(job, deadline, search) {
   let done = 0;
 
@@ -349,6 +370,11 @@ async function matchPhase(job, deadline, search) {
   // times. Never throws — an unknown listener is [], which the matcher reads as
   // "no opinion" and leaves the ranking exactly as it was.
   const userLangs = await getUserLanguages(job.user_id).catch(() => []);
+  // Resolved once per drain and INJECTED into findCandidates. Its own default
+  // is a dynamic import('./catalog.js') per call — a module-registry hit per
+  // item, and under concurrent wave items the kind of lazy resolution that
+  // races (vitest's mock interception, notably) for zero benefit here.
+  const searchFn = search ?? searchSongs;
 
   for (;;) {
     if (Date.now() >= deadline) {
@@ -363,17 +389,25 @@ async function matchPhase(job, deadline, search) {
       `SELECT id, position, video_id, yt_title, yt_channel, yt_duration
          FROM yt_import_items
         WHERE job_id = $1 AND state = 'pending' AND tier IS NULL
-        ORDER BY position ASC LIMIT 1`,
+        ORDER BY position ASC LIMIT ${WAVE}`,
       [job.id],
     );
-    const item = rows[0];
-    if (!item) break;
+    if (!rows.length) break;
 
-    await resolveItem(job, item, search, userLangs);
-    done++;
+    // allSettled, then rethrow: a single item's throw must still fail the
+    // job (drainJob's catch is where 42703 becomes YT_MIGRATION, and that
+    // contract predates the waves) — but only after its wave-mates have
+    // finished, so no write is abandoned mid-flight.
+    const settled = await Promise.allSettled(
+      rows.map(item => resolveItem(job, item, searchFn, userLangs)),
+    );
+    const failed = settled.find(s => s.status === 'rejected');
+    if (failed) throw failed.reason;
+    done += rows.length;
     // Keep updated_at moving so a long but healthy drain is never mistaken for
-    // a dead one by claimJob's STUCK_MS check.
-    if (done % 5 === 0) await touch(job.id);
+    // a dead one by claimJob's STUCK_MS check (once per wave ≈ the old every-
+    // 5th-item cadence).
+    await touch(job.id);
   }
 
   const summary = await finishJob(job);

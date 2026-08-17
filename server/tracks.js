@@ -45,10 +45,50 @@ async function upsert(track) {
 }
 
 export async function cacheTracks(tracks) {
+  // One multi-row statement, not one round trip per track. The import drain
+  // calls this per matched song with up to four rows; against a remote
+  // database the per-row spelling billed up to four network round trips for
+  // what is a single VALUES list. Last-write-wins on duplicate ids within one
+  // call is fine — they carry the same payload.
+  const usable = [];
+  const seen = new Set();
   for (const t of tracks) {
-    if (!t?.id) continue;
-    try { await upsert(t); }
-    catch (err) { console.error('cacheTracks upsert failed', t.id, err.message); }
+    if (t?.id && !seen.has(t.id)) {
+      seen.add(t.id);
+      usable.push(t);
+    }
+  }
+  if (!usable.length) return;
+  const ts = Date.now();
+  const params = [];
+  const rows = usable.map(track => {
+    const base = params.length;
+    params.push(
+      track.id, track.title, track.artist, track.album, track.language,
+      track.durationSec, track.streamUrl,
+      JSON.stringify(track.explicit === true
+        ? { imageUrl: track.imageUrl, explicit: true }
+        : { imageUrl: track.imageUrl }),
+      ts,
+    );
+    return `(${Array.from({ length: 9 }, (_, i) => `$${base + i + 1}`).join(',')})`;
+  });
+  try {
+    await pool.query(`
+      INSERT INTO tracks (id, title, artist, album, language, duration_sec, stream_url, raw, fetched_at)
+      VALUES ${rows.join(',')}
+      ON CONFLICT (id) DO UPDATE SET
+        title        = EXCLUDED.title,
+        artist       = EXCLUDED.artist,
+        album        = EXCLUDED.album,
+        language     = EXCLUDED.language,
+        duration_sec = EXCLUDED.duration_sec,
+        stream_url   = EXCLUDED.stream_url,
+        raw          = EXCLUDED.raw,
+        fetched_at   = EXCLUDED.fetched_at
+    `, params);
+  } catch (err) {
+    console.error('cacheTracks upsert failed', usable.map(t => t.id).join(','), err.message);
   }
 }
 
