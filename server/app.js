@@ -5,6 +5,7 @@ import { makeRateStore } from './rateLimitStore.js';
 import { pool, query, runMigrations, getSchemaVersion, EXPECTED_SCHEMA_VERSION } from './db.js';
 import { searchSongs, searchSuggest, rankByLang } from './catalog.js';
 import { getTrackById, cacheTracks } from './tracks.js';
+import { getSeedMix } from './seedMix.js';
 import { getFeatured } from './featured.js';
 import { getLyricsForTrack } from './lyrics.js';
 import {
@@ -307,6 +308,18 @@ app.get('/api/tracks/:id/related', optionalAuth, async (req, res) => {
     // shared similarity cache stays user-agnostic.
     if (req.userId) tracks = await demoteSkipped(req.userId, tracks);
     res.json({ tracks });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: clientError(err) });
+  }
+});
+
+// AURA radio from a seed track — the owned answer to YouTube mixes (see
+// seedMix.js for the research verdict this encodes). Auth required: editions
+// are per-user (suppression, same-day cache).
+app.get('/api/radio/seed/:track_id', requireAuth, async (req, res) => {
+  try {
+    const tzOffset = req.query.tz ? Number(req.query.tz) : 0;
+    res.json(await getSeedMix(req.userId, req.params.track_id, { tzOffset }));
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: clientError(err) });
   }
