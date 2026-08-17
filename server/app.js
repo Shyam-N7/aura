@@ -44,7 +44,7 @@ import { normalizeMood } from './moods.js';
 import authRouter from './auth.js';
 import familyRouter from './family.js';
 import modesRouter from './modesRoutes.js';
-import importRouter from './importRoutes.js';
+import importRouter, { isImportPoll } from './importRoutes.js';
 import { processImportQueue, youtubeImportEnabled } from './importJobs.js';
 import { modeSeedArtists, modeSeedTracks } from './modes.js';
 import { requireAuth, optionalAuth, peekUserId, sweepSessions } from './middleware/auth.js';
@@ -146,7 +146,16 @@ app.use('/api/auth', authLimiter);
 // Cost-bearing routes (Gemini / lyrics provider / Replicate / upstream catalog).
 // Tighter than the broad generalLimiter so cache-miss spend can't be driven.
 // (security: H1 / M4 / M5)
-app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm', '/api/import'], costLimiter);
+app.use(['/api/why', '/api/lyrics', '/api/greeting', '/api/mood', '/api/llm'], costLimiter);
+// Import shares the cost limiter EXCEPT for the status poll. The poll is the
+// server's own worker (the drain runs inside the GET — see importRoutes.js),
+// so 429ing it halts the user's import while the UI spins: at the fast poll
+// cadence a single import could exhaust 60/5min in about two minutes and then
+// only advance via the daily cron. The starts/resolves/cancels that actually
+// bear upstream cost stay limited; the poll is still under generalLimiter,
+// and every drain it triggers is bounded by the lease + budget regardless.
+app.use('/api/import', (req, res, next) =>
+  (isImportPoll(req) ? next() : costLimiter(req, res, next)));
 // Sensitive per-account routes get a tighter, shared, account-keyed limiter on top
 // of generalLimiter — registered before their routers mount below.
 app.use(['/api/family', '/api/modes'], sensitiveLimiter);

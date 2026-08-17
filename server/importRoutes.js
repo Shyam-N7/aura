@@ -32,6 +32,13 @@ import {
 
 const router = Router();
 
+// True for the status poll (GET /youtube/:jobId — req.path as seen from the
+// /api/import mount). app.js uses this to exempt the poll from costLimiter:
+// the poll is the server's own worker, and 429ing it halts the user's import
+// while the UI spins. Exported for the wiring's test.
+export const isImportPoll = req =>
+  req.method === 'GET' && /^\/youtube\/yti_[a-z0-9]{1,40}$/.test(req.path);
+
 // A drain inside a request must leave room for the response itself, for the
 // poll's own DB reads, and for one item to overrun. The function ceiling is 60s
 // (vercel.json); these sit well under it.
@@ -164,14 +171,32 @@ router.post('/', requireAuth, requireEnabled, async (req, res) => {
 // ── Poll — and do a slice of the work ───────────────────────────────
 router.get('/:jobId', requireAuth, requireEnabled, async (req, res) => {
   try {
-    // Read first, so a terminal job costs one query and never takes a lease.
-    let view = await getJob(req.userId, req.params.jobId);
-    const live = [STATUS.QUEUED, STATUS.FETCHING, STATUS.MATCHING].includes(view.job.status);
-    if (live) {
-      await drainJob(req.params.jobId, { budgetMs: POLL_BUDGET_MS }).catch(() => {});
-      view = await getJob(req.userId, req.params.jobId);
+    // A one-column probe decides liveness (same ownership predicate getJob
+    // enforces), so the full three-query view is built exactly once per poll —
+    // it used to run before AND after the drain, six round trips of pure
+    // overhead against a remote database.
+    const { rows } = await pool.query(
+      `SELECT status FROM yt_import_jobs WHERE id=$1 AND user_id=$2`,
+      [req.params.jobId, req.userId],
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: 'import not found', code: 'YT_NOT_FOUND' });
     }
-    res.json(shape(view));
+    const live = [STATUS.QUEUED, STATUS.FETCHING, STATUS.MATCHING].includes(rows[0].status);
+    let drained = null;
+    if (live) {
+      drained = await drainJob(req.params.jobId, { budgetMs: POLL_BUDGET_MS }).catch(() => null);
+    }
+    const view = await getJob(req.userId, req.params.jobId);
+    // workRemaining is true only when THIS drain ran out of budget with items
+    // still pending — the one case where the server is explicitly waiting to
+    // be driven again, and the client chases with a short gap instead of the
+    // idle one. A claim that lost to another drain reports false, so a second
+    // client watching the same job idles instead of spin-polling a lease it
+    // can never win.
+    res.json(shape(view, {
+      workRemaining: !!(drained?.budgetExhausted && drained.remaining > 0),
+    }));
   } catch (err) {
     fail(res, err, 'poll');
   }
@@ -222,8 +247,9 @@ router.delete('/:jobId', requireAuth, requireEnabled, async (req, res) => {
  * works. `matching` is the live progress counter — how many videos are still
  * unresolved — which is the only number a progress bar needs.
  */
-function shape({ job, items, matching }) {
+function shape({ job, items, matching }, extra = {}) {
   return {
+    ...extra,
     id: job.id,
     status: job.status,
     title: job.title,

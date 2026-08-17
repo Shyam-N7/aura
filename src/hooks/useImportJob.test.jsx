@@ -35,6 +35,47 @@ describe('when there is work to do', () => {
     expect(pollImport).toHaveBeenCalledTimes(2);
   });
 
+
+  it('chases while the server says its drain ran out of budget mid-work', async () => {
+    // workRemaining: true = the drain hit its budget with items pending — the
+    // server is explicitly waiting to be driven again. The gap collapses to
+    // CHASE_MS; when the flag drops, the idle cadence returns.
+    pollImport.mockResolvedValue(job('matching', { workRemaining: true }));
+    renderHook(() => useImportJob(job('matching')));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(pollImport).toHaveBeenCalledTimes(1);
+
+    // 300ms later, not 2000: the next poll was chased.
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(pollImport).toHaveBeenCalledTimes(2);
+
+    // Flag gone (finished slice, or an un-upgraded server): idle cadence.
+    pollImport.mockResolvedValue(job('matching'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(pollImport).toHaveBeenCalledTimes(3);
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(pollImport).toHaveBeenCalledTimes(3);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1700); });
+    expect(pollImport).toHaveBeenCalledTimes(4);
+  });
+
+  it('a failed poll falls back to the idle cadence, never a 300ms retry hammer', async () => {
+    pollImport.mockResolvedValueOnce(job('matching', { workRemaining: true }));
+    pollImport.mockRejectedValueOnce(new Error('boom'));
+    pollImport.mockResolvedValue(job('matching'));
+    renderHook(() => useImportJob(job('matching')));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });   // ok, chase armed
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });    // chased poll fails
+    expect(pollImport).toHaveBeenCalledTimes(2);
+    // The retry is on the idle gap, not the chase gap.
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(pollImport).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1700); });
+    expect(pollImport).toHaveBeenCalledTimes(3);
+  });
+
   it('stops the moment the job reaches a terminal status', async () => {
     // Not just wasteful: the server would keep taking a lease on a finished job.
     pollImport.mockResolvedValueOnce(job('ready'));

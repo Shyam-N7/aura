@@ -19,6 +19,10 @@ vi.mock('./config.js', () => ({
   YT_IMPORT_DAILY_CAP: 200,
   YT_IMPORT_USER_DAILY: 10,
 }));
+// importJobs now imports searchSongs statically (injected once per drain
+// instead of a per-item dynamic import) — keep the real catalog out of this
+// suite's module graph.
+vi.mock('./catalog.js', () => ({ searchSongs: vi.fn() }));
 vi.mock('./tracks.js', () => ({ cacheTracks: vi.fn(), getTrackById: vi.fn() }));
 vi.mock('./playlists.js', () => ({
   createPlaylistFromImport: vi.fn(),
